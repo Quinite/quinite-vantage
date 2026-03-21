@@ -17,7 +17,10 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(null)
     const [loading, setLoading] = useState(true)
     const router = useRouter()
-    const supabase = createClient()
+    
+    // Crucial fix: store supabase client in state to prevent recreating it on every render,
+    // which caused excessive rerenders and loop conditions.
+    const [supabase] = useState(() => createClient())
 
     const fetchProfile = useCallback(async (userId) => {
         try {
@@ -37,52 +40,60 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         let mounted = true
 
-        // Safety timeout: if auth never resolves within 3s, force loading=false
-        // This prevents infinite loading if onAuthStateChange fails to fire
-        const safetyTimeout = setTimeout(() => {
-            if (mounted && loading) {
-                console.warn('[AuthContext] Safety timeout — forcing loading=false')
-                setLoading(false)
-            }
-        }, 3000)
-
-        // Use onAuthStateChange as the SOLE mechanism.
-        // It fires INITIAL_SESSION synchronously on subscribe,
-        // then SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED later.
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
-                if (!mounted) return
-
-                // Clear safety timeout immediately - we received an event, so auth mechanism is working.
-                clearTimeout(safetyTimeout)
-
-                console.log('[AuthContext] Auth event:', event, session ? 'has session' : 'no session')
-
+        // Reliable method to check initial session, ensuring loading is ALWAYS resolved
+        const initializeAuth = async () => {
+            try {
+                // Ensure auth resolves and user state is synchronized
+                const { data: { session } } = await supabase.auth.getSession()
+                
                 if (session?.user) {
                     setUser(session.user)
-
-                    // Fetch profile on initial load or sign-in
-                    if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                        await fetchProfile(session.user.id)
-                    }
+                    await fetchProfile(session.user.id)
                 } else {
                     setUser(null)
                     setProfile(null)
                 }
-
-                // Loading is done once any auth event fires
+            } catch (error) {
+                console.error('[AuthContext] Error getting initial session:', error)
+            } finally {
                 if (mounted) {
                     setLoading(false)
+                }
+            }
+        }
+
+        initializeAuth()
+
+        // Subscribe to auth events, but handle them gracefully
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (event, session) => {
+                if (!mounted) return
+                console.log('[AuthContext] Auth event:', event, session ? 'has session' : 'no session')
+
+                // For INITIAL_SESSION, initializeAuth already handles it.
+                // We only care about subsequent events.
+                if (event === 'INITIAL_SESSION') return
+
+                if (session?.user) {
+                    setUser(session.user)
+                    
+                    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                        // Don't block loading on subsequent events, just fetch profile
+                        await fetchProfile(session.user.id)
+                    }
+                } else if (event === 'SIGNED_OUT') {
+                    setUser(null)
+                    setProfile(null)
+                    router.push('/')
                 }
             }
         )
 
         return () => {
             mounted = false
-            clearTimeout(safetyTimeout)
             subscription.unsubscribe()
         }
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [supabase, fetchProfile, router])
 
     const signOut = async () => {
         await supabase.auth.signOut()
