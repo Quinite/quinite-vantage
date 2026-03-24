@@ -8,18 +8,43 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import AdminHeader from '@/components/admin/AdminHeader'
 
 export default function AdminLayout({ children }) {
-    const { user, profile, loading: authLoading } = useAuth()
+    const { user, profile, loading: authLoading, profileLoading } = useAuth()
     const router = useRouter()
     const pathname = usePathname()
     const [authorized, setAuthorized] = useState(false)
+    const [redirecting, setRedirecting] = useState(false)
 
     useEffect(() => {
-        if (!authLoading) checkAccess()
-    }, [authLoading, user, profile])
+        // Only run check when BOTH auth and profile loading are finished
+        if (!authLoading && !profileLoading) {
+            checkAccess()
+        }
+    }, [authLoading, profileLoading, user, profile])
+
+    // Safety timeout: If still not authorized after 10s and not loading, something is wrong
+    useEffect(() => {
+        if (!authLoading && !profileLoading && !authorized && !redirecting) {
+            const timer = setTimeout(() => {
+                console.warn('⚠️ [AdminLayout] Stuck in loading, forcing check...')
+                checkAccess()
+            }, 5000)
+            return () => clearTimeout(timer)
+        }
+    }, [authLoading, profileLoading, authorized, redirecting])
 
     function checkAccess() {
+        if (redirecting) return
+
+        console.log('[AdminLayout] Checking access...', { 
+            hasUser: !!user, 
+            hasProfile: !!profile,
+            role: profile?.role 
+        })
+
         // 1. No user -> Redirect
         if (!user) {
+            console.log('➡️ [Admin] No user, redirecting to login')
+            setRedirecting(true)
             router.push('/')
             return
         }
@@ -28,6 +53,7 @@ export default function AdminLayout({ children }) {
         if (!profile) {
             // If auth is done loading but no profile, something is wrong
             console.error('❌ [Admin] User logged in but no profile found')
+            setRedirecting(true)
             router.push('/')
             return
         }
@@ -37,20 +63,23 @@ export default function AdminLayout({ children }) {
         if (!allowedRoles.includes(profile.role)) {
             console.log(`⛔ [Admin] Access denied - role: ${profile.role}`)
             toast.error('Access denied')
+            setRedirecting(true)
             router.push('/')
             return
         }
 
+        console.log('✅ [Admin] Authorized')
         setAuthorized(true)
     }
 
-    if (authLoading || !authorized) {
+    if (authLoading || profileLoading || !authorized || redirecting) {
         return (
             <div className="h-screen flex items-center justify-center bg-slate-50">
                 <LoadingSpinner className="w-8 h-8 text-primary" />
             </div>
         )
     }
+
 
     const isFullScreenModule = pathname?.startsWith('/dashboard/admin/crm') ||
         pathname?.startsWith('/dashboard/admin/inventory') ||
