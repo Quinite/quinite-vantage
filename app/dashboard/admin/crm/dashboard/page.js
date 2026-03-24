@@ -29,10 +29,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { PermissionGate } from '@/components/permissions/PermissionGate'
 
+import { useCRMDashboard } from '@/hooks/useCRMDashboard'
+
 export default function CRMDashboardPage() {
-    const [stats, setStats] = useState(null)
-    const [loading, setLoading] = useState(true)
     const [dateRange, setDateRange] = useState('this_month')
+    
+    // Use React Query hook for data fetching and caching
+    const { 
+        data: stats, 
+        isLoading: loading, 
+        isRefetching, 
+        error 
+    } = useCRMDashboard(dateRange)
 
     const dateRangeOptions = [
         { value: 'this_month', label: 'This Month' },
@@ -47,26 +55,18 @@ export default function CRMDashboardPage() {
         return dateRangeOptions.find(opt => opt.value === dateRange)?.label || 'This Month'
     }
 
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                const res = await fetch(`/api/crm/dashboard?range=${dateRange}`)
-                if (res.ok) {
-                    const data = await res.json()
-                    setStats(data)
-                }
-            } catch (error) {
-                console.error('Failed to fetch CRM dashboard data:', error)
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchDashboardData()
-    }, [dateRange])
+    if (error) {
+        return (
+            <div className="p-6 text-center text-red-500">
+                <p>Failed to load dashboard data. Please try again later.</p>
+                <Button onClick={() => window.location.reload()} className="mt-4">Reload Page</Button>
+            </div>
+        )
+    }
 
     const metrics = [
         {
-            title: 'Total Leads',
+
             value: loading ? '...' : stats?.totalLeads || 0,
             change: loading ? '...' : stats?.leadsChange || '+12%',
             trend: 'up',

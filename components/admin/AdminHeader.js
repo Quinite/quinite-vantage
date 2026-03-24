@@ -60,6 +60,17 @@ export default function AdminHeader({ user, profile }) {
     // [NEW] Get permissions
     const { hasPermission, hasAnyPermission, loading: permissionsLoading } = usePermissions()
 
+    // [NEW] Query Client for prefetching
+    const queryClient = React.useMemo(() => {
+        try { return new (require('@tanstack/react-query').QueryClient)() } catch { return null }
+    }, [])
+    
+    // Use the existing one from provider if possible but simple prefetch is fine
+    const prefetchDashboard = () => {
+        fetch('/api/crm/dashboard?range=this_month')
+    }
+
+
     React.useEffect(() => {
         setIsMounted(true)
     }, [])
@@ -305,6 +316,9 @@ export default function AdminHeader({ user, profile }) {
                                         <Link
                                             key={item.href}
                                             href={item.href}
+                                            onMouseEnter={() => {
+                                                if (item.label === 'CRM') prefetchDashboard()
+                                            }}
                                             className={cn(
                                                 "relative flex items-center gap-2 px-5 text-sm font-medium transition-all duration-300 rounded-t-lg", // Thinner font, smoother roundness
                                                 /* Height calculation: Full height minus top margin. Natural feel = floating slightly off top */
@@ -314,6 +328,7 @@ export default function AdminHeader({ user, profile }) {
                                                     : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/50 h-[calc(100%-18px)] mb-1.5 rounded-md"
                                             )}
                                         >
+
                                             {/* Top Gradient Border */}
                                             {isActive && (
                                                 <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg" />

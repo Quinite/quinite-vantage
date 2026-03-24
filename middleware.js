@@ -110,6 +110,21 @@ export async function middleware(request) {
             // Attempt to get user - this will throw if token is invalid
             const { data: { user }, error } = await supabase.auth.getUser()
 
+            if (user) {
+                // EXTREME PERFORMANCE GAIN: Pass user ID to downstream API routes
+                // to avoid re-verifying session in every single route handler.
+                request.headers.set('x-user-id', user.id)
+                request.headers.set('x-user-email', user.email || '')
+                
+                // Set these on the NEXT request headers so our app can see them
+                response = NextResponse.next({
+                    request: {
+                        headers: request.headers,
+                    },
+                })
+            }
+
+
             // If there's an auth error (invalid/expired token), clear cookies and redirect
             if (error || !user) {
                 // Only redirect dashboard routes, not API routes

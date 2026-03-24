@@ -8,12 +8,13 @@ export function ReactQueryProvider({ children }) {
     const [queryClient] = useState(() => new QueryClient({
         defaultOptions: {
             queries: {
-                staleTime: 60 * 1000,
-                gcTime: 10 * 60 * 1000,
+                staleTime: 30 * 1000, // 30 seconds fresh
+                gcTime: 10 * 60 * 1000, // Keep in memory for 10 minutes unused
                 retry: 1,
-                refetchOnWindowFocus: true,
-                refetchOnMount: false,
+                refetchOnWindowFocus: true, // Auto-update when user clicks back to browser tab
+                refetchOnMount: true,       // Auto-update when user navigates back to page
             },
+
             mutations: {
                 retry: 0,
             }
