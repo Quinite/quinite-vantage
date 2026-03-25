@@ -43,6 +43,7 @@ export default function LeadsPage() {
   const [editingLead, setEditingLead] = useState(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [leadToDelete, setLeadToDelete] = useState(null)
+  const [isRefreshingLeads, setIsRefreshingLeads] = useState(false)
 
   // Permissions
   const canCreate = usePermission('create_leads')
@@ -71,6 +72,17 @@ export default function LeadsPage() {
 
   const leads = leadsResponse?.leads || []
   const metadata = leadsResponse?.metadata || {}
+
+  const handleRefreshLeads = async () => {
+    setIsRefreshingLeads(true)
+    try {
+      await refetchLeads()
+    } finally {
+      setIsRefreshingLeads(false)
+    }
+  }
+
+  const leadsListLoading = leadsLoading || isRefreshingLeads
 
   const { data: projects } = useProjects({ status: 'active' })
 
@@ -178,7 +190,7 @@ export default function LeadsPage() {
     try {
       await updateLeadMutation.mutateAsync({
         leadId: id,
-        updates: { stage_id: stageId }
+        updates: { stageId: stageId === 'none' ? null : stageId }
       })
       await refetchLeads()
       toast.success('Lead stage updated')
@@ -222,13 +234,13 @@ export default function LeadsPage() {
         setProjectId={setProjectId}
         projects={projects || []}
         stages={allStages}
-        onRefresh={refetchLeads}
-        loading={leadsLoading}
+        onRefresh={handleRefreshLeads}
+        loading={leadsListLoading}
       />
 
       <LeadTable
         leads={leads}
-        loading={leadsLoading}
+        loading={leadsListLoading}
         selectedLeads={selectedLeads}
         setSelectedLeads={setSelectedLeads}
         onEdit={handleEditClick}

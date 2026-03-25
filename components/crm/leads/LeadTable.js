@@ -413,6 +413,8 @@ export function LeadTable({
                     <div className="text-sm text-muted-foreground">
                         {totalLeads} leads found
                     </div>
+                </div>
+                <div className="flex items-center space-x-2">
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
                         <Select
@@ -431,8 +433,6 @@ export function LeadTable({
                             </SelectContent>
                         </Select>
                     </div>
-                </div>
-                <div className="flex items-center space-x-2">
                     <Button
                         variant="outline"
                         size="sm"

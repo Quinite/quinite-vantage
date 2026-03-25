@@ -20,7 +20,9 @@ import {
     DialogTitle,
     DialogFooter
 } from '@/components/ui/dialog'
-import { formatIndianMobile } from '@/lib/utils'
+
+
+
 
 export function LeadDialog({
     open,
@@ -109,12 +111,8 @@ export function LeadDialog({
  
         if (formData.phone) {
             const digits = formData.phone.replace(/\D/g, '')
-            const localNumber = digits.startsWith('91') && digits.length > 10
-                ? digits.slice(-10)
-                : digits
-
-            if (!/^[6-9]\d{9}$/.test(localNumber)) {
-                toast.error('Please enter a valid 10-digit phone number')
+            if (digits.length < 7 || digits.length > 15) {
+                toast.error('Please enter a valid phone number')
                 return
             }
         }
@@ -122,7 +120,7 @@ export function LeadDialog({
         // Convert 'none'/'unassigned' back to null
         const payload = {
             ...formData,
-            phone: formatIndianMobile(formData.phone),
+            phone: formData.phone,
             projectId: formData.projectId === 'none' ? null : formData.projectId,
             stageId: formData.stageId === 'none' ? null : formData.stageId,
             assignedTo: formData.assignedTo === 'unassigned' ? null : formData.assignedTo

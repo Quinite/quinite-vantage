@@ -45,7 +45,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       return corsJSON({ error: 'Organization not found' }, { status: 400 })
     }
 
-    const { project_id, name, description, start_date, end_date, time_start, time_end, metadata } = body
+    const { project_id, name, description, start_date, end_date, time_start, time_end, metadata, manual_start } = body
 
     if (!project_id || !start_date || !end_date || !time_start || !time_end) {
       return corsJSON({
@@ -63,6 +63,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       time_start,
       time_end,
       status: 'scheduled',
+      manual_start: manual_start === true,
       metadata: metadata || null,
       created_by: user.id
     }
