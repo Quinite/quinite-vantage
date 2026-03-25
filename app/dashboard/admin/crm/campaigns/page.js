@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -573,6 +573,7 @@ function DeleteConfirmDialog({ open, campaign, onConfirm, onCancel, deleting }) 
 export default function CampaignsPage() {
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const canView = usePermission('view_campaigns')
   const canCreate = usePermission('create_campaigns')
@@ -581,7 +582,7 @@ export default function CampaignsPage() {
   const canRun = usePermission('run_campaigns')
 
   const [page, setPage] = useState(1)
-  const [selectedProjectId, setSelectedProjectId] = useState('all')
+  const [selectedProjectId, setSelectedProjectId] = useState(() => searchParams.get('project_id') || 'all')
   const [projects, setProjects] = useState([])
 
   // Campaign Data
@@ -619,11 +620,15 @@ export default function CampaignsPage() {
 
   useEffect(() => { fetchProjectsOnly() }, [])
 
+  // Sync filter when URL query param changes (e.g. navigating from project page)
+  useEffect(() => {
+    const pid = searchParams.get('project_id')
+    setSelectedProjectId(pid || 'all')
+    setPage(1)
+  }, [searchParams])
+
   async function fetchProjectsOnly() {
     try {
-      const params = new URLSearchParams(window.location.search)
-      const pid = params.get('project_id')
-      if (pid) setSelectedProjectId(pid)
       const pRes = await fetch('/api/projects')
       const pData = await pRes.json()
       setProjects(pData.projects || [])
@@ -813,7 +818,17 @@ export default function CampaignsPage() {
         <Card className="bg-card">
           <CardContent className="p-4">
             <div className="flex gap-2">
-              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+              <Select
+                value={selectedProjectId}
+                onValueChange={(v) => {
+                  setSelectedProjectId(v)
+                  setPage(1)
+                  const url = v === 'all'
+                    ? '/dashboard/admin/crm/campaigns'
+                    : `/dashboard/admin/crm/campaigns?project_id=${v}`
+                  router.replace(url, { scroll: false })
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="All Projects" />
                 </SelectTrigger>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input' // For Campaign Dialog
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -72,21 +72,11 @@ export default function ProjectsPage() {
   const [viewOpen, setViewOpen] = useState(false)
   const [viewingProject, setViewingProject] = useState(null)
 
-  // Campaign State
-  const [addOpen, setAddOpen] = useState(false)
-
   // Permissions
   const canView = usePermission('view_projects')
   const canCreate = usePermission('create_projects')
   const canEdit = usePermission('edit_projects')
   const canDelete = usePermission('delete_projects')
-
-  const [campName, setCampName] = useState('')
-  const [campProjectId, setCampProjectId] = useState(null)
-  const [campStartDate, setCampStartDate] = useState(new Date().toISOString().split('T')[0])
-  const [campEndDate, setCampEndDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0])
-  const [campTimeStart, setCampTimeStart] = useState('09:00')
-  const [campTimeEnd, setCampTimeEnd] = useState('18:00')
 
   // Delete State
   const [deletingId, setDeletingId] = useState(null)
@@ -323,37 +313,6 @@ export default function ProjectsPage() {
     })
   }
 
-  const handleCreateCampaign = async (e) => {
-    e.preventDefault()
-    setSubmitting(true)
-    try {
-      const res = await fetch('/api/campaigns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: campName,
-          project_id: campProjectId,
-          start_date: campStartDate,
-          end_date: campEndDate,
-          time_start: campTimeStart,
-          time_end: campTimeEnd
-        })
-      })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-
-      toast.success("Campaign created successfully!")
-      setCampName('')
-      setCampProjectId(null)
-      setAddOpen(false)
-      router.push('/dashboard/admin/campaigns')
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-muted/5">
@@ -473,8 +432,7 @@ export default function ProjectsPage() {
                     setViewOpen(true)
                   }}
                   onStartCampaign={(p) => {
-                    // Navigate to Campaigns page filtered by project
-                    router.push(`/dashboard/admin/crm/projects/${p.id}/campaigns`)
+                    router.push(`/dashboard/admin/crm/campaigns?project_id=${p.id}`)
                   }}
                   onToggleVisibility={handleToggleVisibility}
                   deleting={deletingId === project.id}
@@ -520,9 +478,7 @@ export default function ProjectsPage() {
                   setViewOpen(true)
                 }}
                 onStartCampaign={(p) => {
-                  setCampName(`Campaign for ${p.name}`)
-                  setCampProjectId(p.id)
-                  setAddOpen(true)
+                  router.push(`/dashboard/admin/crm/campaigns?project_id=${p.id}`)
                 }}
                 onToggleVisibility={handleToggleVisibility}
                 deletingId={deletingId}
@@ -849,77 +805,6 @@ export default function ProjectsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Create Campaign Modal (Simplified) */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create Quick Campaign</DialogTitle>
-            <DialogDescription>
-              Launch a calling campaign for this project immediately.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateCampaign} className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Campaign Name</label>
-              <Input
-                value={campName}
-                onChange={e => setCampName(e.target.value)}
-                placeholder="e.g., Summer Sale Outreach"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Start Date</label>
-                <Input
-                  type="date"
-                  value={campStartDate}
-                  onChange={e => setCampStartDate(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">End Date</label>
-                <Input
-                  type="date"
-                  value={campEndDate}
-                  onChange={e => setCampEndDate(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Daily Start Time</label>
-                <Input
-                  type="time"
-                  value={campTimeStart}
-                  onChange={e => setCampTimeStart(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Daily End Time</label>
-                <Input
-                  type="time"
-                  value={campTimeEnd}
-                  onChange={e => setCampTimeEnd(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Campaign'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
- 
       {/* Universal Confirmation Dialog */}
       <AlertDialog
         open={confirmDialog.open}

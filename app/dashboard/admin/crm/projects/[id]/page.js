@@ -101,7 +101,11 @@ export default function ProjectDetailsPage() {
                         <Building2 className="w-4 h-4" />
                         Overview
                     </TabsTrigger>
-                    <TabsTrigger value="campaigns" className="flex items-center gap-2">
+                    <TabsTrigger
+                        value="campaigns"
+                        className="flex items-center gap-2"
+                        onClick={() => router.push(`/dashboard/admin/crm/campaigns?project_id=${projectId}`)}
+                    >
                         <Megaphone className="w-4 h-4" />
                         Campaigns
                     </TabsTrigger>
@@ -271,21 +275,7 @@ export default function ProjectDetailsPage() {
                     </div>
                 </TabsContent>
 
-                {/* Campaigns Tab */}
-                <TabsContent value="campaigns">
-                    <Card className="p-6">
-                        <div className="text-center py-12">
-                            <Megaphone className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                            <h3 className="text-lg font-semibold text-foreground mb-2">Campaigns</h3>
-                            <p className="text-sm text-muted-foreground mb-4">
-                                View and manage campaigns for this project
-                            </p>
-                            <Button onClick={() => router.push(`/dashboard/admin/crm/projects/${projectId}/campaigns`)}>
-                                Go to Campaigns
-                            </Button>
-                        </div>
-                    </Card>
-                </TabsContent>
+                {/* Campaigns Tab - handled via router.push above */}
 
                 {/* Inventory Tab */}
                 <TabsContent value="inventory">
