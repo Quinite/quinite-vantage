@@ -5,16 +5,68 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { toast } from 'sonner'
-import { GripVertical, Trash2, Plus, Save, Loader2, Lock } from 'lucide-react'
+import { GripVertical, Trash2, Plus, Loader2, Lock, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle
+} from '@/components/ui/alert-dialog'
+
+const MANDATORY_STAGE_NAMES = ['New Lead', 'Won', 'Lost']
+const DEFAULT_STAGE_COLORS = {
+    'New Lead': '#3b82f6',
+    'Won': '#16a34a',
+    'Lost': '#ef4444'
+}
+
+const normalizeStageName = (name) => (name || '').trim().toLowerCase()
+const isMandatoryStage = (stage) => MANDATORY_STAGE_NAMES.some(
+    (mandatoryName) => normalizeStageName(mandatoryName) === normalizeStageName(stage?.name)
+)
+
+const ensureMandatoryStages = (stageList = [], pipelineId) => {
+    const normalizedMap = new Map(stageList.map((s) => [normalizeStageName(s.name), s]))
+    const next = [...stageList]
+
+    for (const mandatoryName of MANDATORY_STAGE_NAMES) {
+        if (!normalizedMap.has(normalizeStageName(mandatoryName))) {
+            next.push({
+                id: `temp-default-${mandatoryName.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+                name: mandatoryName,
+                color: DEFAULT_STAGE_COLORS[mandatoryName],
+                order_index: next.length,
+                pipeline_id: pipelineId || null,
+            })
+        }
+    }
+
+    return next.map((stage) => {
+        if (!isMandatoryStage(stage)) return stage
+        const canonicalName = MANDATORY_STAGE_NAMES.find(
+            (mandatoryName) => normalizeStageName(mandatoryName) === normalizeStageName(stage.name)
+        ) || stage.name
+        return {
+            ...stage,
+            name: canonicalName,
+            color: stage.color || DEFAULT_STAGE_COLORS[canonicalName] || '#94a3b8',
+        }
+    })
+}
 
 function SortableStage({ id, stage, onChange, onDelete, canEdit }) {
     const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id, disabled: !canEdit })
+    const mandatory = isMandatoryStage(stage)
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -23,26 +75,42 @@ function SortableStage({ id, stage, onChange, onDelete, canEdit }) {
     }
 
     return (
-        <div ref={setNodeRef} style={style} className="flex items-center gap-4 p-3 bg-white border rounded-lg mb-2 shadow-sm group">
+        <div
+            ref={setNodeRef}
+            style={style}
+            className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl mb-3 shadow-sm group hover:shadow-md transition-shadow"
+        >
             <div {...attributes} {...listeners} className={`outline-none ${canEdit ? 'cursor-grab hover:text-blue-600' : 'cursor-not-allowed text-gray-300'}`}>
                 <GripVertical className="h-5 w-5" />
             </div>
 
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                    value={stage.name}
-                    onChange={(e) => onChange(id, 'name', e.target.value)}
-                    placeholder="Stage Name"
-                    className="h-9"
-                    disabled={!canEdit}
-                />
-                <div className="flex gap-2">
-                    <div className="relative w-full">
-                        <div className="absolute left-2 top-2.5 h-4 w-4 rounded-full border border-gray-200" style={{ backgroundColor: stage.color }}></div>
-                        <Input
-                            value={stage.color}
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                <div className="md:col-span-7">
+                    <Input
+                        value={stage.name}
+                        onChange={(e) => onChange(id, 'name', e.target.value)}
+                        placeholder="Stage Name"
+                        className="h-10"
+                        disabled={!canEdit}
+                    />
+                </div>
+                <div className="md:col-span-5 flex gap-2">
+                    <label className="h-10 w-12 rounded-md border border-slate-300 bg-white flex items-center justify-center cursor-pointer">
+                        <input
+                            type="color"
+                            value={stage.color || '#94a3b8'}
                             onChange={(e) => onChange(id, 'color', e.target.value)}
-                            placeholder="#Color"
+                            disabled={!canEdit}
+                            className="h-7 w-7 border-0 bg-transparent p-0 cursor-pointer"
+                            aria-label={`Pick color for ${stage.name}`}
+                        />
+                    </label>
+                    <div className="relative flex-1">
+                        <div className="absolute left-2 top-2.5 h-4 w-4 rounded-full border border-gray-200" style={{ backgroundColor: stage.color || '#94a3b8' }}></div>
+                        <Input
+                            value={stage.color || ''}
+                            onChange={(e) => onChange(id, 'color', e.target.value)}
+                            placeholder="#RRGGBB"
                             className="h-9 pl-8 font-mono"
                             disabled={!canEdit}
                         />
@@ -51,21 +119,22 @@ function SortableStage({ id, stage, onChange, onDelete, canEdit }) {
             </div>
 
             <PermissionTooltip
-                hasPermission={canEdit}
-                message="You need 'Manage CRM Settings' permission to delete stages."
+                hasPermission={canEdit && !mandatory}
+                message={mandatory
+                    ? 'Default stages are mandatory and cannot be deleted.'
+                    : "You need 'Manage CRM Settings' permission to delete stages."}
             >
                 <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                        if (!canEdit) return
+                        if (!canEdit || mandatory) return
                         onDelete(id)
                     }}
-                    disabled={!canEdit}
+                    disabled={!canEdit || mandatory}
                     className="text-red-500 hover:text-red-700 hover:bg-red-50 relative"
                 >
-                    {!canEdit && <Lock className="w-3 h-3 absolute" />}
-                    <Trash2 className="h-4 w-4" />
+                    {!canEdit ? <Lock className="w-3 h-3 absolute" /> : <Trash2 className="h-4 w-4" />}
                 </Button>
             </PermissionTooltip>
         </div>
@@ -79,6 +148,7 @@ export default function PipelineSettingsPage() {
     const [stages, setStages] = useState([])
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [stageToDelete, setStageToDelete] = useState(null)
 
     // Sensors for Drag and Drop
     const sensors = useSensors(
@@ -100,7 +170,7 @@ export default function PipelineSettingsPage() {
         if (selectedPipelineId && pipelines.length > 0) {
             const pipeline = pipelines.find(p => p.id === selectedPipelineId)
             if (pipeline) {
-                setStages(pipeline.stages || [])
+                setStages(ensureMandatoryStages(pipeline.stages || [], selectedPipelineId))
             }
         }
     }, [selectedPipelineId, pipelines])
@@ -126,6 +196,8 @@ export default function PipelineSettingsPage() {
     const handleDragEnd = (event) => {
         const { active, over } = event
 
+        if (!over || active.id === over.id) return
+
         if (active.id !== over.id) {
             setStages((items) => {
                 const oldIndex = items.findIndex(i => i.id === active.id)
@@ -142,12 +214,11 @@ export default function PipelineSettingsPage() {
     }
 
     const handleDeleteStage = async (id) => {
-        // If it's a new temporary stage (no backend ID yet, usually UUID check or negative ID), just remove from state
-        // But here we rely on backend having generated IDs or temp IDs. 
-        // For simplicity, let's assume we optimistically remove from UI and delete from API if it exists.
-
-        // However, if we delete, we should probably confirm. 
-        if (!confirm('Are you sure? This will remove the stage permanently.')) return
+        const target = stages.find((s) => s.id === id)
+        if (!target || isMandatoryStage(target)) {
+            toast.error('This stage is mandatory and cannot be deleted')
+            return
+        }
 
         if (String(id).startsWith('temp-')) {
             setStages(prev => prev.filter(s => s.id !== id))
@@ -184,6 +255,13 @@ export default function PipelineSettingsPage() {
         setSaving(true)
 
         try {
+            const stagesWithDefaults = ensureMandatoryStages(stages, selectedPipelineId)
+            const hasEmptyName = stagesWithDefaults.some((stage) => !stage.name?.trim())
+            if (hasEmptyName) {
+                toast.error('Stage name cannot be empty')
+                return
+            }
+
             // Prepare payload
             // For new stages (temp-id), we need to POST them first or let PUT handle them if we modify API?
             // Existing API: 
@@ -194,8 +272,8 @@ export default function PipelineSettingsPage() {
             // 1. Filter new stages (temp-) -> Create them via POST
             // 2. Filter existing stages -> Update them via PUT (batch)
 
-            const newStages = stages.filter(s => String(s.id).startsWith('temp-'))
-            const existingStages = stages.filter(s => !String(s.id).startsWith('temp-'))
+            const newStages = stagesWithDefaults.filter(s => String(s.id).startsWith('temp-'))
+            const existingStages = stagesWithDefaults.filter(s => !String(s.id).startsWith('temp-'))
 
             // Create new stages
             const createdStages = []
@@ -205,8 +283,8 @@ export default function PipelineSettingsPage() {
                     body: JSON.stringify({
                         pipeline_id: selectedPipelineId,
                         name: stage.name,
-                        color: stage.color,
-                        order_index: stages.indexOf(stage) // Use current index
+                        color: stage.color || '#94a3b8',
+                        order_index: stagesWithDefaults.findIndex((s) => s.id === stage.id)
                     })
                 })
                 const data = await res.json()
@@ -257,7 +335,8 @@ export default function PipelineSettingsPage() {
                 body: JSON.stringify({
                     stages: existingStages.map(s => ({
                         ...s,
-                        order_index: stages.findIndex(st => st.id === s.id)
+                        color: s.color || '#94a3b8',
+                        order_index: stagesWithDefaults.findIndex(st => st.id === s.id)
                     }))
                 })
             })
@@ -279,7 +358,7 @@ export default function PipelineSettingsPage() {
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Pipeline Settings</h1>
-                    <p className="text-gray-500 mt-1">Manage your sales pipeline stages and order</p>
+                    <p className="text-gray-500 mt-1">Manage stages with drag-and-drop, color coding, and mandatory defaults.</p>
                 </div>
                 <div className="flex gap-4">
                     <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
@@ -298,9 +377,13 @@ export default function PipelineSettingsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Stages</CardTitle>
-                    <CardDescription>Drag and drop to reorder stages.</CardDescription>
+                    <CardDescription>Default mandatory stages: New Lead, Won, Lost. You can edit names/colors but cannot delete them.</CardDescription>
                 </CardHeader>
                 <CardContent>
+                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 flex items-start gap-2">
+                        <ShieldCheck className="h-4 w-4 mt-0.5" />
+                        <span>Use the color picker for quick stage color selection. Drag rows to reorder the pipeline flow.</span>
+                    </div>
                     <DndContext
                         sensors={sensors}
                         collisionDetection={closestCenter}
@@ -316,7 +399,11 @@ export default function PipelineSettingsPage() {
                                     id={stage.id}
                                     stage={stage}
                                     onChange={handleStageChange}
-                                    onDelete={handleDeleteStage}
+                                    onDelete={(id) => {
+                                        const stage = stages.find((s) => s.id === id)
+                                        if (!stage) return
+                                        setStageToDelete(stage)
+                                    }}
                                     canEdit={canEdit}
                                 />
                             ))}
@@ -364,6 +451,30 @@ export default function PipelineSettingsPage() {
                     </Button>
                 </PermissionTooltip>
             </div>
+
+            <AlertDialog open={!!stageToDelete} onOpenChange={(open) => !open && setStageToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Stage?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action will permanently remove the stage{stageToDelete?.name ? ` "${stageToDelete.name}"` : ''}. This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-red-600 hover:bg-red-700"
+                            onClick={() => {
+                                if (!stageToDelete) return
+                                handleDeleteStage(stageToDelete.id)
+                                setStageToDelete(null)
+                            }}
+                        >
+                            Delete Stage
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
