@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -29,6 +30,11 @@ export default function LeadForm({
     isSubmitting = false
 }) {
     const canAssign = usePermission('assign_leads')
+    const [phoneValue, setPhoneValue] = useState(initialData?.phone || '')
+
+    React.useEffect(() => {
+        setPhoneValue(initialData?.phone || '')
+    }, [initialData?.phone])
 
     const handleSubmit = (e) => {
         e.preventDefault()
@@ -38,7 +44,7 @@ export default function LeadForm({
             id: initialData?.id,
             name: formData.get('name'),
             email: formData.get('email'),
-            phone: formatIndianMobile(formData.get('phone')),
+            phone: formatIndianMobile(phoneValue),
             projectId: formData.get('projectId') === 'none' ? null : formData.get('projectId'),
             // If we have stages, prioritize stageId. Otherwise use status.
             stageId: formData.get('stageId') || initialStageId || initialData?.stage_id,
@@ -150,11 +156,12 @@ export default function LeadForm({
                         <Phone className="w-4 h-4 text-slate-500" />
                         Phone Number *
                     </Label>
-                    <Input
+                    <PhoneInput
                         name="phone"
-                        defaultValue={initialData?.phone}
+                        value={phoneValue}
+                        onChange={setPhoneValue}
                         required
-                        placeholder="+1 (555) 000-0000"
+                        placeholder="98765 43210"
                         className="h-11 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                     />
                 </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'react-hot-toast'
@@ -139,11 +140,11 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, profil
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="phone">Phone</Label>
-                                    <Input id="phone" name="phone" value={formData.phone} onChange={handleChange} />
+                                    <PhoneInput id="phone" name="phone" value={formData.phone} onChange={(value) => setFormData(prev => ({ ...prev, phone: value }))} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="mobile">Mobile</Label>
-                                    <Input id="mobile" name="mobile" value={formData.mobile} onChange={handleChange} />
+                                    <PhoneInput id="mobile" name="mobile" value={formData.mobile} onChange={(value) => setFormData(prev => ({ ...prev, mobile: value }))} />
                                 </div>
                             </div>
 

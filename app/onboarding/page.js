@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -31,6 +32,9 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'react-hot-toast'
 import { Skeleton } from '@/components/ui/skeleton'
+
+const getPhoneDigits = (value) => (value || '').replace(/\D/g, '')
+const isValidIndianMobile = (value) => /^[6-9]\d{9}$/.test(getPhoneDigits(value).slice(-10))
 
 const STEPS = [
   { id: 1, title: 'Sector', icon: Briefcase },
@@ -348,7 +352,9 @@ export default function OnboardingPage() {
         return formData.businessType !== ''
       case 3:
         return formData.companyName.trim() !== '' &&
-          formData.contactNumber.trim().length >= (formData.country === 'India' ? 10 : 5)
+          (formData.country === 'India'
+            ? isValidIndianMobile(formData.contactNumber)
+            : getPhoneDigits(formData.contactNumber).length >= 5)
       case 4:
         return formData.addressLine1.trim().length >= 5 &&
           formData.city.trim() !== '' &&
@@ -387,13 +393,12 @@ export default function OnboardingPage() {
         }
         // Validate phone number (10 digits for India, general check for others)
         if (formData.country === 'India') {
-          const phoneRegex = /^[6-9]\d{9}$/
-          if (!phoneRegex.test(formData.contactNumber.replace(/[^\d]/g, ''))) {
+          if (!isValidIndianMobile(formData.contactNumber)) {
             toast.error('Please enter a valid 10-digit Indian mobile number')
             return false
           }
         } else {
-          if (formData.contactNumber.length < 5) {
+          if (getPhoneDigits(formData.contactNumber).length < 5) {
             toast.error('Please enter a valid contact number')
             return false
           }
@@ -736,16 +741,11 @@ export default function OnboardingPage() {
 
                 <div>
                   <Label htmlFor="contactNumber">Contact Number *</Label>
-                  <Input
+                  <PhoneInput
                     id="contactNumber"
-                    type="tel"
                     value={formData.contactNumber}
-                    onChange={(e) => {
-                      // Only allow digits and limit to 10
-                      const value = e.target.value.replace(/\D/g, '').slice(0, 10)
-                      updateFormData('contactNumber', value)
-                    }}
-                    placeholder={formData.country === 'India' ? "91XXXXXXXXXX" : "Enter contact number"}
+                    onChange={(value) => updateFormData('contactNumber', value)}
+                    placeholder={formData.country === 'India' ? "98765 43210" : "Enter contact number"}
                     className="mt-1"
                   />
                   <p className="text-xs text-gray-500 mt-1">

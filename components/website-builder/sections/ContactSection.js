@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Phone, Mail, MapPin, Clock, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
+import { PhoneInput } from '@/components/ui/phone-input'
 
 // ─── Phone normalizer ─────────────────────────────────────────────────────────
 // Rules:
@@ -194,11 +195,13 @@ export default function ContactSection({ content = {}, organizationId }) {
                                         <label className="text-xs font-semibold text-slate-600">
                                             Mobile Number <span className="text-red-500">*</span>
                                         </label>
-                                        <input
-                                            type="tel"
+                                        <PhoneInput
                                             placeholder="9XXXXXXXXX or +44 XXXX XXXXXX"
                                             value={form.mobile}
-                                            onChange={handleChange('mobile')}
+                                            onChange={(value) => {
+                                                setForm(prev => ({ ...prev, mobile: value }))
+                                                if (errors.mobile) setErrors(prev => ({ ...prev, mobile: '' }))
+                                            }}
                                             className={inputClass('mobile')}
                                         />
                                         {errors.mobile

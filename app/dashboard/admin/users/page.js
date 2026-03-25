@@ -8,6 +8,7 @@ import CredentialsModal from '@/components/dashboard/CredentialsModal'
 import { Pencil, Trash2, Plus, Shield, Lock, ArrowLeft } from 'lucide-react'
 import PermissionManager from '@/components/admin/PermissionManager'
 import { Button } from '@/components/ui/button'
+import { PhoneInput } from '@/components/ui/phone-input'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
 
@@ -413,11 +414,10 @@ function UserModal({ user, onClose, onSuccess }) {
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Phone Number *
                         </label>
-                        <input
-                            type="tel"
+                        <PhoneInput
                             required
                             value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            onChange={(value) => setFormData({ ...formData, phone: value })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="+91 98765 43210"
                         />

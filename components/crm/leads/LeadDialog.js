@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/phone-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -106,9 +107,16 @@ export function LeadDialog({
             return
         }
  
-        if (formData.phone && !/^\d{10}$/.test(formData.phone.replace(/\D/g, ''))) {
-            toast.error('Please enter a valid 10-digit phone number')
-            return
+        if (formData.phone) {
+            const digits = formData.phone.replace(/\D/g, '')
+            const localNumber = digits.startsWith('91') && digits.length > 10
+                ? digits.slice(-10)
+                : digits
+
+            if (!/^[6-9]\d{9}$/.test(localNumber)) {
+                toast.error('Please enter a valid 10-digit phone number')
+                return
+            }
         }
  
         // Convert 'none'/'unassigned' back to null
@@ -187,11 +195,10 @@ export function LeadDialog({
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
                             <Label htmlFor="phone">Phone</Label>
-                            <Input
+                            <PhoneInput
                                 id="phone"
-                                type="tel"
                                 value={formData.phone}
-                                onChange={(e) => handleChange('phone', e.target.value)}
+                                onChange={(value) => handleChange('phone', value)}
                             />
                         </div>
                         <div className="grid gap-2">
