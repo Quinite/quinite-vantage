@@ -47,13 +47,36 @@ const safeParseFloat = (val) => {
 export default function ProjectsPage() {
   const router = useRouter()
   const [page, setPage] = useState(1)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+
+  // Handle debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setPage(1)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   // Data Fetching
-  const { data: projectsData, metadata: projectsMetadata, isLoading: loading, isPlaceholderData, refetch } = useProjects({
-    status: undefined, // Add filters if needed
+  const {
+    data: projectsData,
+    metadata: projectsMetadata,
+    isLoading: loading,
+    isFetching,
+    isPlaceholderData,
+    refetch
+  } = useProjects({
+    search: debouncedSearchTerm,
     page,
     limit: 20
   })
+
+  // Combined loading state for skeleton: initial loading OR fetching new search/page/refresh
+  // Adding a small delay or check to make it "speedy" as per user request
+  // (React Query's isFetching is usually enough)
+  const showSkeleton = loading || isFetching
 
   // useProjects now returns flattened data
   const projects = projectsData || []
@@ -350,6 +373,11 @@ export default function ProjectsPage() {
                 <Input
                   placeholder="Search projects..."
                   className="w-full"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value)
+                    setPage(1) // Reset to page 1 on search
+                  }}
                 />
               </div>
 
@@ -380,8 +408,9 @@ export default function ProjectsPage() {
                 size="icon"
                 onClick={() => refetch()}
                 className="shrink-0"
+                disabled={isFetching}
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </CardContent>
@@ -392,7 +421,7 @@ export default function ProjectsPage() {
         {/* Projects Display */}
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {loading ? (
+            {showSkeleton ? (
               [...Array(6)].map((_, i) => (
                 <div key={i} className="rounded-xl border border-border bg-card overflow-hidden">
                   <Skeleton className="h-48 w-full bg-slate-200" />
@@ -444,7 +473,7 @@ export default function ProjectsPage() {
           </div>
         ) : (
           <div>
-            {loading ? (
+            {showSkeleton ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4].map(i => (
                   <div key={i} className="flex items-center justify-between p-4 border border-border rounded-lg bg-card">

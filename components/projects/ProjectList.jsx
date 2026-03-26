@@ -130,7 +130,7 @@ export default function ProjectList({
                                         <div className="flex items-center gap-2">
                                             <div className="font-medium text-foreground">{project.name}</div>
                                             {(project.is_draft || project.project_status === 'draft') && (
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 font-bold uppercase tracking-wider border border-orange-200">
+                                                <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-orange-100 text-orange-600 font-bold uppercase tracking-wider border border-orange-200">
                                                     Draft
                                                 </span>
                                             )}

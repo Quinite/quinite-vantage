@@ -29,6 +29,7 @@ export const GET = withPermission('view_projects', async (request, context) => {
     const filters = {
       status: searchParams.get('status'),
       projectType: searchParams.get('project_type'),
+      search: searchParams.get('search'),
       page: searchParams.get('page') || 1,
       limit: searchParams.get('limit') || 20
     }
@@ -40,7 +41,12 @@ export const GET = withPermission('view_projects', async (request, context) => {
       .from('projects')
       .select('*, campaigns(*)') // Fetch related campaigns
       .eq('organization_id', profile.organization_id)
-      .order('created_at', { ascending: false })
+
+    if (filters.search) {
+      query = query.or(`name.ilike.%${filters.search}%,address.ilike.%${filters.search}%,locality.ilike.%${filters.search}%`)
+    }
+
+    query = query.order('created_at', { ascending: false })
 
     // 2. Apply Filters
     if (filters.status && filters.status !== 'all') {
@@ -58,10 +64,16 @@ export const GET = withPermission('view_projects', async (request, context) => {
     const to = from + limit - 1
 
     // Get count first
-    const { count, error: countError } = await admin
+    let countQuery = admin
       .from('projects')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', profile.organization_id)
+
+    if (filters.search) {
+      countQuery = countQuery.or(`name.ilike.%${filters.search}%,address.ilike.%${filters.search}%,locality.ilike.%${filters.search}%`)
+    }
+
+    const { count, error: countError } = await countQuery
 
     if (countError) {
       console.error('Projects count error:', countError)

@@ -188,15 +188,6 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
 
                 <div className="grid grid-cols-2 gap-2 pt-1.5">
                     <Button
-                        className="w-full h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                        size="sm"
-                        onClick={() => onStartCampaign(project)}
-                        disabled={project.is_draft || project.project_status === 'draft'}
-                    >
-                        <Briefcase className="w-3.5 h-3.5 mr-1.5" />
-                        Campaign
-                    </Button>
-                    <Button
                         variant="outline"
                         className="w-full h-8 text-xs border-border text-foreground hover:bg-muted"
                         size="sm"
@@ -204,6 +195,15 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
                     >
                         <Eye className="w-3.5 h-3.5 mr-1.5" />
                         View
+                    </Button>
+                    <Button
+                        className="w-full h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                        size="sm"
+                        onClick={() => onStartCampaign(project)}
+                        disabled={project.is_draft || project.project_status === 'draft'}
+                    >
+                        <Briefcase className="w-3.5 h-3.5 mr-1.5" />
+                        Campaign
                     </Button>
                 </div>
 
