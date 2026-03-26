@@ -21,7 +21,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 /**
@@ -115,14 +114,13 @@ const InputComponent = React.forwardRef(({ className, ...rest }, ref) => (
 InputComponent.displayName = "InputComponent"
 
 const CountrySelect = ({ disabled, value: selectedCountry, options: countryList, onChange }) => {
-  const scrollAreaRef = React.useRef(null)
   const [searchValue, setSearchValue] = React.useState("")
   const [isOpen, setIsOpen] = React.useState(false)
 
   return (
     <Popover
       open={isOpen}
-      modal={false}
+      modal={true}
       onOpenChange={(open) => {
         setIsOpen(open)
         if (open) setSearchValue("")
@@ -142,44 +140,32 @@ const CountrySelect = ({ disabled, value: selectedCountry, options: countryList,
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[300px] p-0 z-[100]"
-        onFocusOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
+        className="w-[300px] p-0 z-[200]"
       >
         <Command>
           <CommandInput
             value={searchValue}
             onValueChange={(nextValue) => {
               setSearchValue(nextValue)
-              setTimeout(() => {
-                if (scrollAreaRef.current) {
-                  const viewportElement = scrollAreaRef.current.querySelector(
-                    "[data-radix-scroll-area-viewport]"
-                  )
-                  if (viewportElement) viewportElement.scrollTop = 0
-                }
-              }, 0)
             }}
             placeholder="Search country..."
           />
-          <CommandList>
-            <ScrollArea ref={scrollAreaRef} className="h-72">
-              <CommandEmpty>No country found.</CommandEmpty>
-              <CommandGroup>
-                {countryList.map(({ value: countryCode, label }) =>
-                  countryCode ? (
-                    <CountrySelectOption
-                      key={countryCode}
-                      country={countryCode}
-                      countryName={label}
-                      selectedCountry={selectedCountry}
-                      onChange={onChange}
-                      onSelectComplete={() => setIsOpen(false)}
-                    />
-                  ) : null
-                )}
-              </CommandGroup>
-            </ScrollArea>
+          <CommandList className="max-h-72 overflow-y-auto">
+            <CommandEmpty>No country found.</CommandEmpty>
+            <CommandGroup>
+              {countryList.map(({ value: countryCode, label }) =>
+                countryCode ? (
+                  <CountrySelectOption
+                    key={countryCode}
+                    country={countryCode}
+                    countryName={label}
+                    selectedCountry={selectedCountry}
+                    onChange={onChange}
+                    onSelectComplete={() => setIsOpen(false)}
+                  />
+                ) : null
+              )}
+            </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>

@@ -14,7 +14,9 @@ import { createServerClient } from '@supabase/ssr'
 // Simple in-memory rate limiter
 const rateLimitMap = new Map()
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
-const MAX_REQUESTS = 100 // 100 requests per minute per IP
+const MAX_REQUESTS = 500 // 500 requests per minute per IP
+
+const isDev = process.env.NODE_ENV === 'development'
 
 function rateLimit(ip) {
     const now = Date.now()
@@ -59,7 +61,9 @@ export async function middleware(request) {
 
     // Apply rate limiting to API routes
     if (pathname.startsWith('/api/')) {
-        if (!rateLimit(ip)) {
+        // Skip rate limiting in development or for localhost
+        const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip === 'unknown'
+        if (!isDev && !isLocalhost && !rateLimit(ip)) {
             return new NextResponse(
                 JSON.stringify({
                     error: {

@@ -16,6 +16,7 @@ export function useLeads(filters = {}) {
             if (filters.stageId) params.append('stage_id', filters.stageId)
             if (filters.search) params.append('search', filters.search)
             if (filters.status) params.append('status', filters.status)
+            if (filters.assignedTo) params.append('assigned_to', filters.assignedTo)
             if (filters.page) params.append('page', filters.page)
             if (filters.limit) params.append('limit', filters.limit)
             if (filters.sortBy) params.append('sortBy', filters.sortBy)

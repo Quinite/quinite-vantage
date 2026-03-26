@@ -31,6 +31,7 @@ export default function LeadsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [projectId, setProjectId] = useState(null)
+  const [assignedTo, setAssignedTo] = useState(null)
   const [selectedLeads, setSelectedLeads] = useState(new Set())
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
@@ -64,6 +65,7 @@ export default function LeadsPage() {
     search: searchQuery,
     stageId: stageFilter !== 'all' ? stageFilter : undefined,
     projectId: projectId,
+    assignedTo: assignedTo,
     page: page,
     limit: limit,
     sortBy: sortBy,
@@ -82,7 +84,7 @@ export default function LeadsPage() {
     }
   }
 
-  const leadsListLoading = leadsLoading || isRefreshingLeads
+
 
   const { data: projects } = useProjects({ status: 'active' })
 
@@ -103,6 +105,9 @@ export default function LeadsPage() {
   const deleteLeadMutation = useDeleteLead()
   const bulkDeleteMutation = useBulkDeleteLeads()
   const bulkUpdateMutation = useBulkUpdateLeads()
+
+  // Derived Loading State
+  const leadsListLoading = leadsLoading || isRefreshingLeads || deleteLeadMutation.isPending || bulkDeleteMutation.isPending
 
   // Handlers
   const handleCreateEditSubmit = async (data) => {
@@ -137,6 +142,7 @@ export default function LeadsPage() {
 
   const confirmDelete = async () => {
     if (!leadToDelete) return
+    setIsRefreshingLeads(true)
     try {
       await deleteLeadMutation.mutateAsync(leadToDelete.id)
       setDeleteDialogOpen(false)
@@ -151,6 +157,8 @@ export default function LeadsPage() {
     } catch (error) {
       console.error(error)
       toast.error('Failed to delete lead')
+    } finally {
+      setIsRefreshingLeads(false)
     }
   }
 
@@ -158,6 +166,7 @@ export default function LeadsPage() {
     if (selectedLeads.size === 0) return
     if (!confirm(`Are you sure you want to delete ${selectedLeads.size} selected leads?`)) return
 
+    setIsRefreshingLeads(true)
     try {
       await bulkDeleteMutation.mutateAsync(Array.from(selectedLeads))
       setSelectedLeads(new Set())
@@ -166,6 +175,8 @@ export default function LeadsPage() {
     } catch (error) {
       console.error(error)
       toast.error('Failed to delete leads')
+    } finally {
+      setIsRefreshingLeads(false)
     }
   }
 
@@ -232,8 +243,11 @@ export default function LeadsPage() {
         setStageFilter={setStageFilter}
         projectId={projectId}
         setProjectId={setProjectId}
+        assignedTo={assignedTo}
+        setAssignedTo={setAssignedTo}
         projects={projects || []}
         stages={allStages}
+        users={users}
         onRefresh={handleRefreshLeads}
         loading={leadsListLoading}
       />

@@ -44,6 +44,7 @@ export const GET = withAuth(async (request, context) => {
         const filters = {
             projectId: searchParams.get('project_id'),
             stageId: searchParams.get('stage_id'),
+            assignedTo: searchParams.get('assigned_to'),
             search: searchParams.get('search'),
             status: searchParams.get('status'),
             page: searchParams.get('page') || 1,
@@ -197,8 +198,20 @@ export async function POST(request) {
             .single()
 
         if (error) {
-            console.log('❌ [Leads POST] Database error:', error.message)
-            throw error
+            console.error('❌ [Leads POST] Database error:', error)
+            
+            // 23505 is the Postgres code for unique_violation
+            if (error.code === '23505') {
+                return corsJSON(
+                    { error: 'A lead with this phone number already exists in this project.', code: error.code },
+                    { status: 409 }
+                )
+            }
+
+            return corsJSON(
+                { error: error.message || error.details || 'Database error while creating lead', code: error.code },
+                { status: 500 }
+            )
         }
 
         console.log('✅ [Leads POST] Lead created successfully:', lead.id)

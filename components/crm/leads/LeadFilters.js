@@ -20,6 +20,9 @@ export function LeadFilters({
     setProjectId,
     projects = [],
     stages = [], // Stages can be passed or fetched inside if needed
+    users = [],
+    assignedTo,
+    setAssignedTo,
     onRefresh,
     loading
 }) {
@@ -78,7 +81,7 @@ export function LeadFilters({
                             value={projectId || "all"}
                             onValueChange={(val) => setProjectId(val === "all" ? null : val)}
                         >
-                            <SelectTrigger className="w-full sm:w-[180px]">
+                            <SelectTrigger className="w-full sm:w-[150px]">
                                 <SelectValue placeholder="All Projects" />
                             </SelectTrigger>
                             <SelectContent>
@@ -86,6 +89,23 @@ export function LeadFilters({
                                 {projects.map(project => (
                                     <SelectItem key={project.id} value={project.id}>
                                         {project.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select
+                            value={assignedTo || "all"}
+                            onValueChange={(val) => setAssignedTo(val === "all" ? null : val)}
+                        >
+                            <SelectTrigger className="w-full sm:w-[150px]">
+                                <SelectValue placeholder="All Agents" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Agents</SelectItem>
+                                {users.map(user => (
+                                    <SelectItem key={user.id} value={user.id}>
+                                        {user.full_name || user.email}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

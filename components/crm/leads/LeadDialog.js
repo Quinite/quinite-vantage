@@ -55,7 +55,6 @@ export function LeadDialog({
         projectId: 'none',
         status: 'New',
         stageId: 'none',
-        dealValue: '',
         notes: '',
         assignedTo: 'unassigned'
     })
@@ -70,7 +69,6 @@ export function LeadDialog({
                 projectId: lead.project_id || 'none',
                 status: lead.status || 'New',
                 stageId: lead.stage_id || 'none',
-                dealValue: lead.deals?.[0]?.value || '',
                 notes: lead.notes || '',
                 assignedTo: lead.assigned_to || 'unassigned'
             })
@@ -83,7 +81,6 @@ export function LeadDialog({
                 projectId: 'none',
                 status: 'New',
                 stageId: 'none',
-                dealValue: '',
                 notes: '',
                 assignedTo: 'unassigned'
             })
@@ -236,20 +233,6 @@ export function LeadDialog({
                                     ))}
                                 </SelectContent>
                             </Select>
-                        </div>
-                        {/* Status is removed from database, so ignored here */}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="dealValue">Estimated Value</Label>
-                            <Input
-                                id="dealValue"
-                                type="number"
-                                placeholder="0.00"
-                                value={formData.dealValue}
-                                onChange={(e) => handleChange('dealValue', e.target.value)}
-                            />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="assignedTo">Assign To</Label>
