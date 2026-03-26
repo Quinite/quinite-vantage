@@ -780,8 +780,8 @@ export default function ProjectsPage() {
                   const land = prop.land || {}
                   const amenities = meta.amenities || []
 
-                  // Use direct price_range column if available, fallback to metadata
-                  const priceRange = viewingProject.price_range || price
+                  // Use metadata-based pricing as fallback
+                  const priceRange = price || {}
 
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

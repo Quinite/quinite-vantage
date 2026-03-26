@@ -79,7 +79,6 @@ export const PUT = withAuth(async (request, { params, user, profile }) => {
 
         if (body.total_units !== undefined) updates.total_units = body.total_units
         if (body.unit_types !== undefined) updates.unit_types = body.unit_types
-        if (body.price_range !== undefined) updates.price_range = body.price_range
         if (body.project_status !== undefined) updates.project_status = body.project_status
         if (body.is_draft !== undefined) updates.is_draft = body.is_draft
         if (body.show_in_inventory !== undefined) updates.show_in_inventory = body.show_in_inventory

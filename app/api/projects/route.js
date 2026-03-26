@@ -200,7 +200,6 @@ export async function POST(request) {
       // Inventory fields
       total_units: body.total_units || 0,
       unit_types: body.unit_types || null,
-      price_range: body.price_range || null,
       project_status: body.project_status || 'planning',
       is_draft: body.is_draft || false,
       show_in_inventory: body.show_in_inventory !== false,
