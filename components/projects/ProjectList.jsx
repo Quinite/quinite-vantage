@@ -9,7 +9,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Edit, Trash2, Eye, Megaphone, Building2, MapPin, Lock, Globe } from "lucide-react"
+import { Edit, Trash2, Eye, Megaphone, Building2, MapPin, Lock, Globe, Archive, RefreshCw } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
@@ -27,7 +27,9 @@ export default function ProjectList({
     onPageChange,
     hasMore = false,
     isLoadingMore = false,
-    loading = false
+    loading = false,
+    isArchived: globalIsArchived = false,
+    onRestore
 }) {
     const canEdit = usePermission('edit_projects')
     const canDelete = usePermission('delete_projects')
@@ -108,9 +110,10 @@ export default function ProjectList({
                             const re = meta.real_estate || {}
                             const prop = re.property || {}
                             const loc = re.location || {}
+                            const isArchived = globalIsArchived || !!project.archived_at
 
                             return (
-                                <TableRow key={project.id} className="hover:bg-muted/30">
+                                <TableRow key={project.id} className={`hover:bg-muted/30 transition-all ${isArchived ? 'grayscale-[0.6] opacity-80 bg-slate-50/50' : ''}`}>
                                     <TableCell>
                                         <div className="w-16 h-12 rounded-lg overflow-hidden bg-muted border border-border">
                                             {project.image_url ? (
@@ -132,6 +135,11 @@ export default function ProjectList({
                                             {(project.is_draft || project.project_status === 'draft') && (
                                                 <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-orange-100 text-orange-600 font-bold uppercase tracking-wider border border-orange-200">
                                                     Draft
+                                                </span>
+                                            )}
+                                            {isArchived && (
+                                                <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 font-bold uppercase tracking-wider border border-slate-200">
+                                                    Archived
                                                 </span>
                                             )}
                                         </div>
@@ -156,7 +164,7 @@ export default function ProjectList({
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => onStartCampaign(project)}
-                                                disabled={project.is_draft || project.project_status === 'draft'}
+                                                disabled={project.is_draft || project.project_status === 'draft' || isArchived}
                                                 className="h-8 px-2 text-primary hover:text-primary hover:bg-primary/10 disabled:opacity-30"
                                                 title="Start Campaign"
                                             >
@@ -183,7 +191,7 @@ export default function ProjectList({
                                                         if (!canEdit) return
                                                         onToggleVisibility && onToggleVisibility(project)
                                                     }}
-                                                    disabled={!canEdit || !onToggleVisibility}
+                                                    disabled={!canEdit || !onToggleVisibility || isArchived}
                                                     className={`h-8 w-8 p-0 ${project.public_visibility ? 'text-green-600 hover:text-green-700 bg-green-50/50' : 'text-slate-400 hover:text-slate-600'}`}
                                                     title={project.public_visibility ? 'Public (Click to Hide)' : 'Hidden (Click to Publish)'}
                                                 >
@@ -202,7 +210,7 @@ export default function ProjectList({
                                                         if (!canEdit) return
                                                         onEdit(project)
                                                     }}
-                                                    disabled={!canEdit}
+                                                    disabled={!canEdit || isArchived}
                                                     className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                                                     title="Edit"
                                                 >
@@ -212,20 +220,28 @@ export default function ProjectList({
 
                                             <PermissionTooltip
                                                 hasPermission={canDelete}
-                                                message="You need 'Delete Projects' permission to delete projects."
+                                                message={isArchived ? "Restore to active list" : "Archive project"}
                                             >
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => {
-                                                        if (!canDelete) return
-                                                        onDelete?.(project)
+                                                        if (isArchived) {
+                                                            onRestore?.(project)
+                                                        } else {
+                                                            if (!canDelete) return
+                                                            onDelete?.(project)
+                                                        }
                                                     }}
-                                                    disabled={deletingId === project.id || !onDelete || !canDelete}
-                                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50/50"
-                                                    title="Delete"
+                                                    disabled={deletingId === project.id || (isArchived ? !onRestore : (!onDelete || !canDelete))}
+                                                    className={`h-8 w-8 p-0 ${isArchived ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50/50' : 'text-orange-500 hover:text-orange-700 hover:bg-orange-50/50'}`}
+                                                    title={isArchived ? "Restore" : "Archive"}
                                                 >
-                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    {isArchived ? (
+                                                        <RefreshCw className={deletingId === project.id ? "animate-spin w-3.5 h-3.5" : "w-3.5 h-3.5"} />
+                                                    ) : (
+                                                        <Archive className="w-3.5 h-3.5" />
+                                                    )}
                                                 </Button>
                                             </PermissionTooltip>
                                         </div>

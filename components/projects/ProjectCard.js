@@ -20,7 +20,9 @@ import {
     LandPlot,
     Briefcase,
     Lock,
-    Globe
+    Globe,
+    Archive,
+    RefreshCw
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
@@ -45,7 +47,7 @@ const TransactionBadge = ({ transaction }) => {
     )
 }
 
-export default function ProjectCard({ project, onEdit, onDelete, onView, onStartCampaign, onToggleVisibility, deleting, currency = 'INR', locale = 'en-IN' }) {
+export default function ProjectCard({ project, onEdit, onDelete, onView, onStartCampaign, onToggleVisibility, deleting, isArchived, onRestore, currency = 'INR', locale = 'en-IN' }) {
     const canEdit = usePermission('edit_projects')
     const canDelete = usePermission('delete_projects')
 
@@ -84,7 +86,7 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
     }
 
     return (
-        <Card className="hover:shadow-md transition-all duration-300 border-border bg-card group overflow-hidden rounded-xl">
+        <Card className={`hover:shadow-md transition-all duration-300 border-border bg-card group overflow-hidden rounded-xl ${isArchived ? 'grayscale-[0.6] opacity-90' : ''}`}>
             <div className="relative h-48 bg-muted/30">
                 {project.image_url ? (
                     <img
@@ -104,9 +106,14 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
                         </Badge>
                     )}
                     <TransactionBadge transaction={re.transaction || 'sell'} />
-                    {(project.is_draft || project.project_status === 'draft') && (
+                    {project.is_draft && (
                         <Badge variant="secondary" className="bg-orange-500/90 hover:bg-orange-600/90 backdrop-blur-sm border-0 text-[10px] uppercase tracking-wider text-white">
                             Draft
+                        </Badge>
+                    )}
+                    {isArchived && (
+                        <Badge variant="secondary" className="bg-slate-700/90 backdrop-blur-sm border-0 text-[10px] uppercase tracking-wider text-white">
+                            Archived
                         </Badge>
                     )}
                 </div>
@@ -192,6 +199,7 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
                         className="w-full h-8 text-xs border-border text-foreground hover:bg-muted"
                         size="sm"
                         onClick={() => onView(project)}
+                        disabled={isArchived}
                     >
                         <Eye className="w-3.5 h-3.5 mr-1.5" />
                         View
@@ -200,7 +208,7 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
                         className="w-full h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                         size="sm"
                         onClick={() => onStartCampaign(project)}
-                        disabled={project.is_draft || project.project_status === 'draft'}
+                        disabled={project.is_draft || project.project_status === 'draft' || isArchived}
                     >
                         <Briefcase className="w-3.5 h-3.5 mr-1.5" />
                         Campaign
@@ -217,10 +225,10 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
                             size="sm"
                             className="flex-1 h-7 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
                             onClick={() => {
-                                if (!canEdit) return
+                                if (!canEdit || isArchived) return
                                 onEdit(project)
                             }}
-                            disabled={deleting || !canEdit}
+                            disabled={deleting || !canEdit || isArchived}
                         >
                             <Edit className="w-3.5 h-3.5 mr-1.5" />
                             Edit
@@ -236,10 +244,10 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
                             size="sm"
                             className={`flex-1 h-7 text-xs ${project.public_visibility ? 'text-green-600 hover:text-green-700 hover:bg-green-50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
                             onClick={() => {
-                                if (!canEdit) return
+                                if (!canEdit || isArchived) return
                                 onToggleVisibility && onToggleVisibility(project)
                             }}
-                            disabled={!canEdit || !onToggleVisibility}
+                            disabled={!canEdit || !onToggleVisibility || isArchived}
                         >
                             <Globe className="w-3.5 h-3.5 mr-1.5" />
                             {project.public_visibility ? 'Public' : 'Hidden'}
@@ -248,20 +256,28 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
 
                     <PermissionTooltip
                         hasPermission={canDelete}
-                        message="You need 'Delete Projects' permission to delete projects."
+                        message={isArchived ? "Restore this project to active list" : "Move this project to archive"}
                     >
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="flex-1 h-7 text-xs text-red-500 hover:text-red-700 hover:bg-red-50/50"
+                            className={`flex-1 h-7 text-xs ${isArchived ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50/50' : 'text-orange-500 hover:text-orange-700 hover:bg-orange-50/50'}`}
                             onClick={() => {
-                                if (!canDelete) return
-                                onDelete?.(project)
+                                if (isArchived) {
+                                    onRestore?.(project)
+                                } else {
+                                    if (!canDelete) return
+                                    onDelete?.(project)
+                                }
                             }}
-                            disabled={deleting || !onDelete || !canDelete}
+                            disabled={deleting || (isArchived ? !onRestore : (!onDelete || !canDelete))}
                         >
-                            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                            Delete
+                            {isArchived ? (
+                                <RefreshCw className={deleting ? "animate-spin w-3.5 h-3.5 mr-1.5" : "w-3.5 h-3.5 mr-1.5"} />
+                            ) : (
+                                <Archive className="w-3.5 h-3.5 mr-1.5" />
+                            )}
+                            {isArchived ? 'Restore' : 'Archive'}
                         </Button>
                     </PermissionTooltip>
                 </div>

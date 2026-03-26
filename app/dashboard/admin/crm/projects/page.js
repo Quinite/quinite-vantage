@@ -22,7 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +43,14 @@ const ProjectForm = dynamic(() => import('@/components/projects/ProjectForm'), {
 const safeParseFloat = (val) => {
   const n = parseFloat(val)
   return isNaN(n) ? 0 : n
+}
+
+const formatPrice = (price) => {
+  if (!price) return '0'
+  const n = Number(price)
+  if (n >= 10000000) return (n / 10000000).toFixed(2) + ' Cr'
+  if (n >= 100000) return (n / 100000).toFixed(2) + ' Lac'
+  return n.toLocaleString('en-IN')
 }
 
 export default function ProjectsPage() {
@@ -134,8 +143,10 @@ export default function ProjectsPage() {
         image_path: formData.imagePath,
         // Inventory fields
         total_units: safeParseFloat(formData.totalUnits),
+        available_units: safeParseFloat(formData.availableUnits),
+        sold_units: safeParseFloat(formData.soldUnits),
+        reserved_units: safeParseFloat(formData.reservedUnits),
         unit_types: formData.unitTypes,
-        price_range: { min: safeParseFloat(formData.priceMin), max: safeParseFloat(formData.priceMax) },
         project_status: formData.projectStatus || 'planning',
         is_draft: formData.isDraft || false,
         show_in_inventory: formData.showInInventory !== false,
@@ -195,7 +206,6 @@ export default function ProjectsPage() {
       await refetch() // Refresh list instead of manual state update
       setCreateOpen(false)
       toast.success("Project created successfully!")
-      setShowCreateForm(false)
     } catch (err) {
       toast.error(err.message || "Failed to create project")
     } finally {
@@ -217,8 +227,10 @@ export default function ProjectsPage() {
         image_path: formData.imagePath,
         // Inventory fields
         total_units: safeParseFloat(formData.totalUnits),
+        available_units: safeParseFloat(formData.availableUnits),
+        sold_units: safeParseFloat(formData.soldUnits),
+        reserved_units: safeParseFloat(formData.reservedUnits),
         unit_types: formData.unitTypes,
-        price_range: { min: safeParseFloat(formData.priceMin), max: safeParseFloat(formData.priceMax) },
         project_status: formData.projectStatus || 'planning',
         is_draft: formData.isDraft || false,
         show_in_inventory: formData.showInInventory !== false,
@@ -285,25 +297,126 @@ export default function ProjectsPage() {
     }
   }
 
-  const handleDelete = (project) => {
+  const handleArchive = async (project) => {
+    const loadingToast = toast.loading("Calculating project impact...")
+    try {
+      const res = await fetch(`/api/projects/${project.id}/archive-preview`)
+      const data = await res.json()
+      toast.dismiss(loadingToast)
+
+      if (!res.ok) throw new Error(data.error || "Failed to fetch counts")
+
+      const { counts } = data
+      const isBlocked = counts.running_campaigns > 0
+
+      setConfirmDialog({
+        open: true,
+        title: 'Safe Project Archive?',
+        variant: 'destructive',
+        description: (
+          <div className="space-y-4 pt-2">
+            <p className="text-[13px] text-slate-600 leading-relaxed italic border-l-2 border-orange-400 pl-3">
+              Archiving <strong>{project.name}</strong> will deactivate all associated business data. This action is safe and recoverable.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <div className="flex items-center gap-2.5 text-[11px] font-semibold text-slate-500">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm border border-slate-200/60">
+                  <Megaphone className="w-3 h-3 text-orange-500" />
+                </div>
+                <span>{counts.campaigns} Campaigns</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-[11px] font-semibold text-slate-500">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm border border-slate-200/60">
+                  <Users className="w-3 h-3 text-orange-500" />
+                </div>
+                <span>{counts.leads} Total Leads</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-[11px] font-semibold text-slate-500">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm border border-slate-200/60">
+                  <Store className="w-3 h-3 text-orange-500" />
+                </div>
+                <span>{counts.inventory} Unit Items</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-[11px] font-semibold text-slate-500">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm border border-slate-200/60">
+                  <PhoneCall className="w-3 h-3 text-orange-500" />
+                </div>
+                <span>{counts.calls} Call Records</span>
+              </div>
+            </div>
+
+            {isBlocked && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex gap-3 items-start animate-in fade-in slide-in-from-top-1">
+                <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold text-red-800 leading-none">Archiving Blocked</p>
+                  <p className="text-[10px] text-red-600 leading-tight">
+                    This project has {counts.running_campaigns} running campaign(s). Pause or end them manually to enable project archiving.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isBlocked && (
+              <div className="bg-amber-50/50 border border-amber-100 p-3 rounded-xl flex gap-3 items-start">
+                <div className="p-1 bg-amber-100 rounded-full mt-0.5">
+                  <History className="w-3.5 h-3.5 text-amber-600" />
+                </div>
+                <p className="text-[10px] text-amber-700 leading-tight italic">
+                  Associated campaigns, leads, and inventory will be archived automatically. Performance metrics are preserved for historical record.
+                </p>
+              </div>
+            )}
+          </div>
+        ),
+        onConfirm: async () => {
+          if (isBlocked) {
+            toast.error("Blocked: Running campaigns must be stopped first")
+            return
+          }
+
+          setDeletingId(project.id)
+          try {
+            const res = await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Archive failed')
+
+            await refetch()
+            toast.success(data.message || "Project and its data archived safely")
+          } catch (err) {
+            toast.error(err.message || 'Error archiving project')
+          } finally {
+            setDeletingId(null)
+          }
+        }
+      })
+    } catch (e) {
+      toast.dismiss(loadingToast)
+      toast.error(e.message || "Error calculating archive impact")
+    }
+  }
+
+  const handleRestore = (project) => {
     setConfirmDialog({
       open: true,
-      title: 'Delete Project?',
-      description: `Are you sure you want to delete "${project.name}"? This will also remove all associated inventory and configurations. This action cannot be undone.`,
-      variant: 'destructive',
+      title: 'Restore Project?',
+      description: `Would you like to restore "${project.name}" back to the active list? It will be visible to your team and in the inventory again.`,
+      variant: 'default',
       onConfirm: async () => {
-        setDeletingId(project.id)
+        setDeletingId(project.id) // Reuse deletingId for loading state
         try {
-          const res = await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
+          const res = await fetch(`/api/projects/${project.id}/restore`, { method: 'POST' })
           const data = await res.json()
-          if (!res.ok) throw new Error(data.error || 'Delete failed')
+          if (!res.ok) throw new Error(data.error || 'Restore failed')
 
           await refetch()
-          toast.success("Project deleted successfully!")
+          toast.success(data.message || "Project restored successfully")
         } catch (err) {
-          toast.error(err.message || "Delete failed")
+          toast.error(err.message || 'Error restoring project')
         } finally {
           setDeletingId(null)
+          setConfirmDialog(p => ({ ...p, open: false }))
         }
       }
     })
@@ -418,6 +531,8 @@ export default function ProjectsPage() {
       </div>
 
       <div className="p-6 space-y-6">
+
+
         {/* Projects Display */}
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -457,7 +572,9 @@ export default function ProjectsPage() {
                     setEditingProject(p)
                     setEditOpen(true)
                   }}
-                  onDelete={handleDelete}
+                  onDelete={handleArchive}
+                  isArchived={!!project.archived_at}
+                  onRestore={handleRestore}
                   onView={(p) => {
                     setViewingProject(p)
                     setViewOpen(true)
@@ -503,7 +620,9 @@ export default function ProjectsPage() {
                   setEditingProject(p)
                   setEditOpen(true)
                 }}
-                onDelete={handleDelete}
+                onDelete={handleArchive}
+                isArchived={false} // List will handle mixing if we pass data, but we need to check if List handles it per row
+                onRestore={handleRestore}
                 onView={(p) => {
                   setViewingProject(p)
                   setViewOpen(true)
@@ -522,7 +641,7 @@ export default function ProjectsPage() {
           </div>
         )}
       </div>
- 
+
       {/* Create Modal */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto sm:rounded-xl">
@@ -664,173 +783,233 @@ export default function ProjectsPage() {
                   const land = prop.land || {}
                   const amenities = meta.amenities || []
 
-                  // Use direct price_range column if available, fallback to metadata
-                  const priceRange = viewingProject.price_range || price
+                  // Use metadata-based pricing as fallback
+                  const priceRange = price || {}
 
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Inventory Stats Card */}
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100 space-y-3">
-                        <h3 className="font-semibold text-slate-900 border-b border-blue-200 pb-2 mb-2">Inventory Overview</h3>
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div className="bg-white p-3 rounded-md shadow-sm">
-                            <p className="text-slate-500 text-xs">Total Units</p>
-                            <p className="font-bold text-2xl text-slate-900">{viewingProject.total_units || 0}</p>
-                          </div>
-                          <div className="bg-white p-3 rounded-md shadow-sm">
-                            <p className="text-slate-500 text-xs">Available</p>
-                            <p className="font-bold text-2xl text-green-600">{viewingProject.available_units || 0}</p>
-                          </div>
-                          <div className="bg-white p-3 rounded-md shadow-sm">
-                            <p className="text-slate-500 text-xs">Sold</p>
-                            <p className="font-bold text-2xl text-red-600">{viewingProject.sold_units || 0}</p>
-                          </div>
-                          <div className="bg-white p-3 rounded-md shadow-sm">
-                            <p className="text-slate-500 text-xs">Reserved</p>
-                            <p className="font-bold text-2xl text-yellow-600">{viewingProject.reserved_units || 0}</p>
+                    <div className="space-y-6">
+                      {/* Top Summary Bar */}
+                      <div className={`grid grid-cols-1 ${re.rera_number ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-4`}>
+                        <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 flex flex-col justify-center">
+                          <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest mb-1">Project Category</p>
+                          <div className="flex items-center gap-2">
+                             <div className="p-1.5 bg-white rounded-lg shadow-sm border border-indigo-200">
+                               <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                             </div>
+                             <p className="text-base font-bold text-slate-900 capitalize">
+                               {[prop.category, prop.use_case].filter(Boolean).join(' - ') || 'N/A'}
+                             </p>
                           </div>
                         </div>
-                        {viewingProject.total_units > 0 && (
-                          <div className="mt-2">
-                            <div className="flex justify-between text-xs text-slate-600 mb-1">
-                              <span>Occupancy</span>
-                              <span>{Math.round(((viewingProject.sold_units + viewingProject.reserved_units) / viewingProject.total_units) * 100)}%</span>
-                            </div>
-                            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                              <div className="h-full flex">
-                                <div
-                                  className="bg-red-500"
-                                  style={{ width: `${(viewingProject.sold_units / viewingProject.total_units) * 100}%` }}
-                                />
-                                <div
-                                  className="bg-yellow-500"
-                                  style={{ width: `${(viewingProject.reserved_units / viewingProject.total_units) * 100}%` }}
-                                />
-                              </div>
+
+                        {re.rera_number && (
+                          <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50 flex flex-col justify-center">
+                            <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest mb-1">RERA Number</p>
+                            <div className="flex items-center gap-2">
+                               <div className="p-1.5 bg-white rounded-lg shadow-sm border border-amber-200">
+                                 <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                               </div>
+                               <p className="text-base font-bold text-slate-900 uppercase">
+                                 {re.rera_number}
+                               </p>
                             </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Property Highlights */}
-                      <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-3">
-                        <h3 className="font-semibold text-slate-900 border-b pb-2 mb-2">Property Highlights</h3>
-
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <p className="text-slate-500">Transaction</p>
-                            <p className="font-medium text-slate-900 capitalize">{re.transaction || 'N/A'}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Elegant Inventory Card */}
+                        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-5">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                              <Layout className="w-4 h-4 text-blue-500" />
+                              Inventory Status
+                            </h3>
+                            <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-[10px]">
+                              Total: {viewingProject.total_units || 0} Units
+                            </Badge>
                           </div>
-                          <div>
-                            <p className="text-slate-500">Category</p>
-                            <p className="font-medium text-slate-900 capitalize">
-                              {[prop.category, prop.use_case].filter(Boolean).join(' - ') || 'N/A'}
-                            </p>
-                          </div>
-                          {re.rera_number && (
-                            <div className="col-span-2">
-                              <p className="text-slate-500">RERA Number</p>
-                              <p className="font-medium text-slate-900">{re.rera_number}</p>
-                            </div>
-                          )}
-                          {priceRange.min && priceRange.max ? (
-                            <div className="col-span-2">
-                              <p className="text-slate-500">Price Range</p>
-                              <p className="font-medium text-green-700 text-lg">
-                                {`${formatCurrency(priceRange.min)} - ${formatCurrency(priceRange.max)}`}
-                              </p>
-                            </div>
-                          ) : null}
 
-                          {/* Dates */}
-                          {(['planning', 'under_construction'].includes(viewingProject.project_status) || viewingProject.is_draft || viewingProject.project_status === 'draft') && (viewingProject.possession_date || re.possession_date) && (
-                            <div className="col-span-2">
-                              <p className="text-slate-500">Expected Possession</p>
-                              <p className="font-medium text-slate-900">{new Date(viewingProject.possession_date || re.possession_date).toLocaleDateString()}</p>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tight">Available</span>
+                              <span className="text-xl font-black text-emerald-700">{viewingProject.available_units || 0}</span>
                             </div>
-                          )}
-                          {['ready_to_move', 'completed'].includes(viewingProject.project_status) && (viewingProject.completion_date || re.completion_date) && (
-                            <div className="col-span-2">
-                              <p className="text-slate-500">Completion Date</p>
-                              <p className="font-medium text-slate-900">{new Date(viewingProject.completion_date || re.completion_date).toLocaleDateString()}</p>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-red-600 uppercase tracking-tight">Sold Out</span>
+                              <span className="text-xl font-black text-red-700">{viewingProject.sold_units || 0}</span>
                             </div>
-                          )}
-
-                          {/* Unit Highlights */}
-                          {res.bhk && (
-                            <div>
-                              <p className="text-slate-500">BHK</p>
-                              <p className="font-medium text-slate-900">{res.bhk}</p>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tight">Reserved</span>
+                              <span className="text-xl font-black text-amber-700">{viewingProject.reserved_units || 0}</span>
                             </div>
-                          )}
-                          {res.carpet_area > 0 && (
-                            <div>
-                              <p className="text-slate-500">Main Area</p>
-                              <p className="font-medium text-slate-900">{res.carpet_area} sq.ft</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Location Card */}
-                      <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-3">
-                        <h3 className="font-semibold text-slate-900 border-b pb-2 mb-2">Location Details</h3>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">City:</span>
-                            <span className="font-medium text-slate-900">{loc.city || 'N/A'}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Locality:</span>
-                            <span className="font-medium text-slate-900">{loc.locality || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Landmark:</span>
-                            <span className="font-medium text-slate-900">{loc.landmark || 'N/A'}</span>
-                          </div>
-                        </div>
-                      </div>
 
-                      {/* Unit Types Breakdown */}
-                      {viewingProject.unit_types && viewingProject.unit_types.length > 0 && (
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-3">
-                          <h3 className="font-semibold text-slate-900 border-b pb-2 mb-2">Unit Configuration</h3>
-                          <div className="space-y-2">
-                            {viewingProject.unit_types.map((unit, idx) => (
-                              <div key={idx} className="flex justify-between items-center py-2 px-3 bg-white rounded-md text-sm border border-slate-100">
-                                <div className="flex-1">
-                                  <p className="font-medium text-slate-900">{unit.configuration || unit.property_type}</p>
-                                  {unit.carpet_area && (
-                                    <p className="text-xs text-slate-500">{unit.carpet_area} sq.ft</p>
-                                  )}
-                                </div>
-                                <div className="text-right">
-                                  <p className="font-semibold text-slate-900">{unit.count} units</p>
-                                  {unit.price && (
-                                    <p className="text-xs text-green-600 font-medium">{formatCurrency(unit.price)}</p>
-                                  )}
+                          {viewingProject.total_units > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-[11px] font-bold mb-1.5">
+                                <span className="text-slate-500">Sales Progress</span>
+                                <span className="text-blue-600">{Math.round(((viewingProject.sold_units + viewingProject.reserved_units) / viewingProject.total_units) * 100)}% Occupied</span>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200">
+                                <div className="h-full flex rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-red-500 shadow-inner"
+                                    style={{ width: `${(viewingProject.sold_units / viewingProject.total_units) * 100}%` }}
+                                  />
+                                  <div
+                                    className="bg-amber-400 shadow-inner"
+                                    style={{ width: `${(viewingProject.reserved_units / viewingProject.total_units) * 100}%` }}
+                                  />
                                 </div>
                               </div>
-                            ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Financial Card */}
+                        <div className="space-y-4">
+                          {(viewingProject.min_price || priceRange?.min) ? (
+                            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-3xl shadow-lg shadow-emerald-200 relative overflow-hidden group">
+                              <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-2 -translate-y-2 group-hover:scale-110 transition-transform">
+                                <IndianRupee className="w-24 h-24" />
+                              </div>
+                              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-[0.2em] mb-3 relative z-10">Starting Investment</p>
+                              <div className="relative z-10 flex flex-col">
+                                <p className="text-3xl font-black text-white tracking-tight leading-none mb-1">
+                                  ₹ {formatPrice(viewingProject.min_price || priceRange.min)}
+                                </p>
+                                {(viewingProject.max_price || priceRange.max) && (viewingProject.max_price || priceRange.max) !== (viewingProject.min_price || priceRange.min) && (
+                                  <p className="text-emerald-100 text-sm font-medium mt-1">
+                                    Up to ₹ {formatPrice(viewingProject.max_price || priceRange.max)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200 text-center">
+                              <p className="text-slate-500 font-medium italic">Pricing not defined</p>
+                            </div>
+                          )}
+
+                          {/* Date Badges */}
+                          <div className="flex gap-3">
+                            {(viewingProject.possession_date || re.possession_date) && (
+                              <div className="flex-1 bg-white border border-slate-200 p-3 rounded-2xl flex items-center gap-3">
+                                <div className="p-2 bg-blue-50 rounded-xl">
+                                  <Calendar className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-slate-500 font-bold uppercase">Possession</p>
+                                  <p className="text-xs font-bold text-slate-900">{new Date(viewingProject.possession_date || re.possession_date).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                            )}
+                            {(viewingProject.completion_date || re.completion_date) && (
+                              <div className="flex-1 bg-white border border-slate-200 p-3 rounded-2xl flex items-center gap-3">
+                                <div className="p-2 bg-slate-50 rounded-xl">
+                                  <CheckCircle2 className="w-4 h-4 text-slate-600" />
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-slate-500 font-bold uppercase">Completion</p>
+                                  <p className="text-xs font-bold text-slate-900">{new Date(viewingProject.completion_date || re.completion_date).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
 
-                      {/* Specifications section removed */}
-
-                      {/* Amenities */}
-                      {amenities && amenities.length > 0 && (
-                        <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-3">
-                          <h3 className="font-semibold text-slate-900 border-b pb-2 mb-2">Amenities</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {amenities.map((amenity, idx) => (
-                              <Badge key={idx} variant="outline" className="bg-white">
-                                {amenity}
-                              </Badge>
-                            ))}
+                        {/* Full Width Location Details */}
+                        <div className="md:col-span-2 bg-slate-50/50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                              <MapPin className="w-4 h-4 text-red-500" />
+                              Prime Location
+                            </h3>
                           </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                             <div className="space-y-1">
+                               <p className="text-[10px] text-slate-500 font-bold uppercase">City / Region</p>
+                               <p className="text-sm font-bold text-slate-900">{loc.city || 'N/A'}</p>
+                             </div>
+                             <div className="space-y-1">
+                               <p className="text-[10px] text-slate-500 font-bold uppercase">Locality / Sector</p>
+                               <p className="text-sm font-bold text-slate-900">{loc.locality || 'N/A'}</p>
+                             </div>
+                             <div className="space-y-1">
+                               <p className="text-[10px] text-slate-500 font-bold uppercase">Landmark</p>
+                               <p className="text-sm font-bold text-slate-900 italic text-slate-600">
+                                 {loc.landmark ? `Near ${loc.landmark}` : 'No landmark added'}
+                               </p>
+                             </div>
+                          </div>
+                          {viewingProject.address && (
+                            <div className="pt-3 border-t border-slate-200/50 mt-2">
+                               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Full Address</p>
+                               <p className="text-xs text-slate-600 leading-relaxed">{viewingProject.address}</p>
+                            </div>
+                          )}
                         </div>
-                      )}
+
+                        {/* Unit Breakdown Improved */}
+                        {viewingProject.unit_types && viewingProject.unit_types.length > 0 && (
+                          <div className="md:col-span-2 space-y-4">
+                            <h3 className="font-bold text-slate-900 flex items-center gap-2 pl-1">
+                              <Layers className="w-4 h-4 text-blue-500" />
+                              Inventory Configurations
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {viewingProject.unit_types.map((unit, idx) => (
+                                <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                                  <div className="absolute top-0 right-0 bg-blue-50 text-blue-600 px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase">
+                                    {unit.count} Units
+                                  </div>
+                                  <div className="space-y-3">
+                                    <div>
+                                      <p className="text-sm font-black text-slate-900">{unit.configuration || unit.property_type}</p>
+                                      <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{unit.category} • {unit.transaction_type}</p>
+                                    </div>
+                                    <div className="flex items-center justify-between items-end pt-2">
+                                      {unit.carpet_area > 0 && (
+                                        <div className="flex flex-col">
+                                          <span className="text-[9px] text-slate-400 font-bold uppercase">Carpet Area</span>
+                                          <span className="text-xs font-bold text-slate-700">{unit.carpet_area} sq.ft</span>
+                                        </div>
+                                      )}
+                                      {unit.price > 0 && (
+                                        <div className="text-right flex flex-col">
+                                          <span className="text-[9px] text-emerald-600 font-bold uppercase">Price</span>
+                                          <span className="text-sm font-black text-emerald-600">₹ {formatPrice(unit.price)}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Amenities Professionalized */}
+                        {amenities && amenities.length > 0 && (
+                          <div className="md:col-span-2 bg-slate-900 p-6 rounded-3xl text-white space-y-4 shadow-xl shadow-slate-200">
+                             <div className="flex items-center gap-2 mb-2">
+                               <div className="p-2 bg-slate-800 rounded-xl">
+                                 <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                               </div>
+                               <h3 className="font-bold text-base">Key Amenities</h3>
+                             </div>
+                             <div className="flex flex-wrap gap-2.5">
+                               {amenities.map((amenity, idx) => (
+                                 <div key={idx} className="bg-slate-800 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border border-slate-700 hover:bg-slate-700 transition-colors">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                   {amenity}
+                                 </div>
+                               ))}
+                             </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 })()}
@@ -859,9 +1038,9 @@ export default function ProjectsPage() {
                 confirmDialog.onConfirm();
                 setConfirmDialog(prev => ({ ...prev, open: false }));
               }}
-              className={confirmDialog.variant === 'destructive' ? 'bg-red-600 hover:bg-red-700' : ''}
+              className={confirmDialog.variant === 'destructive' ? 'bg-orange-600 hover:bg-orange-700 text-white border-0' : ''}
             >
-              {confirmDialog.variant === 'destructive' ? 'Delete' : 'Confirm'}
+              {confirmDialog.variant === 'destructive' ? 'Archive' : 'Confirm'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

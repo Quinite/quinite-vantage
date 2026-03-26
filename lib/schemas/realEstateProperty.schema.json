@@ -128,6 +128,15 @@
         },
         "landmark": {
           "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "pincode": {
+          "type": "string"
         }
       },
       "additionalProperties": false

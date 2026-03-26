@@ -9,6 +9,7 @@ const fetchProjects = async (filters = {}) => {
     if (filters.page) params.append('page', filters.page)
     if (filters.limit) params.append('limit', filters.limit)
     if (filters.search) params.append('search', filters.search)
+    if (filters.archived !== undefined) params.append('archived', filters.archived)
 
     const res = await fetch(`/api/projects?${params.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch projects')

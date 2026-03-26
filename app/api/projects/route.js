@@ -30,6 +30,7 @@ export const GET = withPermission('view_projects', async (request, context) => {
       status: searchParams.get('status'),
       projectType: searchParams.get('project_type'),
       search: searchParams.get('search'),
+      archived: searchParams.get('archived') === 'true',
       page: searchParams.get('page') || 1,
       limit: searchParams.get('limit') || 20
     }
@@ -41,6 +42,15 @@ export const GET = withPermission('view_projects', async (request, context) => {
       .from('projects')
       .select('*, campaigns(*)') // Fetch related campaigns
       .eq('organization_id', profile.organization_id)
+    
+    // Optional archive filtering
+    if (searchParams.has('archived')) {
+      if (filters.archived) {
+        query = query.not('archived_at', 'is', null)
+      } else {
+        query = query.is('archived_at', null)
+      }
+    }
 
     if (filters.search) {
       query = query.or(`name.ilike.%${filters.search}%,address.ilike.%${filters.search}%,locality.ilike.%${filters.search}%`)
@@ -68,6 +78,15 @@ export const GET = withPermission('view_projects', async (request, context) => {
       .from('projects')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', profile.organization_id)
+    
+    // Optional archive filtering
+    if (searchParams.has('archived')) {
+      if (filters.archived) {
+        countQuery = countQuery.not('archived_at', 'is', null)
+      } else {
+        countQuery = countQuery.is('archived_at', null)
+      }
+    }
 
     if (filters.search) {
       countQuery = countQuery.or(`name.ilike.%${filters.search}%,address.ilike.%${filters.search}%,locality.ilike.%${filters.search}%`)
@@ -181,7 +200,6 @@ export async function POST(request) {
       // Inventory fields
       total_units: body.total_units || 0,
       unit_types: body.unit_types || null,
-      price_range: body.price_range || null,
       project_status: body.project_status || 'planning',
       is_draft: body.is_draft || false,
       show_in_inventory: body.show_in_inventory !== false,
@@ -195,8 +213,14 @@ export async function POST(request) {
       country: realEstate?.location?.country || 'India',
       pincode: realEstate?.location?.pincode || null,
       locality: realEstate?.location?.locality || null,
-      landmark: realEstate?.location?.landmark || null
+      landmark: realEstate?.location?.landmark || null,
+      min_price: body.unit_types ? Math.min(...body.unit_types.map(u => Number(u.price)).filter(p => !isNaN(p) && p > 0)) : null,
+      max_price: body.unit_types ? Math.max(...body.unit_types.map(u => Number(u.price)).filter(p => !isNaN(p) && p > 0)) : null
     }
+
+    // Ensure we handle Infinity if no valid prices
+    if (payload.min_price === Infinity) payload.min_price = null
+    if (payload.max_price === -Infinity) payload.max_price = null
 
     const { data: project, error } = await admin
       .from('projects')
