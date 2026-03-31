@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request, { params }) {
     const supabase = await createServerSupabaseClient()
-    const { id } = params
+    const { id } = await params
 
     try {
         // Check permission

@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -14,33 +13,23 @@ export async function POST(request) {
 
     try {
         if (campaignId) {
-            console.log(`🔍 Looking for available employee for Campaign: ${campaignId}`);
-
-            // 1. Get Organization ID from Campaign
-            const { data: campaign, error: campError } = await supabase
+            const { data: campaign } = await supabase
                 .from('campaigns')
                 .select('organization_id')
                 .eq('id', campaignId)
                 .single();
 
             if (campaign?.organization_id) {
-                // 2. Find an Employee Profile in this Org with a Phone Number
-                // User uses 'role' enum in profiles table, not a separate roles table
                 const { data: employee } = await supabase
                     .from('profiles')
                     .select('phone, full_name')
                     .eq('organization_id', campaign.organization_id)
                     .eq('role', 'employee')
-                    .not('phone', 'is', null) // Must have phone
+                    .not('phone', 'is', null)
                     .limit(1)
                     .maybeSingle();
 
-                if (employee?.phone) {
-                    console.log(`✅ Found available employee: ${employee.full_name} (${employee.phone})`);
-                    transferToNumber = employee.phone;
-                } else {
-                    console.log('⚠️ No employees with phone numbers found in this organization.');
-                }
+                if (employee?.phone) transferToNumber = employee.phone;
             }
         }
     } catch (error) {
@@ -48,87 +37,25 @@ export async function POST(request) {
     }
 
     if (!transferToNumber) {
-        console.error('❌ Missing transfer number (Default & Dynamic both failed)');
-        return new NextResponse('<Response><Hangup/></Response>', {
-            headers: { 'Content-Type': 'text/xml' }
-        });
+        return new NextResponse('<Response><Hangup/></Response>', { headers: { 'Content-Type': 'text/xml' } });
     }
 
-    console.log(`📞 Final Transfer Target: ${transferToNumber}`);
-
-    // Update call_logs to mark as transferred
-    if (leadId && campaignId) {
-        await supabase
-            .from('call_logs')
-            .update({ call_status: 'transferred' })
-            .eq('lead_id', leadId)
-            .eq('campaign_id', campaignId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .select()
-
-        // Update lead status and move to 'Contacted' stage
-        try {
-            // 1. Get project_id from campaign
-            const { data: campaignData } = await supabase
-                .from('campaigns')
-                .select('project_id')
-                .eq('id', campaignId)
-                .single()
-
-            if (campaignData?.project_id) {
-                // 2. Find 'Contacted' stage for this project
-                // Note: Stages are per-project via the pipeline relation, but schema shows 
-                // pipeline_stages has project_id directly in the schema.sql:
-                // project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE
-                const { data: stageData } = await supabase
-                    .from('pipeline_stages')
-                    .select('id')
-                    .eq('project_id', campaignData.project_id)
-                    .ilike('name', 'Contacted') // Case-insensitive match
-                    .limit(1)
-                    .maybeSingle()
-
-                const updatePayload = {
-                    transferred_to_human: true,
-                    last_contacted_at: new Date().toISOString()
-                }
-
-                if (stageData?.id) {
-                    console.log(`✅ Moving lead to Contacted stage: ${stageData.id}`)
-                    updatePayload.stage_id = stageData.id
-                } else {
-                    console.log('⚠️ Contacted stage not found for project, skipping stage update')
-                }
-
-                await supabase
-                    .from('leads')
-                    .update(updatePayload)
-                    .eq('id', leadId)
-            }
-        } catch (err) {
-            console.error('❌ Error updating lead stage:', err)
-            // Fallback: just update the boolean flags if stage update fails
-            await supabase
-                .from('leads')
-                .update({
-                    transferred_to_human: true,
-                    last_contacted_at: new Date().toISOString()
-                })
-                .eq('id', leadId)
-        }
+    // Update DB
+    if (leadId) {
+        await supabase.from('call_logs').update({ call_status: 'transferred' }).eq('lead_id', leadId).order('created_at', { ascending: false }).limit(1);
+        await supabase.from('leads').update({ transferred_to_human: true }).eq('id', leadId);
     }
 
-    // Generate Plivo XML for blind transfer
+    // 🕵️ WHISPER LOGIC: Play context to agent before bridging
+    const whisperUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/plivo/whisper?leadId=${leadId}`;
+
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Speak>Connecting you to a specialist now. Please hold.</Speak>
     <Dial callerId="${process.env.PLIVO_PHONE_NUMBER || ''}">
-        <Number>${transferToNumber}</Number>
+        <Number url="${whisperUrl}">${transferToNumber}</Number>
     </Dial>
 </Response>`;
 
-    return new NextResponse(xml, {
-        headers: { 'Content-Type': 'text/xml' }
-    });
+    return new NextResponse(xml, { headers: { 'Content-Type': 'text/xml' } });
 }
