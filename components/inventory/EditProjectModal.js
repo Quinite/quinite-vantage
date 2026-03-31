@@ -113,7 +113,7 @@ export default function EditProjectModal({ project, isOpen, onClose, onProjectUp
                         {/* Unit Types Breakdown */}
                         <div className="space-y-3 pt-2 border-t">
                             <div className="flex items-center justify-between">
-                                <Label>Unit Types Breakdown</Label>
+                                <Label>Unit Configurations Breakdown</Label>
                                 <div className="flex gap-2">
                                     <Button
                                         type="button"

@@ -102,9 +102,9 @@ export default function InventoryProjectDetailsPage() {
                         <Building2 className="w-4 h-4" />
                         Visual View
                     </TabsTrigger>
-                    <TabsTrigger value="configs" className="flex items-center gap-2">
+                    <TabsTrigger value="configs" className="flex items-center gap-2 transition-all data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-xl">
                         <Layers className="w-4 h-4" />
-                        Unit Types
+                        Unit Configs
                     </TabsTrigger>
                 </TabsList>
 

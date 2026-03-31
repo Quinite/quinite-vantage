@@ -7,17 +7,14 @@ import {
   SheetHeader,
   SheetTitle,
   SheetFooter,
-  SheetDescription
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
-import { Building2, Save, Trash2, LayoutGrid, Layers, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Building2, Save, Trash2, LayoutGrid, Layers } from 'lucide-react';
 import { autoNameTower } from '@/lib/inventory';
-import { cn } from '@/lib/utils';
-import { toast } from 'react-hot-toast';
 
 export default function TowerDrawer({
   open,
@@ -37,7 +34,6 @@ export default function TowerDrawer({
     description: '',
     order_index: existingTowerCount,
   });
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (mode === 'edit' && tower) {
@@ -62,125 +58,126 @@ export default function TowerDrawer({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     try {
-      await onSave(formData);
-      toast.success(mode === 'add' ? 'Tower Synthesized' : 'Protocol Updated');
+      await onSave({
+        ...formData,
+        project_id: projectId,
+        organization_id: organizationId
+      });
       onClose();
     } catch (error) {
       console.error('Error saving tower:', error);
-      toast.error('Architectural failure');
-    } finally {
-      setLoading(false);
     }
   };
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent className="sm:max-w-md p-0 flex flex-col border-0 shadow-2xl overflow-hidden bg-white">
-        {/* Premium Header */}
-        <div className="bg-slate-900 p-8 pt-10 text-white shrink-0">
-          <SheetHeader>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                 <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md border border-white/10">
-                    <Building2 className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <SheetTitle className="text-2xl font-black text-white uppercase tracking-tight leading-none mb-1">
-                    {mode === 'add' ? 'New Structure' : 'Edit Tower'}
-                  </SheetTitle>
-                  <SheetDescription className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] leading-none">
-                    {mode === 'add' ? 'Initializing spatial mapping' : `Updating parameters for ${tower?.name}`}
-                  </SheetDescription>
+      <SheetContent className="sm:max-w-md p-0 flex flex-col border-l shadow-2xl bg-slate-50">
+        <SheetHeader className="p-6 bg-white border-b">
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-xl font-bold text-slate-900">
+              {mode === 'add' ? 'Add New Tower' : 'Edit Tower Settings'}
+            </SheetTitle>
+            {mode === 'edit' && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-slate-400 hover:text-red-600 hover:bg-red-50" 
+                onClick={() => {
+                  if(confirm('Are you sure you want to delete this tower and all its units?')) onDelete(tower.id);
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </SheetHeader>
+
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="tower_name" className="text-xs font-bold text-slate-500 uppercase">Tower Name</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="tower_name"
+                    className="pl-9 h-11 bg-white rounded-lg border-slate-200 shadow-sm"
+                    value={formData.name}
+                    onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Tower A, Block 1"
+                    required
+                  />
                 </div>
               </div>
-            </div>
-          </SheetHeader>
-        </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden bg-white">
-          <div className="flex-1 p-8 space-y-10 overflow-y-auto">
-            {/* Core Specs */}
-            <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-px bg-slate-100" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Architectural Core</span>
-                    <div className="flex-1 h-px bg-slate-100" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="total_floors" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-slate-400" /> Total Floors
+                  </Label>
+                  <Input
+                    id="total_floors"
+                    type="number"
+                    min="1"
+                    max="100"
+                    className="h-11 bg-white rounded-lg border-slate-200 shadow-sm"
+                    value={formData.total_floors}
+                    onChange={(e) => setFormData(p => ({ ...p, total_floors: Number(e.target.value) }))}
+                    required
+                  />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="units_per_floor" className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <LayoutGrid className="w-4 h-4 text-slate-400" /> Units Per F
+                  </Label>
+                  <Input
+                    id="units_per_floor"
+                    type="number"
+                    min="1"
+                    max="20"
+                    className="h-11 bg-white rounded-lg border-slate-200 shadow-sm"
+                    value={formData.units_per_floor}
+                    onChange={(e) => setFormData(p => ({ ...p, units_per_floor: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+              </div>
 
-                <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Structure Label</Label>
-                    <Input
-                        className="h-12 bg-slate-50 border-slate-100 font-black text-lg tracking-tight rounded-xl focus:bg-white transition-all shadow-sm"
-                        value={formData.name}
-                        onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
-                        placeholder="e.g. Tower A"
-                        required
-                    />
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 ml-1"><Layers className="w-3 h-3"/> Verticality</Label>
-                        <Input
-                            type="number"
-                            min="1"
-                            max="60"
-                            className="h-12 bg-slate-50 border-slate-100 font-black rounded-xl text-center"
-                            value={formData.total_floors}
-                            onChange={(e) => setFormData(p => ({ ...p, total_floors: Number(e.target.value) }))}
-                            required
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2 ml-1"><LayoutGrid className="w-3 h-3"/> Spacing</Label>
-                        <Input
-                            type="number"
-                            min="1"
-                            max="12"
-                            className="h-12 bg-slate-50 border-slate-100 font-black rounded-xl text-center"
-                            value={formData.units_per_floor}
-                            onChange={(e) => setFormData(p => ({ ...p, units_per_floor: Number(e.target.value) }))}
-                            required
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* Metadata */}
-            <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-px bg-slate-100" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Metadata & Notes</span>
-                    <div className="flex-1 h-px bg-slate-100" />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="tower_desc" className="text-xs font-bold text-slate-500 uppercase">Description (Optional)</Label>
                 <Textarea
-                    className="h-32 bg-slate-50 border-slate-100 font-bold rounded-2xl resize-none p-4 text-sm"
-                    value={formData.description}
-                    onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
-                    placeholder="Enter architectural observations or specific tower constraints..."
+                  id="tower_desc"
+                  value={formData.description}
+                  onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
+                  placeholder="Additional details about this tower..."
+                  className="min-h-[100px] bg-white rounded-lg border-slate-200 shadow-sm"
                 />
+              </div>
+
             </div>
 
-            {/* Summary Panel */}
-            <div className="bg-slate-900 rounded-3xl p-6 text-white flex items-center justify-between shadow-2xl shadow-slate-200 border border-slate-800">
-               <div className="space-y-1">
-                 <p className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em] block leading-none">Total Grid Capacity</p>
-                 <p className="text-2xl font-black text-white tracking-tight leading-none mt-1">{formData.total_floors * formData.units_per_floor} Units Allocated</p>
+            <Separator className="bg-slate-100" />
+            
+            <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 flex gap-4 text-sm text-blue-700 shadow-sm">
+               <div className="p-2 bg-white rounded-xl h-fit shrink-0 shadow-sm">
+                  <Layers className="w-5 h-5 text-blue-500" />
                </div>
-               <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center border border-white/5">
-                  <LayoutGrid className="w-6 h-6 text-white" />
+               <div>
+                 <p className="font-bold text-blue-900 mb-1">Matrix Initialization Ready</p>
+                 <p className="opacity-80 text-xs leading-relaxed">Defining this tower will generate a coordinate mapping for {formData.total_floors * formData.units_per_floor} unique unit slots across {formData.total_floors} levels.</p>
                </div>
             </div>
           </div>
 
-          <SheetFooter className="p-8 bg-slate-50 border-t border-slate-100 flex gap-4 shrink-0">
-             <Button type="button" variant="ghost" onClick={onClose} disabled={loading} className="flex-1 h-12 font-black uppercase text-[10px] tracking-widest text-slate-400">Cancel</Button>
-             <Button type="submit" disabled={loading} className="flex-1 h-12 bg-slate-900 hover:bg-black font-black uppercase text-xs tracking-[0.15em] rounded-xl shadow-2xl shadow-slate-200 transition-all hover:scale-[1.02] flex items-center gap-3">
-                <ShieldCheck className="w-4 h-4" />
-                {mode === 'add' ? 'Deploy Structure' : 'Update Matrix'}
-             </Button>
+          <SheetFooter className="p-6 border-t bg-white gap-3">
+            <Button type="button" variant="ghost" onClick={onClose} className="h-11 flex-1 rounded-lg font-bold text-slate-500">
+              Cancel
+            </Button>
+            <Button type="submit" className="h-11 flex-1 gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 font-bold shadow-lg shadow-blue-100">
+              <Save className="w-4 h-4" />
+              {mode === 'add' ? 'Create Tower' : 'Save'}
+            </Button>
           </SheetFooter>
         </form>
       </SheetContent>

@@ -15,10 +15,7 @@ import {
     Briefcase,
     ShoppingBag,
     Factory,
-    ConciergeBell,
-    Settings2,
-    CheckCircle2,
-    Component
+    ConciergeBell
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useInventory, useUnitConfigs } from '@/hooks/useInventory'
@@ -31,15 +28,14 @@ import { cn } from '@/lib/utils'
 export default function UnitTypesTab({ projectId, project }) {
     const queryClient = useQueryClient()
     const { 
-        saveUnitConfig, 
-        deleteUnitConfig, 
-        units 
+        units = {}, 
+        deleteUnitConfig: deleteConfigHook 
     } = useInventory({ 
         projectId, 
         organizationId: project?.organization_id 
     })
 
-    const { data: unitConfigs = [], isLoading: configsLoading } = useUnitConfigs(projectId)
+    const { data: unitConfigs = [], isLoading, saveUnitConfig, deleteUnitConfig } = useUnitConfigs(projectId)
 
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [editingConfig, setEditingConfig] = useState(null)
@@ -48,7 +44,7 @@ export default function UnitTypesTab({ projectId, project }) {
     const unitCountsByConfigId = useMemo(() => {
         const allUnits = Object.values(units).flat()
         return allUnits.reduce((acc, unit) => {
-            const configId = unit.config_id || unit.unit_config_id
+            const configId = unit.config_id
             if (configId) {
                 acc[configId] = (acc[configId] || 0) + 1
             }
@@ -60,12 +56,13 @@ export default function UnitTypesTab({ projectId, project }) {
         try {
             await saveUnitConfig({
                 ...configData,
-                projectId,
-                id: editingConfig?.id || null
+                id: editingConfig?.id,
+                project_id: projectId,
+                organization_id: project?.organization_id
             })
             setIsFormOpen(false)
             setEditingConfig(null)
-            toast.success(editingConfig ? 'Configuration Updated' : 'Prototype Initialized')
+            toast.success(editingConfig ? 'Configuration updated' : 'Configuration added')
         } catch (error) {
             console.error('Save unit type error:', error)
             toast.error('Failed to save configuration')
@@ -74,14 +71,17 @@ export default function UnitTypesTab({ projectId, project }) {
 
     const handleDelete = async (config) => {
         const usageCount = unitCountsByConfigId[config.id] || 0
+        
         if (usageCount > 0) {
-            toast.error(`Constraint Violation: ${usageCount} units already utilizing this profile.`)
+            toast.error(`Cannot delete: ${usageCount} units of this type are already placed on the floor plan.`)
             return
         }
-        if (!confirm('Are you sure you want to delete this unit configuration?')) return
+
+        if (!confirm('Are you sure you want to delete this unit type?')) return
+
         try {
             await deleteUnitConfig(config.id)
-            toast.success('Profile Deprecated')
+            toast.success('Unit type removed')
         } catch (error) {
             console.error('Delete error:', error)
             toast.error('Failed to delete configuration')
@@ -92,6 +92,7 @@ export default function UnitTypesTab({ projectId, project }) {
         const icons = {
             'Apartment': Building2,
             'Villa': Home,
+            'Villa Bungalow': Home,
             'Penthouse': ConciergeBell,
             'Office': Briefcase,
             'Retail': ShoppingBag,
@@ -103,21 +104,17 @@ export default function UnitTypesTab({ projectId, project }) {
         return icons[type] || Building2
     }
 
-    if (configsLoading) return <div className="p-20 text-center"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" /></div>
+    if (isLoading) {
+        return <div className="p-10 flex justify-center"><Plus className="w-8 h-8 animate-spin text-slate-200" /></div>
+    }
 
     return (
-        <div className="space-y-10 py-6">
-            <div className="flex justify-between items-end px-2">
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
                 <div>
-                    <div className="flex items-center gap-2 mb-2">
-                         <div className="p-1.5 bg-blue-100 rounded-lg">
-                            <Component className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Inventory Templates</span>
-                    </div>
-                    <h3 className="text-3xl font-black text-slate-900 tracking-tight leading-none">Unit Master Catalog</h3>
-                    <p className="text-xs font-bold text-slate-400 mt-3 uppercase tracking-widest flex items-center gap-2">
-                        Global definitions for unit structures and pricing models.
+                    <h3 className="text-xl font-bold text-foreground">Unit Prototyping & Configs</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Define common property layouts for this project to use in the visual grid.
                     </p>
                 </div>
                 <Button 
@@ -125,99 +122,91 @@ export default function UnitTypesTab({ projectId, project }) {
                         setEditingConfig(null)
                         setIsFormOpen(true)
                     }}
-                    className="bg-slate-900 hover:bg-black h-12 px-8 rounded-xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-slate-200 transition-all hover:scale-[1.05] active:scale-[0.95]"
+                    className="bg-blue-600 hover:bg-blue-700 shadow-sm"
                 >
-                    <Plus className="w-4 h-4 mr-2" /> Initialize Profile
+                    <Plus className="w-4 h-4 mr-2" /> New Configuration
                 </Button>
             </div>
 
             {unitConfigs.length === 0 ? (
-                <div className="text-center py-24 border-2 border-dashed border-slate-100 rounded-[40px] bg-slate-50/30">
-                    <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-6 border border-slate-100">
-                        <Layers className="w-10 h-10 text-slate-200" />
+                <div className="text-center py-20 border-2 border-dashed rounded-3xl bg-slate-50/50">
+                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                        <Layers className="w-8 h-8 text-slate-300" />
                     </div>
-                    <h4 className="text-xl font-black text-slate-900 tracking-tight">Catalog is Empty</h4>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest max-w-[240px] mx-auto mt-3 leading-relaxed">
-                        Start by creating master unit profiles to accelerate your grid layout.
+                    <h4 className="text-lg font-semibold text-slate-900">No Unit Configs Defined</h4>
+                    <p className="text-sm text-slate-500 max-w-xs mx-auto mt-2">
+                        Start by adding the different types of units available in this project (e.g., 3BHK Flat, Office Space).
                     </p>
                     <Button 
                         variant="outline" 
                         onClick={() => setIsFormOpen(true)}
-                        className="mt-8 h-12 px-8 rounded-xl border-slate-200 font-black uppercase text-[10px] tracking-widest hover:bg-white hover:shadow-lg transition-all"
+                        className="mt-6"
                     >
-                        Define First Profile
+                        Create First Config
                     </Button>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {unitConfigs.map((config) => {
                         const Icon = getIcon(config.property_type)
                         const placedCount = unitCountsByConfigId[config.id] || 0
-
+                        
                         return (
-                            <Card key={config.id} className="group relative border-0 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 rounded-[32px] bg-white overflow-hidden flex flex-col min-h-[220px]">
-                                <CardContent className="p-0 flex flex-col h-full">
-                                    {/* Action Header */}
-                                    <div className="p-6 pb-2 flex justify-between items-start">
-                                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 group-hover:bg-blue-600 group-hover:border-blue-500 transition-all duration-500 shadow-sm">
-                                            <Icon className="w-6 h-6 text-slate-400 group-hover:text-white transition-colors" />
-                                        </div>
-                                        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 duration-500">
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-10 w-10 rounded-xl bg-slate-50 hover:bg-blue-100 text-slate-400 hover:text-blue-600 border border-slate-100"
-                                                onClick={() => {
-                                                    setEditingConfig(config)
-                                                    setIsFormOpen(true)
-                                                }}
-                                            >
-                                                <Edit className="w-4 h-4" />
-                                            </Button>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-10 w-10 rounded-xl bg-slate-50 hover:bg-red-100 text-slate-400 hover:text-red-600 border border-slate-100"
-                                                onClick={() => handleDelete(config)}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        </div>
+                            <Card key={config.id} className="group relative border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all duration-300 rounded-2xl bg-white flex flex-col min-h-[160px]">
+                                <CardContent className="p-4 flex flex-col h-full">
+                                    {/* Action Buttons (Top Right) */}
+                                    <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-7 w-7 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                                            onClick={() => {
+                                                setEditingConfig(config)
+                                                setIsFormOpen(true)
+                                            }}
+                                        >
+                                            <Edit className="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-7 w-7 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                            onClick={() => handleDelete(config)}
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
                                     </div>
 
-                                    <div className="px-6 space-y-1">
-                                        <h4 className="text-xl font-black text-slate-900 tracking-tight truncate group-hover:text-blue-600 transition-colors">
-                                            {config.config_name || 'Untitled Template'}
-                                        </h4>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{config.property_type}</span>
-                                            <span className="w-1 h-1 rounded-full bg-slate-200" />
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{config.category}</span>
+                                    {/* Core Info */}
+                                    <div className="flex gap-3 mb-4">
+                                        <div className="w-10 h-10 shrink-0 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors">
+                                            <Icon className="w-5 h-5 text-slate-500 group-hover:text-blue-600 transition-colors" />
                                         </div>
-                                    </div>
-
-                                    <div className="px-6 py-6 mt-4 flex items-center justify-between bg-slate-50/50">
-                                         <div className="space-y-1">
-                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Net Target Value</p>
-                                            <p className="text-base font-black text-slate-900 tracking-tight">{formatINR(config.base_price)}</p>
-                                        </div>
-                                        <div className="text-right space-y-1">
-                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Net Asset Size</p>
-                                            <p className="text-base font-black text-slate-900 tracking-tight">
-                                                {config.category === 'land' ? config.plot_area : config.carpet_area} <span className="text-[10px] text-slate-400 font-bold uppercase ml-0.5">SQFT</span>
+                                        <div className="flex-1 min-w-0 pr-12">
+                                            <h4 className="text-sm font-bold text-slate-900 truncate leading-tight">
+                                                {config.config_name || config.property_type}
+                                            </h4>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter truncate mt-0.5">
+                                                {config.property_type}
                                             </p>
                                         </div>
                                     </div>
 
-                                    <div className="mt-auto px-6 py-4 flex justify-between items-center border-t border-slate-100">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                                            <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">
-                                                {placedCount} ACTIVE LISTINGS
-                                            </span>
+                                    {/* Details */}
+                                    <div className="grid grid-cols-2 gap-y-3 mt-auto">
+                                        <div>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Price</p>
+                                            <p className="text-xs font-bold text-slate-700 mt-1 truncate">{formatINR(config.base_price)}</p>
                                         </div>
-                                        <Badge variant="outline" className="text-[9px] h-6 px-3 bg-white border-slate-200 text-slate-600 font-black uppercase tracking-widest shadow-sm rounded-lg">
-                                            {config.transaction_type}
+                                        <div className="text-right">
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Area</p>
+                                            <p className="text-xs font-bold text-slate-700 mt-1 truncate">{config.carpet_area || config.plot_area} <span className="text-[8px]">SQFT</span></p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-slate-50 flex items-center gap-2">
+                                        <Badge variant="secondary" className="bg-slate-50 text-[10px] text-slate-500 rounded-lg">
+                                            {placedCount} Placed
                                         </Badge>
                                     </div>
                                 </CardContent>
@@ -233,15 +222,26 @@ export default function UnitTypesTab({ projectId, project }) {
                     setEditingConfig(null)
                 }
             }}>
-                <DialogContent className="max-w-xl p-0 overflow-hidden border-0 rounded-[28px] shadow-2xl bg-[#f8fbff]">
-                    <div className="p-5">
+                <DialogContent className="max-w-xl p-0 overflow-hidden border-0 rounded-3xl shadow-2xl">
+                    <div className="bg-slate-900 px-6 py-5">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl font-bold text-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                                    <Layers className="w-5 h-5 text-blue-400" />
+                                </div>
+                                {editingConfig ? 'Edit Unit Config' : 'New Unit Configuration'}
+                            </DialogTitle>
+                        </DialogHeader>
+                    </div>
+                    
+                    <div className="p-6">
                         <ResidentialConfigForm 
                             onCancel={() => {
                                 setIsFormOpen(false)
                                 setEditingConfig(null)
                             }}
                             onAdd={handleSave}
-                            category={editingConfig?.category || project?.category || 'residential'}
+                            category={project?.metadata?.real_estate?.property?.category || project?.category || 'residential'}
                             initialData={editingConfig}
                         />
                     </div>

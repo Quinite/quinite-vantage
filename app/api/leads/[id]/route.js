@@ -147,9 +147,9 @@ export async function PUT(request, { params }) {
         }
 
         // [Inventory Automation] If Lead is WON, mark linked unit as SOLD
-        const isWon = body.status === 'won' || 
-                      body.stage === 'won' || 
-                      (body.stageId && ['won', 'closed-won'].includes(body.stageId))
+        const isWon = body.status === 'won' ||
+            body.stage === 'won' ||
+            (body.stageId && ['won', 'closed-won'].includes(body.stageId))
 
         if (isWon && data.unit_id) {
             const adminClient = createAdminClient()

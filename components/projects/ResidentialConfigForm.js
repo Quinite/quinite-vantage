@@ -15,8 +15,8 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
         property_type: '',
         config_name: category === 'residential' ? '3BHK' : '',
         carpet_area: '',
-        builtup_area: '',
-        super_builtup_area: '',
+        built_up_area: '',
+        super_built_up_area: '',
         plot_area: '',
         base_price: '',
     })
@@ -67,7 +67,7 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
     return (
         <form onSubmit={handleSubmit} className="space-y-5 bg-[#f8fbff] p-5 rounded-2xl border border-blue-50/50">
             <h2 className="text-lg font-bold text-slate-800 tracking-tight mb-1 px-1">
-                {initialData ? 'Edit Configuration' : 'Add New Configuration'}
+                {initialData ? 'Edit Configuration' : 'New Configuration'}
             </h2>
 
             <div className="grid grid-cols-2 gap-5">
@@ -173,7 +173,7 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
                     <Input
                         type="number"
                         placeholder="1200"
-                        value={isLand ? config.plot_area : config.carpet_area}
+                        value={isLand ? (config.plot_area || '') : (config.carpet_area || '')}
                         onChange={(e) => setConfig(prev => ({ 
                             ...prev, 
                             [isLand ? 'plot_area' : 'carpet_area']: e.target.value 
@@ -192,7 +192,7 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
                         <Input
                             type="number"
                             placeholder="7500000"
-                            value={config.base_price}
+                            value={config.base_price || ''}
                             onChange={(e) => setConfig(prev => ({ ...prev, base_price: e.target.value }))}
                             className="h-10 bg-white border-slate-200 pl-7 shadow-sm font-semibold"
                             required
@@ -207,8 +207,8 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
                             <Input
                                 type="number"
                                 placeholder="1400"
-                                value={config.builtup_area}
-                                onChange={(e) => setConfig(prev => ({ ...prev, builtup_area: e.target.value }))}
+                                value={config.built_up_area || ''}
+                                onChange={(e) => setConfig(prev => ({ ...prev, built_up_area: e.target.value }))}
                                 className="h-10 bg-white border-slate-100 shadow-sm text-xs"
                             />
                         </div>
@@ -217,8 +217,8 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
                             <Input
                                 type="number"
                                 placeholder="1650"
-                                value={config.super_builtup_area}
-                                onChange={(e) => setConfig(prev => ({ ...prev, super_builtup_area: e.target.value }))}
+                                value={config.super_built_up_area || ''}
+                                onChange={(e) => setConfig(prev => ({ ...prev, super_built_up_area: e.target.value }))}
                                 className="h-10 bg-white border-slate-100 shadow-sm text-xs"
                             />
                         </div>

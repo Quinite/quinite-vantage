@@ -138,7 +138,7 @@ export default function ProjectMetrics({ project, unitConfigs = [] }) {
             {unitConfigs && unitConfigs.length > 0 && (
                 <Card className="border-border">
                     <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-semibold">Unit Types (Configured)</CardTitle>
+                        <CardTitle className="text-sm font-semibold">Unit Configurations</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">

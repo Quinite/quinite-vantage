@@ -27,8 +27,8 @@ export class LeadRepository extends BaseRepository<Lead> {
         project:projects(id, name),
         stage:pipeline_stages(id, name, color, pipeline_id),
         deals(id, amount, status),
-        property:properties(id, title, price, project:projects(id, name)),
-        projects:projects(id, name, image_url, address, project_type),
+        unit:units(id, unit_number, base_price, total_price, project:projects(id, name)),
+        projects:projects(id, name, image_url, address),
         call_logs(*),
         assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name, avatar_url)
       `)

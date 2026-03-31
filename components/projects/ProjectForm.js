@@ -61,7 +61,7 @@ import { Check, ChevronsUpDown } from 'lucide-react'
 const STEPS = [
     { id: 'basic', title: 'Basic Info', icon: Building2, description: 'Project identity & Type' },
     { id: 'location', title: 'Location', icon: MapPin, description: 'Address details' },
-    { id: 'inventory', title: 'Inventory', icon: Store, description: 'Units & Status' },
+    { id: 'inventory', title: 'Inventory', icon: Store, description: 'Configs & Status' },
     { id: 'review', title: 'Review', icon: CheckCircle2, description: 'Review & Submit' }
 ]
 
@@ -892,7 +892,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                 {/* Unit Types Breakdown */}
                                 <div className="bg-slate-50 p-5 rounded-xl border-2 border-slate-200">
                                     <div className="flex items-center justify-between mb-3">
-                                        <label className="text-sm font-semibold text-slate-800 block">Unit Types Breakdown</label>
+                                        <label className="text-sm font-semibold text-slate-800 block">Unit Configurations Breakdown</label>
                                         {!showAddConfig && (
                                             <Button
                                                 type="button"
@@ -901,7 +901,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                 onClick={() => setShowAddConfig(true)}
                                                 className="bg-white"
                                             >
-                                                <Plus className="w-3 h-3 mr-1" /> Add Unit Type
+                                                <Plus className="w-3 h-3 mr-1" /> Add Config
                                             </Button>
                                         )}
                                     </div>
@@ -910,7 +910,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                     <Dialog open={showAddConfig} onOpenChange={setShowAddConfig}>
                                         <DialogContent className="max-w-2xl p-0 overflow-hidden shadow-2xl border-none gap-0">
                                             <div className="px-6 py-4 border-b bg-slate-50/50">
-                                                <DialogTitle className="text-sm font-bold text-slate-900 uppercase tracking-tight">Add New Unit Type</DialogTitle>
+                                                <DialogTitle className="text-sm font-bold text-slate-900 uppercase tracking-tight">Add New Unit Config</DialogTitle>
                                             </div>
                                             <ResidentialConfigForm
                                                 onCancel={() => setShowAddConfig(false)}
@@ -966,7 +966,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                             ))}
                                             {formData.unitTypes.length === 0 && (
                                                 <div className="col-span-full py-8 text-center text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
-                                                    No unit types added yet. Click "Add Unit Type" to start.
+                                                    No unit configs added yet. Click "Add Config" to start.
                                                 </div>
                                             )}
                                         </div>
