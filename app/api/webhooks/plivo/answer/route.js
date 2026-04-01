@@ -79,31 +79,42 @@ export async function POST(request) {
 
     if (enableRealtime && process.env.OPENAI_API_KEY) {
       // REAL-TIME CONVERSATIONAL AI
+      
+      // 1. Resolve WebSocket Base URL
+      // Priority: WEBSOCKET_SERVER_URL > WS_URL > Host-Based Dev Default
+      let wsBaseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL || 
+                      process.env.WEBSOCKET_SERVER_URL || 
+                      process.env.WS_URL;
 
-      // 1. Prefer explicitly configured external WebSocket URL (e.g. ngrok for local dev)
-      // 2. Fallback to WS_URL env var
-      // 3. Last resort: internal localhost default (port 10000 matches your separate server)
-      let wsBaseUrl = process.env.WEBSOCKET_SERVER_URL || process.env.WS_URL;
-
-      // Ensure we have a valid base URL. If running locally without env, assume separate server port 10000
       if (!wsBaseUrl) {
-        wsBaseUrl = 'wss://' + (request.headers.get('host') || 'localhost:3000').split(':')[0] + ':10000';
+        // Fallback for local development if everything is missing
+        const host = request.headers.get('host') || 'localhost:3000';
+        const hostname = host.split(':')[0];
+        wsBaseUrl = `wss://${hostname}:10000`;
+        console.warn('⚠️ [Answer Webhook] No WS URL configured. Falling back to:', wsBaseUrl);
       }
 
-      // Ensure protocol is wss:// (Plivo requires secure websockets)
-      if (wsBaseUrl.startsWith('https://')) {
-        wsBaseUrl = wsBaseUrl.replace('https://', 'wss://');
-      } else if (wsBaseUrl.startsWith('http://')) {
+      // 2. Ensure Secure Protocol (Plivo requires WSS for external connections)
+      if (wsBaseUrl.startsWith('http://')) {
         wsBaseUrl = wsBaseUrl.replace('http://', 'wss://');
+      } else if (wsBaseUrl.startsWith('https://')) {
+        wsBaseUrl = wsBaseUrl.replace('https://', 'wss://');
+      } else if (!wsBaseUrl.startsWith('ws')) {
+        wsBaseUrl = `wss://${wsBaseUrl}`;
       }
 
-      const wsFullUrl = `${wsBaseUrl}/voice/stream?leadId=${leadId}&campaignId=${campaignId}&callSid=${callUUID}`
-      const wsFullXmlUrl = wsFullUrl.replace(/&/g, '&amp;')
-      const statusCallbackUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/plivo/stream-status`
+      // 3. Construct Final Stream URL
+      const wsFullUrl = `${wsBaseUrl}/voice/stream?leadId=${leadId}&campaignId=${campaignId}&callSid=${callUUID}`;
+      const xmlWsUrl = wsFullUrl.replace(/&/g, '&amp;');
+      const statusCallbackUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/plivo/stream-status`;
 
-      // Return Plivo Stream XML for WebSocket connection
+      console.log(`📡 [Answer Webhook] Routing stream to: ${wsBaseUrl}`);
+
+      // 4. Return Plivo Response XML
+      // ADDED: Immediate <Speak> to confirm audio path and reduce "silent start" anxiety
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Speak voice="Woman">Hello?</Speak>
   <Stream 
     bidirectional="true"
     keepCallAlive="true"
@@ -111,9 +122,8 @@ export async function POST(request) {
     contentType="audio/x-mulaw;rate=8000"
     statusCallbackUrl="${statusCallbackUrl}"
     statusCallbackMethod="POST"
-  >${wsFullXmlUrl}</Stream>
-</Response>`
-
+  >${xmlWsUrl}</Stream>
+</Response>`;
 
       return new NextResponse(xml, {
         headers: { 'Content-Type': 'text/xml' }
