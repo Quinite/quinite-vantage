@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInventory, useUnitConfigs } from '@/hooks/useInventory';
@@ -46,6 +47,7 @@ import {
 } from '@/lib/inventory';
 import UnitDrawer from './UnitDrawer';
 import TowerDrawer from './TowerDrawer';
+import VisualUnit3D from './VisualUnit3D';
 import FloorPlanLand from './FloorPlanLand';
 import { toast } from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -83,6 +85,7 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
   const [drawerMode, setDrawerMode] = useState(null);
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [targetFloor, setTargetFloor] = useState(null);
+  const [activeMode, setActiveMode] = useState('inventory'); // inventory | 3d
 
   useEffect(() => {
     if (towers.length > 0 && !activeTowerId) {
@@ -332,8 +335,32 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
               </Button>
             ))}
             <Button variant="outline" size="sm" onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="text-blue-600 border-blue-100 hover:bg-blue-50 shrink-0">
-              <Plus className="w-4 h-4 mr-1" /> Tower
+               <Plus className="w-4 h-4 mr-1" /> Tower
             </Button>
+            
+            <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
+            
+            <div className="flex bg-slate-100 p-1 rounded-xl items-center gap-1">
+               <button 
+                onClick={() => setActiveMode('inventory')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                  activeMode === 'inventory' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                )}
+               >
+                 Inventory
+               </button>
+               <button 
+                onClick={() => setActiveMode('3d')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+                  activeMode === '3d' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                )}
+               >
+                 3D View
+                 <span className="bg-blue-600 text-white text-[7px] px-1 rounded-sm py-0.5 leading-none">BETA</span>
+               </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -370,30 +397,44 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
               </div>
             )}
 
-            <div className="space-y-4">
-              {activeTower ? (
-                Array.from({ length: activeTower.total_floors + 1 }, (_, i) => activeTower.total_floors - i).map(floorNum => (
-                  <FloorRow 
-                    key={floorNum}
-                    floorNum={floorNum}
-                    tower={activeTower}
-                    units={towerUnits}
+            {activeMode === 'inventory' ? (
+              <div className="space-y-4">
+                {activeTower ? (
+                  Array.from({ length: activeTower.total_floors + 1 }, (_, i) => activeTower.total_floors - i).map(floorNum => (
+                    <FloorRow 
+                      key={floorNum}
+                      floorNum={floorNum}
+                      tower={activeTower}
+                      units={towerUnits}
+                      onUnitClick={handleEditUnit}
+                      onAddUnit={handleOpenAddUnit}
+                      onStatusChange={updateUnitStatus}
+                      onDeleteUnit={deleteUnit}
+                      onFillFloor={() => handleFillFloor(floorNum)}
+                      paintingActive={!!selectedConfig}
+                    />
+                  ))
+                ) : (
+                  <div className="h-[400px] flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl bg-white/50">
+                    <Building2 className="w-16 h-16 mb-4 opacity-10" />
+                    <p className="text-lg font-black uppercase tracking-wider text-slate-300">No towers defined</p>
+                    <Button onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="mt-6 bg-slate-900 text-white rounded-xl h-12 px-8 font-bold">Create Tower</Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+               <div className="h-[70vh] min-h-[500px]">
+                  <VisualUnit3D 
+                    towers={towers}
+                    activeTowerId={activeTowerId}
+                    units={units}
                     onUnitClick={handleEditUnit}
                     onAddUnit={handleOpenAddUnit}
-                    onStatusChange={updateUnitStatus}
-                    onDeleteUnit={deleteUnit}
-                    onFillFloor={() => handleFillFloor(floorNum)}
                     paintingActive={!!selectedConfig}
+                    selectedConfig={selectedConfig}
                   />
-                ))
-              ) : (
-                <div className="h-[400px] flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl bg-white/50">
-                  <Building2 className="w-16 h-16 mb-4 opacity-10" />
-                  <p className="text-lg font-black uppercase tracking-wider text-slate-300">No towers defined</p>
-                  <Button onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="mt-6 bg-slate-900 text-white rounded-xl h-12 px-8 font-bold">Create Tower</Button>
-                </div>
-              )}
-            </div>
+               </div>
+            )}
 
             {/* Unassigned Section */}
             {unassignedUnits.length > 0 && (
