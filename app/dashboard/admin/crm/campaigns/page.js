@@ -231,9 +231,21 @@ function CampaignCard({
               <div className="font-semibold text-foreground">{campaign.total_calls}</div>
             </div>
             <div>
+              <div className="text-muted-foreground">Answered</div>
+              <div className="font-semibold text-blue-600">{campaign.answered_calls || 0}</div>
+            </div>
+            <div>
               <div className="text-muted-foreground">Transferred</div>
               <div className="font-semibold text-green-600">{campaign.transferred_calls || 0}</div>
             </div>
+            {campaign.avg_sentiment_score != null && (
+              <div>
+                <div className="text-muted-foreground">Avg Sentiment</div>
+                <div className={`font-semibold ${parseFloat(campaign.avg_sentiment_score) >= 0.3 ? 'text-green-600' : parseFloat(campaign.avg_sentiment_score) < -0.1 ? 'text-red-500' : 'text-yellow-600'}`}>
+                  {parseFloat(campaign.avg_sentiment_score) >= 0.3 ? '😊' : parseFloat(campaign.avg_sentiment_score) < -0.1 ? '😞' : '😐'} {parseFloat(campaign.avg_sentiment_score).toFixed(2)}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -617,6 +629,8 @@ export default function CampaignsPage() {
   const [editTimeEnd, setEditTimeEnd] = useState('')
   const [editStatus, setEditStatus] = useState('scheduled')
   const [editManualStart, setEditManualStart] = useState(false)
+  const [editAiScript, setEditAiScript] = useState('')
+  const [editCallSettings, setEditCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
 
   useEffect(() => { fetchProjectsOnly() }, [])
 
@@ -696,6 +710,8 @@ export default function CampaignsPage() {
     setEditTimeEnd(campaign.time_end || '')
     setEditStatus(campaign.status || 'scheduled')
     setEditManualStart(campaign.manual_start === true)
+    setEditAiScript(campaign.ai_script || '')
+    setEditCallSettings(campaign.call_settings || { language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
     setEditModalOpen(true)
   }
 
@@ -710,7 +726,9 @@ export default function CampaignsPage() {
           project_id: editProjectId, name: editName, description: editDescription,
           start_date: editStartDate, end_date: editEndDate,
           time_start: editTimeStart, time_end: editTimeEnd,
-          status: editStatus, manual_start: editManualStart
+          status: editStatus, manual_start: editManualStart,
+          ai_script: editAiScript || null,
+          call_settings: editCallSettings
         })
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Update failed') }
@@ -1037,6 +1055,72 @@ export default function CampaignsPage() {
                   <Hand className="w-4 h-4" />
                   <span>Manual Start</span>
                 </button>
+              </div>
+            </div>
+
+            {/* AI Call Settings */}
+            <div className="pt-2 border-t border-border/50">
+              <Label className="text-sm font-semibold mb-3 block text-foreground">AI Call Settings</Label>
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Language</Label>
+                    <select
+                      value={editCallSettings.language || 'hinglish'}
+                      onChange={e => setEditCallSettings(s => ({ ...s, language: e.target.value }))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="hinglish">Hinglish (Default)</option>
+                      <option value="hindi">Hindi</option>
+                      <option value="english">English</option>
+                      <option value="gujarati">Gujarati</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">AI Voice</Label>
+                    <select
+                      value={editCallSettings.voice_id || 'shimmer'}
+                      onChange={e => setEditCallSettings(s => ({ ...s, voice_id: e.target.value }))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="shimmer">Shimmer (Female, Default)</option>
+                      <option value="alloy">Alloy (Neutral)</option>
+                      <option value="echo">Echo (Male)</option>
+                      <option value="fable">Fable (Male)</option>
+                      <option value="nova">Nova (Female)</option>
+                      <option value="onyx">Onyx (Male, Deep)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Max Call Duration (seconds)</Label>
+                    <Input
+                      type="number" min={60} max={1800}
+                      value={editCallSettings.max_duration || 600}
+                      onChange={e => setEditCallSettings(s => ({ ...s, max_duration: parseInt(e.target.value) || 600 }))}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Silence Timeout (seconds)</Label>
+                    <Input
+                      type="number" min={5} max={60}
+                      value={editCallSettings.silence_timeout || 30}
+                      onChange={e => setEditCallSettings(s => ({ ...s, silence_timeout: parseInt(e.target.value) || 30 }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">AI Script / Custom Instructions (optional)</Label>
+                  <Textarea
+                    value={editAiScript}
+                    onChange={e => setEditAiScript(e.target.value)}
+                    rows={4}
+                    placeholder="e.g. Focus on 2BHK units in Tower A. Mention the monsoon offer — 5% discount for bookings this week. Always ask for a site visit."
+                    className="text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">This overrides the default AI persona script for this campaign.</p>
+                </div>
               </div>
             </div>
           </div>
