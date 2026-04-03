@@ -231,8 +231,7 @@ export async function DELETE(request, { params }) {
         // 1. Delete call-related data (depend on call_logs and lead)
         await Promise.all([
             supabase.from('conversation_insights').delete().eq('lead_id', id),
-            supabase.from('agent_calls').delete().eq('lead_id', id),
-            supabase.from('call_attempts').delete().eq('lead_id', id)
+            supabase.from('agent_calls').delete().eq('lead_id', id)
         ])
 
         // 2. Delete call logs (depends on lead)

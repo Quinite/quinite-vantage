@@ -90,29 +90,6 @@ CREATE TABLE public.billing_plans (
   allowed_modules ARRAY DEFAULT ARRAY['crm'::text],
   CONSTRAINT billing_plans_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.call_attempts (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  organization_id uuid,
-  lead_id uuid,
-  campaign_id uuid,
-  call_log_id uuid,
-  attempt_number integer NOT NULL,
-  channel text NOT NULL,
-  attempted_at timestamp with time zone DEFAULT now(),
-  outcome text NOT NULL,
-  duration integer DEFAULT 0,
-  will_retry boolean DEFAULT false,
-  next_retry_at timestamp with time zone,
-  retry_reason text,
-  voicemail_detected boolean DEFAULT false,
-  metadata jsonb DEFAULT '{}'::jsonb,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT call_attempts_pkey PRIMARY KEY (id),
-  CONSTRAINT call_attempts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT call_attempts_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
-  CONSTRAINT call_attempts_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id),
-  CONSTRAINT call_attempts_call_log_id_fkey FOREIGN KEY (call_log_id) REFERENCES public.call_logs(id)
-);
 CREATE TABLE public.call_credits (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL UNIQUE,
