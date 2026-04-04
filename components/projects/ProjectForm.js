@@ -28,8 +28,7 @@ import {
     Factory,
     Plus,
     Trash2,
-    Edit,
-    Calendar
+    Edit
 } from 'lucide-react'
 import {
     Dialog,
@@ -56,7 +55,20 @@ import {
     CommandItem,
     CommandList,
 } from '@/components/ui/command'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { Check, ChevronsUpDown, Calendar as CalendarIcon } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { Calendar } from "@/components/ui/calendar"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { 
+    PROJECT_STATUS_CONFIG, 
+    PROJECT_STATUS_OPTIONS 
+} from '@/lib/inventory'
 
 const STEPS = [
     { id: 'basic', title: 'Basic Info', icon: Building2, description: 'Project identity & Type' },
@@ -892,7 +904,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                 {/* Unit Types Breakdown */}
                                 <div className="bg-slate-50 p-5 rounded-xl border-2 border-slate-200">
                                     <div className="flex items-center justify-between mb-3">
-                                        <label className="text-sm font-semibold text-slate-800 block">Unit Configurations Breakdown</label>
+                                        <label className="text-sm font-semibold text-slate-800 block">Unit Configurations</label>
                                         {!showAddConfig && (
                                             <Button
                                                 type="button"
@@ -912,6 +924,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                             <div className="px-6 py-4 border-b bg-slate-50/50">
                                                 <DialogTitle className="text-sm font-bold text-slate-900 uppercase tracking-tight">Add New Unit Config</DialogTitle>
                                             </div>
+                                            <div className="p-6">
                                             <ResidentialConfigForm
                                                 onCancel={() => setShowAddConfig(false)}
                                                 category={formData.propertyCategory}
@@ -923,31 +936,29 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                     setShowAddConfig(false)
                                                 }}
                                             />
+                                            </div>
                                         </DialogContent>
                                     </Dialog>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             {formData.unitTypes.map((ut, index) => (
                                                 <div key={index} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3">
                                                     <div className="flex-1">
-                                                        {ut.configuration ? (
+                                                        {(ut.config_name || ut.property_type) ? (
                                                             <div className="flex flex-col">
                                                                 <span className="font-semibold text-sm text-slate-800">
-                                                                    {ut.configuration} {ut.property_type || ut.type}
+                                                                    {ut.config_name} {ut.property_type}
                                                                 </span>
-                                                                <span className="text-xs text-slate-500">
-                                                                    {ut.carpet_area} sqft • {ut.transaction_type || 'Sell'}
+                                                                <span className="text-xs text-slate-400 font-semibold">
+                                                                    {ut.carpet_area || ut.plot_area} sqft • <span className="capitalize">{ut.transaction_type || 'Sell'}</span>
                                                                 </span>
                                                             </div>
                                                         ) : (
-                                                            <span className="font-semibold text-sm text-slate-800">{ut.type}</span>
+                                                            <span className="font-semibold text-sm text-slate-800">New Configuration</span>
                                                         )}
                                                     </div>
 
                                                     <div className="flex items-center gap-3">
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="text-[10px] text-slate-400 font-medium italic">MASTER PROTOTYPE</span>
-                                                        </div>
                                                         <button
                                                             type="button"
                                                             onClick={() => {
@@ -975,56 +986,93 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                 {/* Project Status */}
                                 <div>
                                     <label className="text-sm font-semibold text-slate-800 mb-2 block">Project Status</label>
-                                    <select
+                                    <Select
                                         value={formData.projectStatus}
-                                        onChange={e => {
-                                            const newStatus = e.target.value
-                                            handleChange('projectStatus', newStatus)
+                                        onValueChange={(val) => {
+                                            handleChange('projectStatus', val)
                                             // Reset irrelevant date when status changes
-                                            if (['ready_to_move', 'completed'].includes(newStatus)) {
+                                            const config = PROJECT_STATUS_CONFIG[val]
+                                            if (config?.showCompletion) {
                                                 handleChange('possessionDate', '')
-                                            } else if (['planning', 'under_construction'].includes(newStatus)) {
+                                            } else if (config?.showPossession) {
                                                 handleChange('completionDate', '')
                                             }
                                         }}
-                                        className="w-full rounded-lg border-2 border-slate-300 px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                                     >
-                                        <option value="planning">Planning</option>
-                                        <option value="under_construction">Under Construction</option>
-                                        <option value="ready_to_move">Ready to Move</option>
-                                        <option value="completed">Completed</option>
-                                    </select>
+                                        <SelectTrigger className="w-full rounded-lg border-2 border-slate-300 h-11 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-800">
+                                            <SelectValue placeholder="Select Status" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl border-slate-100 shadow-xl p-1">
+                                            {PROJECT_STATUS_OPTIONS.map(opt => (
+                                                <SelectItem key={opt.value} value={opt.value} className="text-sm font-medium py-2.5">
+                                                    {opt.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
 
                                 {/* Dynamic Date Fields */}
-                                {['planning', 'under_construction'].includes(formData.projectStatus) && (
+                                {PROJECT_STATUS_CONFIG[formData.projectStatus]?.showPossession && (
                                     <div className="animate-in fade-in duration-300">
                                         <label className="text-sm font-semibold text-slate-800 mb-2 block flex items-center gap-2">
-                                            <Calendar className="w-4 h-4 text-blue-600" />
                                             Expected Possession Date *
                                         </label>
-                                        <Input
-                                            type="date"
-                                            value={formData.possessionDate}
-                                            onChange={e => handleChange('possessionDate', e.target.value)}
-                                            className={`w-full rounded-lg border-2 px-4 py-2 bg-white ${errors.possessionDate ? 'border-red-300' : 'border-slate-300'}`}
-                                        />
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn(
+                                                        "w-full justify-start text-left font-medium h-11 rounded-lg border-2",
+                                                        !formData.possessionDate && "text-slate-400",
+                                                        errors.possessionDate ? 'border-red-300' : 'border-slate-300'
+                                                    )}
+                                                >
+                                                    <CalendarIcon className="mr-2 h-4 w-4 text-blue-500" />
+                                                    {formData.possessionDate ? format(parseISO(formData.possessionDate), "PPP") : <span>Pick a date</span>}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={formData.possessionDate ? parseISO(formData.possessionDate) : undefined}
+                                                    onSelect={(date) => handleChange('possessionDate', date ? format(date, "yyyy-MM-dd") : '')}
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
                                         {errors.possessionDate && <p className="text-xs text-red-500 mt-1">{errors.possessionDate}</p>}
                                     </div>
                                 )}
 
-                                {['ready_to_move', 'completed'].includes(formData.projectStatus) && (
+                                {PROJECT_STATUS_CONFIG[formData.projectStatus]?.showCompletion && (
                                     <div className="animate-in fade-in duration-300">
                                         <label className="text-sm font-semibold text-slate-800 mb-2 block flex items-center gap-2">
-                                            <Calendar className="w-4 h-4 text-blue-600" />
                                             Completion Date *
                                         </label>
-                                        <Input
-                                            type="date"
-                                            value={formData.completionDate}
-                                            onChange={e => handleChange('completionDate', e.target.value)}
-                                            className={`w-full rounded-lg border-2 px-4 py-2 bg-white ${errors.completionDate ? 'border-red-300' : 'border-slate-300'}`}
-                                        />
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn(
+                                                        "w-full justify-start text-left font-medium h-11 rounded-lg border-2",
+                                                        !formData.completionDate && "text-slate-400",
+                                                        errors.completionDate ? 'border-red-300' : 'border-slate-300'
+                                                    )}
+                                                >
+                                                    <CalendarIcon className="mr-2 h-4 w-4 text-blue-500" />
+                                                    {formData.completionDate ? format(parseISO(formData.completionDate), "PPP") : <span>Pick a date</span>}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={formData.completionDate ? parseISO(formData.completionDate) : undefined}
+                                                    onSelect={(date) => handleChange('completionDate', date ? format(date, "yyyy-MM-dd") : '')}
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
                                         {errors.completionDate && <p className="text-xs text-red-500 mt-1">{errors.completionDate}</p>}
                                     </div>
                                 )}
@@ -1087,8 +1135,8 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
 
                 {
                     currentStep === 3 && (
-                        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                            <div className="max-w-3xl mx-auto space-y-4 pt-6">
+                        <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                            <div className="max-w-3xl mx-auto space-y-4">
                                 {/* Basic Info Summary */}
                                 <Card>
                                     <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -1101,50 +1149,41 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                     <CardContent className="space-y-3">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <p className="text-xs text-muted-foreground">Project Name</p>
+                                                <p className="text-xs text-gray-500">Project Name</p>
                                                 <p className="text-sm font-semibold">{formData.name || '-'}</p>
                                             </div>
                                             <div>
-                                                <p className="text-xs text-muted-foreground">Status</p>
+                                                <p className="text-xs text-gray-500">Status</p>
                                                 <Badge
-                                                    variant={
-                                                        formData.projectStatus === 'ready_to_move' ? 'default' :
-                                                            formData.projectStatus === 'under_construction' ? 'secondary' :
-                                                                formData.projectStatus === 'completed' ? 'outline' : 'secondary'
-                                                    }
+                                                    variant={PROJECT_STATUS_CONFIG[formData.projectStatus]?.variant || 'secondary'}
                                                     className={cn(
                                                         "text-xs capitalize",
-                                                        formData.isDraft ? 'bg-orange-500 text-white' :
-                                                        formData.projectStatus === 'ready_to_move' ? 'bg-green-600 text-white' :
-                                                            formData.projectStatus === 'under_construction' ? 'bg-yellow-600 text-white' :
-                                                                formData.projectStatus === 'completed' ? 'bg-gray-600 text-white' :
-                                                                    'bg-blue-600 text-white'
+                                                        formData.isDraft ? 'bg-orange-500 text-white' : (PROJECT_STATUS_CONFIG[formData.projectStatus]?.badge || 'bg-blue-600 text-white')
                                                     )}
                                                 >
-                                                    {formData.isDraft ? 'Draft' : (formData.projectStatus || 'planning').replace(/_/g, ' ')}
+                                                    {formData.isDraft ? 'Draft' : (PROJECT_STATUS_CONFIG[formData.projectStatus]?.label || 'Planning')}
                                                 </Badge>
                                             </div>
-                                            {((['planning', 'under_construction'].includes(formData.projectStatus)) || formData.isDraft) && formData.possessionDate && (
+                                            {(PROJECT_STATUS_CONFIG[formData.projectStatus]?.showPossession || formData.isDraft) && formData.possessionDate && (
                                                 <div className="col-span-2 sm:col-span-1">
-                                                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                                        <Calendar className="w-3 h-3 text-blue-500" />
+                                                    <p className="text-xs text-gray-500 flex items-center gap-1">
                                                         Expected Possession
                                                     </p>
                                                     <p className="text-sm font-semibold">{new Date(formData.possessionDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</p>
                                                 </div>
                                             )}
-                                            {['ready_to_move', 'completed'].includes(formData.projectStatus) && formData.completionDate && (
+                                            {PROJECT_STATUS_CONFIG[formData.projectStatus]?.showCompletion && formData.completionDate && (
                                                 <div className="col-span-2 sm:col-span-1">
-                                                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                                        <Calendar className="w-3 h-3 text-blue-500" />
+                                                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                                                        <CalendarIcon className="w-3 h-3 text-blue-500" />
                                                         Completion Date
                                                     </p>
                                                     <p className="text-sm font-semibold">{new Date(formData.completionDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</p>
                                                 </div>
                                             )}
                                         </div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Description</p>
+                                        <div className="mt-1">
+                                            <p className="text-xs text-gray-500">Description</p>
                                             <div className="text-sm">
                                                 {formData.description.length > 200 && !formData.showFullDescription ? (
                                                     <>
@@ -1181,7 +1220,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                         </div>
                                         {formData.imageUrl && (
                                             <div>
-                                                <p className="text-xs text-muted-foreground mb-2">Project Image</p>
+                                                <p className="text-xs text-gray-500 mb-1.5">Project Image</p>
                                                 <img src={formData.imageUrl} alt="Project" className="w-32 h-32 object-cover rounded-lg border" />
                                             </div>
                                         )}
@@ -1238,7 +1277,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                         {formData.unitTypes && formData.unitTypes.length > 0 && (
                                             <div>
                                                 <p className="text-xs text-muted-foreground mb-2">Unit Configurations</p>
-                                                <div className="space-y-2">
+                                                <div className="grid grid-cols-2 gap-4">
                                                     {formData.unitTypes.map((ut, idx) => {
                                                         const formatPrice = (p) => {
                                                             if (!p) return 'N/A'
@@ -1252,14 +1291,14 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                                 <div className="flex justify-between items-start">
                                                                     <div>
                                                                         <p className="text-sm font-semibold">
-                                                                            {ut.configuration || ut.property_type} {ut.property_type && ut.configuration ? `(${ut.property_type})` : ''}
+                                                                            {ut.config_name} {ut.property_type ? ut.property_type : ''}
                                                                         </p>
-                                                                        <p className="text-xs text-muted-foreground">
-                                                                            {ut.transaction_type} • {ut.category} • {ut.carpet_area} {ut.area_unit || 'sqft'}
+                                                                        <p className="text-xs text-gray-400 font-semibold capitalize">
+                                                                            {ut.transaction_type} • {ut.category} • {ut.carpet_area || ut.plot_area} <span className="lowercase">{ut.area_unit || 'sqft'}</span>
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                        <p className="text-sm font-bold text-green-600">₹{formatPrice(ut.base_price || ut.price)}</p>
+                                                                        <p className="text-sm font-bold text-blue-600">₹{formatPrice(ut.base_price || ut.price)}</p>
                                                                     </div>
                                                                 </div>
                                                             </div>

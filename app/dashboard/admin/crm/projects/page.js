@@ -23,7 +23,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot, ArrowUpRight, ConciergeBell, ShoppingBag, Factory, Zap } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -51,6 +57,22 @@ const formatPrice = (price) => {
   if (n >= 10000000) return (n / 10000000).toFixed(2) + ' Cr'
   if (n >= 100000) return (n / 100000).toFixed(2) + ' Lac'
   return n.toLocaleString('en-IN')
+}
+
+const getIcon = (type) => {
+  const icons = {
+    'Apartment': Building2,
+    'Villa': Home,
+    'Villa Bungalow': Home,
+    'Penthouse': ConciergeBell,
+    'Office': Briefcase,
+    'Retail': ShoppingBag,
+    'Showroom': Store,
+    'Industrial': Factory,
+    'Plot': Home,
+    'Land': Building2
+  }
+  return icons[type] || Building2
 }
 
 export default function ProjectsPage() {
@@ -823,11 +845,18 @@ export default function ProjectsPage() {
                           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                             <h3 className="font-bold text-slate-900 flex items-center gap-2">
                               <Layout className="w-4 h-4 text-blue-500" />
-                              Inventory Status
+                                Inventory Status
                             </h3>
-                            <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-[10px]">
-                              Total: {viewingProject.total_units || 0} Units
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-[10px] font-bold uppercase tracking-wider gap-1 pt-0 pb-0 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-100/50"
+                                onClick={() => router.push(`/dashboard/admin/inventory/projects/${viewingProject.id}`)}
+                              >
+                                Manage <ArrowUpRight className="w-3 h-3" />
+                              </Button>
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-3 gap-3">
@@ -920,11 +949,11 @@ export default function ProjectsPage() {
                         </div>
 
                         {/* Full Width Location Details */}
-                        <div className="md:col-span-2 bg-slate-50/50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                        <div className="md:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
                           <div className="flex items-center justify-between">
                             <h3 className="font-bold text-slate-900 flex items-center gap-2">
                               <MapPin className="w-4 h-4 text-red-500" />
-                              Prime Location
+                              Location
                             </h3>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -952,40 +981,82 @@ export default function ProjectsPage() {
                         </div>
 
                         {/* Unit Breakdown Improved */}
-                        {viewingProject.unit_types && viewingProject.unit_types.length > 0 && (
+                        {(viewingProject.unit_types?.length > 0 || viewingProject.unit_configs?.length > 0) && (
                           <div className="md:col-span-2 space-y-4">
                             <h3 className="font-bold text-slate-900 flex items-center gap-2 pl-1">
                               <Layers className="w-4 h-4 text-blue-500" />
-                              Inventory Configurations
+                              Unit Configurations
                             </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {viewingProject.unit_types.map((unit, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                                  <div className="absolute top-0 right-0 bg-blue-50 text-blue-600 px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase">
-                                    {unit.count} Units
-                                  </div>
-                                  <div className="space-y-3">
-                                    <div>
-                                      <p className="text-sm font-black text-slate-900">{unit.configuration || unit.property_type}</p>
-                                      <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{unit.category} • {unit.transaction_type}</p>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                              {(viewingProject.unit_configs?.length > 0 ? viewingProject.unit_configs : viewingProject.unit_types).map((config, idx) => {
+                                const Icon = getIcon(config.property_type || config.type)
+                                return (
+                                  <div key={idx} className="border border-slate-200 rounded-2xl p-3.5 bg-white hover:shadow-md hover:border-slate-300 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
+                                    <div className="mb-4 flex gap-3">
+                                      <div className="w-10 h-10 shrink-0 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors">
+                                        <Icon className="w-5 h-5 text-slate-500 group-hover:text-blue-600 transition-colors" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
+                                          <h4 className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                                            {config.config_name || config.property_type || config.type || 'Standard'}
+                                          </h4>
+                                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                            <TooltipProvider>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <div className="flex items-center bg-indigo-50 border border-indigo-100 rounded-md px-1.5 py-0.5 cursor-default transition-colors hover:bg-indigo-100">
+                                                    <span className="text-[10px] font-bold text-indigo-700">{config.count || 0} Units</span>
+                                                  </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p className="text-xs">Project Units</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                            <Badge variant="outline" className="text-[8px] bg-slate-50 uppercase tracking-widest font-bold px-1.5 py-0">
+                                              {config.transaction_type || 'Sell'}
+                                            </Badge>
+                                          </div>
+                                        </div>
+                                        <p className="text-[10px] font-semibold text-slate-400 capitalize tracking-wide truncate">
+                                          {(config.category || 'Residential')} • {(config.property_type || config.type || 'Apartment')}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center justify-between items-end pt-2">
-                                      {unit.carpet_area > 0 && (
-                                        <div className="flex flex-col">
-                                          <span className="text-[9px] text-slate-400 font-bold uppercase">Carpet Area</span>
-                                          <span className="text-xs font-bold text-slate-700">{unit.carpet_area} sq.ft</span>
+
+                                    <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                      {config.carpet_area > 0 && (
+                                        <div className="flex justify-between items-center px-0.5">
+                                          <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">Carpet</span>
+                                          <span className="font-bold text-[10px] text-slate-700">{config.carpet_area} sqft</span>
                                         </div>
                                       )}
-                                      {unit.price > 0 && (
-                                        <div className="text-right flex flex-col">
-                                          <span className="text-[9px] text-emerald-600 font-bold uppercase">Price</span>
-                                          <span className="text-sm font-black text-emerald-600">₹ {formatPrice(unit.price)}</span>
+                                      {(config.built_up_area > 0 || config.builtup_area > 0) && (
+                                        <div className="flex justify-between items-center px-0.5">
+                                          <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">Built-up</span>
+                                          <span className="font-bold text-[10px] text-slate-700">{config.built_up_area || config.builtup_area} sqft</span>
+                                        </div>
+                                      )}
+                                      {config.plot_area > 0 && (
+                                        <div className="flex justify-between items-center px-0.5">
+                                          <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">Plot Area</span>
+                                          <span className="font-bold text-[10px] text-slate-700">{config.plot_area} sqft</span>
+                                        </div>
+                                      )}
+
+                                      {(config.base_price > 0 || config.price > 0) && (
+                                        <div className="pt-2 mt-2 border-t border-slate-200">
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-widest">Base Price</span>
+                                            <span className="font-black text-blue-600 text-[10px]">₹ {formatPrice(config.base_price || config.price)}</span>
+                                          </div>
                                         </div>
                                       )}
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )}

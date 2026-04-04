@@ -1,166 +1,153 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-    MapPin, Bed, Bath, Layout, EyeOff, Eye, Lock,
-    Building2, Edit, RefreshCcw, Maximize, TrendingUp
+    Edit, RefreshCcw, Layers, Sparkles, Home, Maximize2, IndianRupee
 } from 'lucide-react'
-import { toast } from 'react-hot-toast'
-
-import EditUnitModal from './EditUnitModal'
+import UnitDrawer from './UnitDrawer'
 import StatusChangeModal from './StatusChangeModal'
-
-import { formatINR } from '@/lib/inventory'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { formatINR, getStatusConfig } from '@/lib/inventory'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 export function UnitCard({ unit: initialUnit, onActionComplete, canManage = false, canEdit = false }) {
     const [unit, setUnit] = useState(initialUnit)
-    const [toggling, setToggling] = useState(false)
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [isStatusOpen, setIsStatusOpen] = useState(false)
 
-    // Status badge configuration
-    const getStatusConfig = (status) => {
-        switch (status) {
-            case 'available': return { bg: 'bg-emerald-500', text: 'text-white', label: 'Available', icon: '✓', shadow: 'shadow-emerald-100' }
-            case 'sold': return { bg: 'bg-slate-500', text: 'text-white', label: 'Sold', icon: '✓', shadow: 'shadow-slate-100' }
-            case 'reserved': return { bg: 'bg-amber-500', text: 'text-white', label: 'Reserved', icon: '⏱', shadow: 'shadow-amber-100' }
-            case 'blocked': return { bg: 'bg-red-500', text: 'text-white', label: 'Blocked', icon: '✕', shadow: 'shadow-red-100' }
-            case 'under_maintenance': return { bg: 'bg-orange-500', text: 'text-white', label: 'Maintenance', icon: '🔧', shadow: 'shadow-orange-100' }
-            default: return { bg: 'bg-blue-500', text: 'text-white', label: status, icon: '', shadow: 'shadow-blue-100' }
-        }
-    }
-
-    const statusConfig = getStatusConfig(unit.status || 'available')
+    const statusObj = getStatusConfig(unit.status || 'available')
     
     // Schema field mapping
-    const title = unit.unit_number ? `Unit ${unit.unit_number}` : 'Unnamed Unit'
     const carpetArea = unit.carpet_area || unit.config?.carpet_area || 0
     const bedrooms = unit.bedrooms || unit.config?.bedrooms || 0
-    const bathrooms = unit.bathrooms || unit.config?.bathrooms || 0
-    const face = unit.facing || unit.config?.facing
-    const configName = unit.config?.config_name || unit.config?.property_type || 'Custom Unit'
+    const configName = unit.config?.config_name || unit.config?.property_type || 'Standard'
+    const towerName = unit.tower?.name || 'Main Tower'
+    const floorNum = unit.floor_number ?? '0'
+    const facing = unit.facing || 'East'
+    const propertyType = (unit.config?.property_type || unit.type || '').toLowerCase();
+    const isResidential = propertyType.includes('apartment') || propertyType.includes('villa') || propertyType.includes('residential') || propertyType.includes('penthouse');
 
     return (
         <TooltipProvider>
-            <Card className="rounded-2xl border-slate-200 bg-white shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden group flex flex-col h-full border hover:border-blue-200">
+            <Card className={cn(
+                "rounded-xl border transition-all duration-300 overflow-hidden group flex flex-col h-full hover:shadow-lg",
+                statusObj.bg,
+                statusObj.border || "border-slate-200",
+                "hover:border-slate-300"
+            )}>
                 {/* Header Section */}
                 <div className="p-4 pb-0">
                     <div className="flex justify-between items-start mb-3">
-                        <Badge className={`${statusConfig.bg} ${statusConfig.text} uppercase text-[9px] font-black tracking-widest h-5 px-2 shadow-sm border-0 rounded-full`}>
-                            {statusConfig.label}
-                        </Badge>
-                        <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest tabular-nums">
-                            {unit.tower?.name || 'T1'} • L{unit.floor_number || 0}
-                        </div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                             <h3 className="font-black text-lg tracking-tight text-slate-900 leading-none">
-                                {unit.unit_number}
-                            </h3>
-                            <Badge variant="secondary" className="bg-slate-100 text-slate-500 border-0 text-[9px] h-4 px-1.5 uppercase font-black tracking-tighter">
+                        <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                                <span className={cn(
+                                    "text-[15px] font-bold tracking-tight leading-none group-hover:text-blue-600 transition-colors",
+                                    statusObj.text
+                                )}>
+                                    {unit.unit_number}
+                                </span>
+                                {unit.is_corner && (
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 shrink-0" />
+                                )}
+                            </div>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.1em] leading-none">
                                 {configName}
-                            </Badge>
+                            </span>
                         </div>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-blue-400" />
-                            {unit.transaction_type === 'rent' ? 'Rental Property' : 'For Sale'}
-                        </p>
+                        <Badge 
+                            variant="secondary" 
+                            className={cn(
+                                "border-0 font-bold text-[9px] uppercase h-6 px-3 rounded-full shrink-0 shadow-sm bg-white/80 backdrop-blur-sm",
+                                statusObj.text
+                            )}
+                        >
+                            <div className={cn("w-1.5 h-1.5 rounded-full mr-2", statusObj.dot)} />
+                            {unit.status?.replace('_', ' ')}
+                        </Badge>
+                    </div>
+
+                    {/* Location Card */}
+                    <div className={cn(
+                        "flex items-center gap-3 p-2.5 rounded-xl border mb-3 group-hover:bg-white transition-colors shadow-sm",
+                        statusObj.activeBg || "bg-white/60",
+                        statusObj.border || "border-slate-100/50"
+                    )}>
+                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm shrink-0">
+                            <Layers className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col overflow-hidden">
+                            <span className="text-xs font-bold text-slate-900 truncate leading-none mb-1">
+                                {towerName}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-tight">
+                                Floor {floorNum === 0 ? 'G' : floorNum} • {facing}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                {/* Main Info */}
-                <CardContent className="p-4 pt-4 flex-1 flex flex-col justify-between">
-                    <div className="space-y-4">
-                        {/* Price Display */}
-                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors">
-                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</div>
-                            <div className="text-xl font-black text-slate-900 tracking-tight">
-                                {formatINR(unit.total_price || unit.base_price || 0)}
-                            </div>
+                {/* Data Grid Section */}
+                <CardContent className="p-4 pt-1 flex-1 flex flex-col gap-2">
+                    { !isResidential ? (
+                        /* NON-RESIDENTIAL: AREA THEN VALUE IN ONE ROW (2 COLUMNS) */
+                        <div className="grid grid-cols-2 gap-2">
+                             <Box icon={<Maximize2 className="w-3 h-3"/>} color="text-emerald-500" label="Area" value={`${carpetArea} SQFT`} statusObj={statusObj} />
+                             <Box icon={<IndianRupee className="w-3 h-3"/>} color="text-blue-500" label="Value" value={formatINR(unit.total_price || unit.base_price || 0).replace('.00', '').replace(' ', '')} statusObj={statusObj} />
                         </div>
-
-                        {/* Property Specs */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Dimension</div>
-                                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                                    <Maximize className="w-3.5 h-3.5 text-blue-500" />
-                                    {carpetArea} <span className="text-[9px] text-slate-400 font-medium">SQFT</span>
-                                </div>
+                    ) : (
+                        /* RESIDENTIAL: AREA AND PLAN IN ROW 1, VALUE IN ROW 2 */
+                        <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                                <Box icon={<Maximize2 className="w-3 h-3"/>} color="text-emerald-500" label="Area" value={`${carpetArea} SQFT`} statusObj={statusObj} />
+                                <Box icon={<Home className="w-3 h-3"/>} color="text-amber-500" label="Plan" value={`${bedrooms}BHK`} statusObj={statusObj} />
                             </div>
-                            <div className="space-y-1">
-                                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Layout</div>
-                                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                                    <Bed className="w-3.5 h-3.5 text-blue-500" />
-                                    {bedrooms} <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">BHK / {bathrooms} BA</span>
-                                </div>
-                            </div>
+                            <Box icon={<IndianRupee className="w-3 h-3"/>} color="text-blue-500" label="Valuation" value={formatINR(unit.total_price || unit.base_price || 0).replace('.00', '').replace(' ', '')} statusObj={statusObj} full />
                         </div>
-
-                        {/* Tags / Metadata */}
-                        <div className="flex flex-wrap gap-1.5 min-h-[1.5rem]">
-                            {face && (
-                                <Badge variant="outline" className="bg-white border-slate-200 text-[9px] font-bold py-0 h-4 uppercase px-1.5 text-slate-500">
-                                    {face} facing
-                                </Badge>
-                            )}
-                            {unit.is_corner && (
-                                <Badge variant="outline" className="bg-amber-50 border-amber-100 text-[9px] font-bold py-0 h-4 uppercase px-1.5 text-amber-600">
-                                    Corner
-                                </Badge>
-                            )}
-                            {unit.is_vastu_compliant && (
-                                <Badge variant="outline" className="bg-emerald-50 border-emerald-100 text-[9px] font-bold py-0 h-4 uppercase px-1.5 text-emerald-600">
-                                    Vastu
-                                </Badge>
-                            )}
-                        </div>
-                    </div>
+                    )}
 
                     {/* Action Bar */}
-                    <div className="flex gap-2 mt-6 border-t border-slate-50 pt-4">
+                    <div className="flex gap-2 pt-3">
                         <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1 h-9 bg-slate-900 hover:bg-black text-[10px] font-black uppercase tracking-widest rounded-lg shadow-lg shadow-slate-200"
+                            variant="secondary"
                             onClick={() => setIsStatusOpen(true)}
                             disabled={!canManage && !canEdit}
+                            className="flex-1 h-8 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold uppercase tracking-[0.1em] rounded-xl shadow-md transition-all active:scale-95"
                         >
-                            <RefreshCcw className="w-3 h-3 mr-2" />
-                            Update Status
+                            <RefreshCcw className="w-3 h-3 mr-2 shadow-sm" />
+                            Status
                         </Button>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-9 w-9 rounded-lg border-slate-200 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
-                                    onClick={() => setIsEditOpen(true)}
-                                    disabled={!canEdit && !canManage}
-                                >
-                                    <Edit className="w-3.5 h-3.5" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Manage Unit Details</TooltipContent>
-                        </Tooltip>
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsEditOpen(true)}
+                            disabled={!canEdit && !canManage}
+                            className="w-8 h-8 p-0 rounded-xl border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-900 shadow-sm transition-all active:scale-95 shrink-0"
+                        >
+                            <Edit className="w-3.5 h-3.5" />
+                        </Button>
                     </div>
                 </CardContent>
 
-                <EditUnitModal
+                <UnitDrawer
                     unit={unit}
-                    isOpen={isEditOpen}
+                    open={isEditOpen}
+                    mode="edit"
                     onClose={() => setIsEditOpen(false)}
-                    onUnitUpdated={(updatedUnit) => {
-                        setUnit(updatedUnit)
+                    onSave={async (payload) => {
+                        const url = `/api/inventory/units/${unit.id}`
+                        const res = await fetch(url, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        })
+                        if (!res.ok) throw new Error('Failed to update')
+                        const data = await res.json()
+                        setUnit(data.unit)
                         if (onActionComplete) onActionComplete()
+                        return true
                     }}
-                    onActionComplete={onActionComplete}
                 />
 
                 <StatusChangeModal
@@ -174,5 +161,28 @@ export function UnitCard({ unit: initialUnit, onActionComplete, canManage = fals
                 />
             </Card>
         </TooltipProvider>
+    )
+}
+
+function Box({ icon, label, value, color, full, statusObj }) {
+    // Map activeBg to a slightly lighter version if needed, 
+    // but for now we'll use activeBg or falling back to bg-white/40
+    return (
+       <div className={cn(
+           "p-2 rounded-xl border transition-colors group-hover:bg-white flex items-center gap-2 overflow-hidden shadow-sm",
+           statusObj.activeBg || "bg-white/60",
+           statusObj.border || "border-slate-100/50",
+           full ? "w-full" : ""
+       )}>
+           <div className={cn("w-5 h-5 rounded-md bg-white flex items-center justify-center border border-slate-100 shadow-sm shrink-0", color)}>
+               {icon}
+           </div>
+           <div className="flex flex-col min-w-0">
+               <span className="text-[7px] font-bold text-slate-300 uppercase leading-none mb-0.5 tracking-wider">{label}</span>
+               <span className="text-[10px] font-bold text-slate-900 tabular-nums truncate leading-none">
+                   {value}
+               </span>
+           </div>
+       </div>
     )
 }

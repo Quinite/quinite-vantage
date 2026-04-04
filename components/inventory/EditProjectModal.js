@@ -3,11 +3,22 @@
 import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'react-hot-toast'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import ResidentialConfigForm from '@/components/projects/ResidentialConfigForm'
+import { 
+    PROJECT_STATUS_CONFIG, 
+    PROJECT_STATUS_OPTIONS 
+} from '@/lib/inventory'
 
 import GenerateInventoryModal from './GenerateInventoryModal'
 
@@ -96,18 +107,21 @@ export default function EditProjectModal({ project, isOpen, onClose, onProjectUp
                         {/* Project Status */}
                         <div className="space-y-2">
                             <Label htmlFor="projectStatus">Project Status</Label>
-                            <select
-                                id="projectStatus"
+                            <Select
                                 value={formData.projectStatus}
-                                onChange={(e) => setFormData(prev => ({ ...prev, projectStatus: e.target.value }))}
-                                className="w-full rounded-lg border-2 border-input px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-input transition-all"
-                                required
+                                onValueChange={(val) => setFormData(prev => ({ ...prev, projectStatus: val }))}
                             >
-                                <option value="planning">Planning</option>
-                                <option value="under_construction">Under Construction</option>
-                                <option value="ready_to_move">Ready to Move</option>
-                                <option value="completed">Completed</option>
-                            </select>
+                                <SelectTrigger className="w-full rounded-lg border-2 border-input h-10 bg-background focus:ring-2 focus:ring-ring transition-all">
+                                    <SelectValue placeholder="Select Status" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl border-slate-100 shadow-xl p-1">
+                                    {PROJECT_STATUS_OPTIONS.map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value} className="text-sm font-medium py-2">
+                                            {opt.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         {/* Unit Types Breakdown */}
@@ -156,17 +170,17 @@ export default function EditProjectModal({ project, isOpen, onClose, onProjectUp
                                     {formData.unitTypes.map((ut, index) => (
                                         <div key={index} className="flex gap-2 items-center p-3 border rounded-lg bg-muted/10">
                                             <div className="flex-1">
-                                                {ut.configuration ? (
+                                                {(ut.config_name || ut.property_type) ? (
                                                     <div className="flex flex-col">
                                                         <span className="font-medium text-sm">
-                                                            {ut.configuration} {ut.property_type || ut.type}
+                                                            {ut.config_name} {ut.property_type}
                                                         </span>
                                                         <span className="text-xs text-muted-foreground">
-                                                            {ut.carpet_area} sqft • {ut.transaction_type || 'Sell'}
+                                                            {ut.carpet_area || ut.plot_area} sqft • {ut.transaction_type || 'Sell'}
                                                         </span>
                                                     </div>
                                                 ) : (
-                                                    <span className="font-medium text-sm">{ut.type}</span>
+                                                    <span className="font-medium text-sm">New Configuration</span>
                                                 )}
                                             </div>
 

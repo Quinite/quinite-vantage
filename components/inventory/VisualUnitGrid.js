@@ -465,7 +465,7 @@ function FloorRow({ floorNum, tower, units, onUnitClick, onAddUnit, onStatusChan
   const isGround = floorNum === 0;
 
   return (
-    <div className="flex items-start gap-3 group/row max-w-full">
+    <div className="flex items-start gap-3 group/row max-w-full !mt-2">
       <div className="w-14 pt-1.5 shrink-0 flex flex-col items-end gap-1.5">
         <span className={cn(
           "text-[10px] font-black px-2 py-0.5 rounded-lg border-2 shadow-sm transition-all group-hover/row:bg-blue-500 group-hover/row:text-white",
@@ -497,7 +497,7 @@ function FloorRow({ floorNum, tower, units, onUnitClick, onAddUnit, onStatusChan
         )}
       </div>
 
-      <div className="flex gap-2 pb-2 flex-1 overflow-x-auto custom-scrollbar pt-0.5 scroll-smooth no-scrollbar select-none">
+      <div className="flex gap-2 pb-2 flex-1 overflow-x-auto pt-0.5 select-none scroll-smooth">
         {slots.map((unit, idx) => (
           <div key={idx} className="shrink-0 min-w-[110px] max-w-[110px]">
             {unit ? (
@@ -546,7 +546,7 @@ function UnitCell({ unit, onClick, onStatusChange, onDelete }) {
             {/* Header: Number and Delete */}
             <div className="flex justify-between items-start">
               <span className={cn(
-                "text-[8px] font-black leading-none px-1.2 py-0.5 rounded-md shadow-sm border border-black/5", 
+                "text-[8px] font-bold leading-none px-1 py-0.5 rounded-md shadow-sm border border-black/5", 
                 style.bg === 'bg-white' ? "bg-slate-50 border-slate-100" : "bg-white/40 border-white/10", 
                 style.text
               )}>
@@ -562,13 +562,13 @@ function UnitCell({ unit, onClick, onStatusChange, onDelete }) {
 
             {/* Price section */}
             <div className={cn("text-[10px] font-black tracking-tight leading-none mb-1", style.text)}>
-              {formatINR(unit.total_price || unit.base_price).split('.')[0]}
+              {formatINR(unit.total_price || unit.base_price)}
             </div>
 
             {/* Area and Configuration */}
             <div className="flex items-center gap-1.5 overflow-hidden">
                <span className={cn("text-[7px] font-bold uppercase truncate opacity-70", style.text)}>
-                  {unit.unit_config_name || unit.config?.config_name || '...'}
+                  {unit.config?.config_name || unit.config?.property_type || '...'}
                </span>
                <span className={cn("text-[7px] font-medium opacity-40 px-1 border-l", style.text)}>
                   {unit.carpet_area || unit.plot_area || '--'} <span className="text-[5px]">SQFT</span>
@@ -603,7 +603,7 @@ function UnitCell({ unit, onClick, onStatusChange, onDelete }) {
                  <span className="text-right text-slate-700 font-bold">{unit.facing || 'North'}</span>
                  
                  <span className="text-slate-400 uppercase tracking-tighter text-[9px] font-bold">Price</span> 
-                 <span className="text-right font-black text-blue-600 underline decoration-2 underline-offset-4">{formatINR(unit.total_price || unit.base_price)}</span>
+                 <span className="text-right font-black text-blue-600">{formatINR(unit.total_price || unit.base_price)}</span>
               </div>
            </div>
         </TooltipContent>

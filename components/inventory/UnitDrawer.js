@@ -255,15 +255,15 @@ export default function UnitDrawer({
                   <Building2 className="w-5 h-5" />
                </div>
                <div>
-                 <SheetTitle className="text-lg font-black text-slate-900 flex items-center gap-2">
+                 <SheetTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
                    {mode === 'add' ? 'New Unit' : `${formData.unit_number}`}
                    {selectedConfig && (
-                      <Badge variant="outline" className="text-[8px] uppercase font-black bg-slate-50 border-slate-100 py-0 px-1.5 h-4">
+                      <Badge variant="outline" className="text-[8px] uppercase font-bold bg-slate-50 border-slate-100 py-0 px-1.5 h-4">
                         {selectedConfig.property_type}
                       </Badge>
                    )}
                  </SheetTitle>
-                 <SheetDescription className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+                 <SheetDescription className="text-[10px] text-slate-400 font-semibold leading-none">
                    {tower?.name} • L{floorNumber === 0 ? 'G' : floorNumber}
                  </SheetDescription>
                </div>
@@ -332,7 +332,7 @@ export default function UnitDrawer({
                             type="button"
                             onClick={() => setFormData(p => ({ ...p, transaction_type: mode }))}
                             className={cn(
-                              "flex-1 py-1 rounded-md text-[11px] font-black uppercase transition-all",
+                              "flex-1 py-1 rounded-md text-[11px] font-bold uppercase transition-all",
                               formData.transaction_type === mode 
                                ? "bg-white text-blue-600 shadow-sm ring-1 ring-slate-100" 
                                : "text-slate-400 hover:text-slate-600"
@@ -371,8 +371,8 @@ export default function UnitDrawer({
                        <IndianRupee className="w-3 h-3 text-blue-500" /> Commercial
                     </h4>
                     <div className="flex items-center gap-1.5 bg-blue-50/50 px-2 py-0.5 rounded-md border border-blue-100">
-                       <span className="text-[8px] font-black text-blue-400 uppercase">Total Value:</span>
-                       <span className="text-[10px] font-black text-blue-600">{formatINR(finalPrice)}</span>
+                       <span className="text-[8px] font-bold text-blue-400 uppercase">Total Value:</span>
+                       <span className="text-[10px] font-bold text-blue-600">{formatINR(finalPrice)}</span>
                     </div>
                  </div>
 
@@ -386,7 +386,7 @@ export default function UnitDrawer({
                         <div className="flex justify-between items-center px-0.5">
                            <Label htmlFor={field.id} className="text-[11px] font-bold text-slate-400 uppercase">{field.label}</Label>
                            {field.value > 0 && (
-                             <span className="text-[9px] font-black text-blue-500">{formatINR(field.value)}</span>
+                             <span className="text-[9px] font-bold text-blue-500">{formatINR(field.value)}</span>
                            )}
                         </div>
                         <Input
@@ -408,7 +408,7 @@ export default function UnitDrawer({
                    <h4 className="text-[11px] font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
                      <Sparkles className="w-3 h-3 text-amber-500" /> Physicals
                    </h4>
-                   <Badge variant="outline" className="text-[9px] font-black tracking-wider uppercase text-slate-400 bg-slate-50/50 border-slate-50 px-1.5 h-3.5">
+                   <Badge variant="outline" className="text-[9px] font-bold tracking-wider uppercase text-slate-400 bg-slate-50/50 border-slate-50 px-1.5 h-3.5">
                      {selectedCategory}
                    </Badge>
                  </div>
@@ -603,7 +603,7 @@ export default function UnitDrawer({
                              <div>
                                 {selectedLead ? (
                                    <div className="flex flex-col">
-                                      <span className="text-[11px] font-black text-slate-900 leading-tight">{selectedLead.name}</span>
+                                      <span className="text-[11px] font-bold text-slate-900 leading-tight">{selectedLead.name}</span>
                                       <span className="text-[8px] text-emerald-600 font-bold uppercase tracking-tight">{selectedLead.phone || 'No Phone'}</span>
                                    </div>
                                 ) : (
@@ -629,7 +629,7 @@ export default function UnitDrawer({
                              />
                           </div>
                           <CommandList className="max-h-[200px] custom-scrollbar">
-                             <CommandEmpty className="p-8 text-center text-slate-300 font-black text-[9px] uppercase">
+                             <CommandEmpty className="p-8 text-center text-slate-300 font-bold text-[9px] uppercase">
                                 No records found.
                              </CommandEmpty>
                              <CommandGroup className="p-2">
@@ -644,10 +644,10 @@ export default function UnitDrawer({
                                    >
                                       <div className="flex items-center gap-2.5">
                                          <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                                            <span className="text-[9px] font-black uppercase">{lead.name[0]}</span>
+                                            <span className="text-[9px] font-bold uppercase">{lead.name[0]}</span>
                                          </div>
                                          <div className="flex flex-col">
-                                            <span className="text-[11px] font-black text-slate-800">{lead.name}</span>
+                                            <span className="text-[11px] font-bold text-slate-800">{lead.name}</span>
                                             <span className="text-[8px] text-slate-400">{lead.phone || lead.email}</span>
                                          </div>
                                       </div>

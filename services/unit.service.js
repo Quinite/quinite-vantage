@@ -17,6 +17,7 @@ export class UnitService {
                 *,
                 project:projects(id, name, address),
                 config:unit_configs(*),
+                tower:towers(id, name),
                 leads:leads(id, name, email, phone)
             `)
             .eq('organization_id', organizationId)
@@ -53,6 +54,7 @@ export class UnitService {
                 *,
                 project:projects(id, name, address, image_url),
                 config:unit_configs(*),
+                tower:towers(id, name),
                 leads:leads(id, name, email, phone)
             `)
             .eq('id', unitId)
