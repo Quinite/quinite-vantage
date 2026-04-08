@@ -24,16 +24,22 @@ import {
     HelpCircle,
     Phone,
     Clock,
-    TrendingUp
+    TrendingUp,
+    CheckSquare
 } from 'lucide-react'
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
     Sheet,
     SheetContent,
@@ -98,6 +104,7 @@ export default function AdminHeader({ user, profile }) {
     // [NEW] Define permissions for CRM nav items
     const crmNavItems = [
         { label: 'Dashboard', href: '/dashboard/admin/crm/dashboard', icon: LayoutDashboard },
+        { label: 'Tasks', href: '/dashboard/admin/crm/tasks', icon: CheckSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
         { label: 'Projects', href: '/dashboard/admin/crm/projects', icon: FolderKanban, permission: 'view_projects' },
         { label: 'Campaigns', href: '/dashboard/admin/crm/campaigns', icon: Megaphone, permission: 'view_campaigns' },
         { label: 'Leads', href: '/dashboard/admin/crm/leads', icon: Users, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
@@ -354,73 +361,112 @@ export default function AdminHeader({ user, profile }) {
                     </div>
 
                     {/* Right Section: Search & Actions */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                         {/* Global Search */}
                         <div className="hidden lg:block">
                             <GlobalSearch />
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            {/* Quick Actions (System Status) */}
+                        <div className="flex items-center gap-1">
+                            {/* System Status */}
                             <SystemStatus />
 
                             {/* Notifications */}
                             <NotificationBell />
 
-                            {/* Help / QL */}
+                            {/* Help */}
                             <HelpMenu />
 
-                            <div className="h-4 w-px bg-slate-200 mx-1"></div>
-
-                            {/* User Profile */}
-                            {isMounted ? (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" className="relative h-8 w-8 rounded-full ring-offset-background focus:ring-0 hover:bg-transparent p-0" suppressHydrationWarning>
-                                            <Avatar className="h-8 w-8 border border-slate-200">
-                                                <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
-                                                <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
-                                                    {profile?.full_name?.[0] || 'U'}
-                                                </AvatarFallback>
-                                            </Avatar>
+                            {/* Settings — direct icon, no popover */}
+                            <TooltipProvider delayDuration={0}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => router.push('/dashboard/admin/settings')}
+                                            className={cn(
+                                                "h-8 w-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors",
+                                                pathname?.startsWith('/dashboard/admin/settings') && "bg-slate-100 text-slate-900"
+                                            )}
+                                        >
+                                            <Settings className="h-4 w-4" />
                                         </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="w-56" align="end" forceMount>
-                                        <DropdownMenuLabel className="font-normal">
-                                            <div className="flex flex-col space-y-1">
-                                                <p className="text-sm font-medium leading-none text-foreground">{profile?.full_name}</p>
-                                                <p className="text-xs leading-none text-muted-foreground">
-                                                    {user?.email}
-                                                </p>
-                                            </div>
-                                        </DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => router.push('/dashboard/admin/profile')}>
-                                            <User className="mr-2 h-4 w-4" />
-                                            <span>Profile</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => router.push('/dashboard/admin/settings')}>
-                                            <Settings className="mr-2 h-4 w-4" />
-                                            <span>Settings</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                            <LogOut className="mr-2 h-4 w-4" />
-                                            <span>Log out</span>
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            ) : (
-                                <Button variant="ghost" className="relative h-8 w-8 rounded-full ring-offset-background focus:ring-0 hover:bg-transparent p-0">
-                                    <Avatar className="h-8 w-8 border border-slate-200">
-                                        <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
-                                        <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
-                                            {profile?.full_name?.[0] || 'U'}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                </Button>
-                            )}
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" className="font-medium bg-slate-900 text-white border-slate-800">
+                                        Settings
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
+
+                        {/* Vertical separator */}
+                        <div className="h-5 w-px bg-slate-200" />
+
+                        {/* User Profile */}
+                        {isMounted ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        className="relative flex items-center gap-2 h-8 px-1.5 rounded-lg hover:bg-slate-100 focus:ring-0 transition-colors"
+                                        suppressHydrationWarning
+                                    >
+                                        <Avatar className="h-7 w-7 border border-slate-200 shrink-0">
+                                            <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                                            <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
+                                                {profile?.full_name?.[0] || 'U'}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <span className="hidden sm:block text-sm font-medium text-slate-700 max-w-[100px] truncate">
+                                            {profile?.full_name?.split(' ')[0] || 'Account'}
+                                        </span>
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-60" align="end" forceMount>
+                                    {/* Profile header */}
+                                    <div className="flex items-center gap-3 px-3 py-3">
+                                        <Avatar className="h-9 w-9 border border-slate-200 shrink-0">
+                                            <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                                            <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-semibold">
+                                                {profile?.full_name?.[0] || 'U'}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex flex-col min-w-0">
+                                            <p className="text-sm font-semibold text-foreground truncate">{profile?.full_name}</p>
+                                            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                                            {profile?.role && (
+                                                <span className="mt-1 inline-flex w-fit items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 capitalize">
+                                                    {profile.role.replace(/_/g, ' ')}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => router.push('/dashboard/admin/profile')} className="gap-2 py-2">
+                                        <User className="h-4 w-4 text-muted-foreground" />
+                                        <span>My Profile</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        onClick={handleSignOut}
+                                        className="gap-2 py-2 text-red-600 focus:text-red-600 focus:bg-red-50"
+                                    >
+                                        <LogOut className="h-4 w-4" />
+                                        <span>Log out</span>
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : (
+                            <div className="flex items-center gap-2 h-8 px-1.5">
+                                <Avatar className="h-7 w-7 border border-slate-200">
+                                    <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                                    <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
+                                        {profile?.full_name?.[0] || 'U'}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

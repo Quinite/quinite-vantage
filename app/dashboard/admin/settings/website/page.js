@@ -114,12 +114,6 @@ export default function WebsiteSettingsPage() {
             <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-8">
                 <div className="mb-6 flex items-center justify-between">
                     <div>
-                        <Link href="/dashboard/admin/settings">
-                            <Button variant="ghost" size="sm" className="pl-0 hover:pl-2 transition-all text-slate-500 hover:text-slate-800">
-                                <ArrowLeft className="h-4 w-4 mr-2" />
-                                Back to Settings
-                            </Button>
-                        </Link>
                         <h1 className="text-3xl font-bold tracking-tight text-gray-900 mt-4">Website Settings</h1>
                         <p className="text-muted-foreground text-slate-500 mt-2">
                             Configure your public profile and website appearance.

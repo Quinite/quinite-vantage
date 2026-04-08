@@ -30,14 +30,6 @@ export default function IntegrationsPage() {
     return (
         <div className="h-full bg-gray-50 overflow-y-auto">
             <div className="p-4 md:p-8 max-w-7xl mx-auto">
-                <div className="mb-6">
-                    <Link href="/dashboard/admin/settings">
-                        <Button variant="ghost" size="sm" className="pl-0 hover:pl-2 transition-all text-slate-500 hover:text-slate-800">
-                            <ArrowLeft className="h-4 w-4 mr-2" />
-                            Back to Settings
-                        </Button>
-                    </Link>
-                </div>
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">Integrations</h1>
                     <p className="text-gray-500 mt-2">Connect your lead sources and external tools to Vantage.</p>

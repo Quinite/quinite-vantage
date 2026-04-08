@@ -16,6 +16,7 @@ import LeadProfileSidebar from '@/components/crm/LeadProfileSidebar'
 import LeadProfileOverview from '@/components/crm/LeadProfileOverview'
 import LeadProfileNotes from '@/components/crm/LeadProfileNotes'
 import LeadProfileEmails from '@/components/crm/LeadProfileEmails'
+import LeadTasksManager from '@/components/crm/LeadTasksManager'
 
 // Parallel Hooks
 import { useLead, useLeadProfile } from '@/hooks/useLeads'
@@ -123,7 +124,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <div className="border-b bg-transparent mb-6">
                         <TabsList className="h-auto w-full justify-start bg-transparent p-0 space-x-8">
-                            {['overview', 'notes', 'emails', 'timeline'].map(tab => (
+                            {['overview', 'tasks', 'notes', 'emails', 'timeline'].map(tab => (
                                 <TabsTrigger
                                     key={tab}
                                     value={tab}
@@ -144,6 +145,10 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                             onLinkUnit={() => setLinkDialogOpen(true)}
                             onUnlinkUnit={handleUnlink}
                         />
+                    )}
+
+                    {activeTab === 'tasks' && (
+                        <LeadTasksManager leadId={leadId} />
                     )}
 
                     {activeTab === 'notes' && (

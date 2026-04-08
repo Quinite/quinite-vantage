@@ -49,8 +49,8 @@ export default function CustomBreadcrumbs() {
 
                     try {
                         if (parentSegment === 'leads') {
-                            const { data } = await supabase.from('leads').select('first_name, last_name, company').eq('id', segment).single()
-                            if (data) label = data.first_name ? `${data.first_name} ${data.last_name || ''}`.trim() : (data.company || 'Unknown Lead')
+                            const { data } = await supabase.from('leads').select('name').eq('id', segment).single()
+                            if (data) label = data.name || 'Unknown Lead'
                         } else if (parentSegment === 'projects') {
                             const { data } = await supabase.from('projects').select('name').eq('id', segment).single()
                             if (data) label = data.name
@@ -67,13 +67,19 @@ export default function CustomBreadcrumbs() {
                         'crm': 'CRM',
                         'leads': 'Leads',
                         'users': 'User Management',
+                        'members': 'Team Members',
                         'inventory': 'Inventory',
                         'analytics': 'Analytics',
                         'audit': 'Audit Logs',
                         'profile': 'Profile',
                         'projects': 'Projects',
                         'tasks': 'Tasks',
-                        'organization': 'Organization',
+                        'organization': 'General',
+                        'website': 'Website',
+                        'integrations': 'Integrations',
+                        'roles': 'Roles & Permissions',
+                        'subscription': 'Subscription',
+                        'billing': 'Billing',
                         'settings': 'Settings',
                         'crm': 'CRM',
                         'pipeline': 'Pipeline Settings'

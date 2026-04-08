@@ -1,91 +1,62 @@
+'use client'
+
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import {
-    KanbanSquare,
+    Building2,
     Users,
-    Megaphone,
-    LayoutDashboard,
-    FolderKanban,
-    BarChart3,
-    FileText,
-    Settings,
+    Shield,
+    KanbanSquare,
+    CreditCard,
+    Plug2,
+    Layout,
     ChevronLeft,
     ChevronRight,
-    Phone,
-    TrendingUp,
-    Clock,
-    CheckSquare,
-    LogOut
 } from 'lucide-react'
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { toast } from 'react-hot-toast'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from '@/components/ui/tooltip'
 import { usePermissions } from '@/contexts/PermissionContext'
-import { createClient as createClientSupabaseClient } from '@/lib/supabase/client'
 
-export default function CrmSidebar() {
+export default function SettingsSidebar() {
     const pathname = usePathname()
-    const router = useRouter()
     const [isCollapsed, setIsCollapsed] = useState(false)
-    const { hasPermission, hasAnyPermission, loading } = usePermissions()
-
-    const handleSignOut = async () => {
-        try {
-            const supabase = createClientSupabaseClient()
-            await supabase.auth.signOut()
-            router.push('/')
-        } catch (error) {
-            toast.error('Failed to sign out. Please try again.')
-            console.error('Sign out error:', error)
-        }
-    }
+    const { hasPermission, loading } = usePermissions()
 
     if (loading) return null
 
-    // Grouped navigation structure with permissions
-    const navigationSections = [
+    const settingsSections = [
         {
-            title: 'My Work',
+            title: 'Organization',
             items: [
-                { label: 'Dashboard', href: '/dashboard/admin/crm/dashboard', icon: LayoutDashboard, permission: null },
-                { label: 'Tasks', href: '/dashboard/admin/crm/tasks', icon: CheckSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
+                { label: 'General', href: '/dashboard/admin/settings/organization', icon: Building2, permission: 'view_settings' },
+                { label: 'Website', href: '/dashboard/admin/settings/website', icon: Layout, permission: 'view_settings' },
+                { label: 'Integrations', href: '/dashboard/admin/settings/integrations', icon: Plug2, permission: 'view_settings' },
             ]
         },
         {
-            title: 'Sales',
+            title: 'Team',
             items: [
-                { label: 'Leads', href: '/dashboard/admin/crm/leads', icon: Users, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
-                { label: 'Pipeline', href: '/dashboard/admin/crm?tab=pipeline', icon: KanbanSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
-                { label: 'Projects', href: '/dashboard/admin/crm/projects', icon: FolderKanban, permission: 'view_projects' },
-                { label: 'Campaigns', href: '/dashboard/admin/crm/campaigns', icon: Megaphone, permission: 'view_campaigns' },
+                { label: 'Members', href: '/dashboard/admin/settings/members', icon: Users, permission: 'view_users' },
+                { label: 'Roles & Permissions', href: '/dashboard/admin/settings/roles', icon: Shield, permission: 'manage_permissions' },
             ]
         },
         {
-            title: 'Calls',
+            title: 'CRM',
             items: [
-                { label: 'Live Calls', href: '/dashboard/admin/crm/calls/live', icon: Phone, permission: ['view_live_calls'] },
-                { label: 'Call History', href: '/dashboard/admin/crm/calls/history', icon: Clock, permission: ['view_call_history'] },
-                { label: 'Insights', href: '/dashboard/admin/crm/insights', icon: TrendingUp, permission: ['view_crm_insights'] },
+                { label: 'Pipeline Stages', href: '/dashboard/admin/crm/settings', icon: KanbanSquare, permission: 'manage_crm_settings' },
             ]
         },
         {
-            title: 'Reports',
+            title: 'Billing',
             items: [
-                { label: 'Analytics', href: '/dashboard/admin/crm/analytics', icon: BarChart3, permission: ['view_own_analytics', 'view_team_analytics', 'view_org_analytics'] },
-            ]
-        },
-        {
-            title: 'Admin',
-            items: [
-                { label: 'Audit Log', href: '/dashboard/admin/crm/auditlog', icon: FileText, permission: 'view_audit_logs' },
-                { label: 'Settings', href: '/dashboard/admin/crm/settings', icon: Settings, permission: 'view_settings' },
+                { label: 'Subscription', href: '/dashboard/admin/settings/subscription', icon: CreditCard, permission: 'view_billing' },
             ]
         }
     ]
@@ -98,22 +69,25 @@ export default function CrmSidebar() {
                     isCollapsed ? "w-20" : "w-64"
                 )}
             >
+                {/* Title */}
+                {!isCollapsed && (
+                    <div className="px-6 py-5 border-b border-border shrink-0">
+                        <h2 className="text-sm font-semibold text-foreground">Settings</h2>
+                    </div>
+                )}
+
                 <div className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
                     <nav className="space-y-4 px-2">
-                        {navigationSections.map((section, sectionIndex) => {
-                            // Pre-compute which items this user can actually access
+                        {settingsSections.map((section, sectionIndex) => {
                             const visibleItems = section.items.filter(item => {
                                 if (!item.permission) return true
-                                if (Array.isArray(item.permission)) return hasAnyPermission(item.permission)
                                 return hasPermission(item.permission)
                             })
 
-                            // Skip the entire section if nothing is accessible
                             if (visibleItems.length === 0) return null
 
                             return (
                                 <div key={section.title}>
-                                    {/* Section Header */}
                                     {!isCollapsed && (
                                         <div className="px-4 mb-2 animate-in fade-in duration-300">
                                             <h3 className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">
@@ -123,13 +97,12 @@ export default function CrmSidebar() {
                                     )}
                                     {isCollapsed && sectionIndex > 0 && <div className="h-px bg-border my-2 mx-2" />}
 
-                                    {/* Section Items — only visible items */}
                                     <div className="space-y-1">
                                         {visibleItems.map((item) => {
                                             const isActive =
                                                 pathname === item.href ||
-                                                (pathname.startsWith(item.href) && item.href !== '/dashboard/admin/crm' && !item.href.includes('?')) ||
-                                                (item.label === 'Pipeline' && pathname === '/dashboard/admin/crm')
+                                                (item.href.startsWith('/dashboard/admin/settings') &&
+                                                    pathname.startsWith(item.href))
                                             const Icon = item.icon
 
                                             const LinkContent = (
@@ -182,48 +155,18 @@ export default function CrmSidebar() {
                     </nav>
                 </div>
 
-                {/* Footer: Logout + Collapse */}
-                <div className="border-t border-border mt-auto">
-                    {/* Logout Button */}
-                    {isCollapsed ? (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={handleSignOut}
-                                    className="w-full h-10 hover:bg-red-50 hover:text-red-600 text-muted-foreground rounded-none"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="font-medium bg-slate-900 text-white border-slate-800">
-                                Log Out
-                            </TooltipContent>
-                        </Tooltip>
-                    ) : (
-                        <button
-                            onClick={handleSignOut}
-                            className="flex items-center gap-3 w-full px-5 py-3 text-sm font-medium text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors group"
-                        >
-                            <LogOut className="w-4 h-4 shrink-0 group-hover:text-red-600 transition-colors" />
-                            <span>Log Out</span>
-                        </button>
-                    )}
-
-                    {/* Collapse Toggle */}
-                    <div className="p-2 border-t border-border">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setIsCollapsed(!isCollapsed)}
-                            className="w-full h-8 hover:bg-slate-100 text-slate-400 hover:text-slate-900"
-                        >
-                            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-                        </Button>
-                    </div>
+                {/* Footer: Collapse toggle */}
+                <div className="border-t border-border p-2 mt-auto">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        className="w-full h-8 hover:bg-slate-100 text-slate-400 hover:text-slate-900"
+                    >
+                        {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                    </Button>
                 </div>
             </aside>
-        </TooltipProvider >
+        </TooltipProvider>
     )
 }
