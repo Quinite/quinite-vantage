@@ -4,26 +4,30 @@ import { corsJSON } from '@/lib/cors'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * POST /api/projects/[id]/generate-inventory
+ * Bulk generate units for a tower
+ */
 export async function POST(req, { params }) {
     try {
         const { id: projectId } = await params
+        const body = await req.json()
         const {
-            configurations,
-            namingPattern, // e.g., "{block}-{floor}{unit}" (not used yet, logical placeholder)
-            blockName,
+            tower_id,
+            config_id,
             startFloor,
             endFloor,
             unitsPerFloor,
-            unitType // e.g., "3BHK"
-        } = await req.json()
+            namingPattern = '{tower}-{floor}{unit}'
+        } = body
 
-        if (!projectId || !blockName || !unitType) {
-            return corsJSON({ error: 'Missing required fields' }, { status: 400 })
+        if (!projectId || !tower_id || !config_id) {
+            return corsJSON({ error: 'Missing required project, tower, or configuration ID' }, { status: 400 })
         }
 
         const adminClient = createAdminClient()
 
-        // Fetch project details including total_units
+        // 1. Fetch Project & Tower validation
         const { data: projectData, error: projectError } = await adminClient
             .from('projects')
             .select('organization_id, total_units')
@@ -34,9 +38,30 @@ export async function POST(req, { params }) {
             return corsJSON({ error: 'Project not found' }, { status: 404 })
         }
 
-        // Get current unit count
+        const { data: towerData, error: towerError } = await adminClient
+            .from('towers')
+            .select('name')
+            .eq('id', tower_id)
+            .single()
+
+        if (towerError || !towerData) {
+            return corsJSON({ error: 'Tower not found' }, { status: 404 })
+        }
+
+        // 2. Fetch Configuration details
+        const { data: config, error: configError } = await adminClient
+            .from('unit_configs')
+            .select('*')
+            .eq('id', config_id)
+            .single()
+
+        if (configError || !config) {
+            return corsJSON({ error: 'Configuration not found' }, { status: 404 })
+        }
+
+        // 3. Check existing units count
         const { count: currentUnitCount, error: countError } = await adminClient
-            .from('properties')
+            .from('units')
             .select('*', { count: 'exact', head: true })
             .eq('project_id', projectId)
 
@@ -45,9 +70,6 @@ export async function POST(req, { params }) {
             return corsJSON({ error: 'Failed to validate unit limits' }, { status: 500 })
         }
 
-        const newProperties = []
-
-        // Calculate total new units to be generated
         const startF = parseInt(startFloor || 1)
         const endF = parseInt(endFloor || 1)
         const unitsPerF = parseInt(unitsPerFloor || 1)
@@ -59,65 +81,64 @@ export async function POST(req, { params }) {
             }, { status: 400 })
         }
 
-        // Logic: specific block generation
-        // Loop through floors
-        for (let f = parseInt(startFloor || 1); f <= parseInt(endFloor || 1); f++) {
-            // Loop through units per floor
-            for (let u = 1; u <= parseInt(unitsPerFloor || 1); u++) {
-                // Pad unit number if needed (e.g. 1 -> 01)
+        // 4. Generate Units payload
+        const newUnits = []
+        for (let f = startF; f <= endF; f++) {
+            for (let u = 1; u <= unitsPerF; u++) {
                 const unitNumStr = u.toString().padStart(2, '0')
-                const propertyTitle = `${blockName} - ${f}${unitNumStr}`
-
-                // Find config details if available (price, size, etc.)
-                // Assuming 'configurations' array passed from frontend has details
-                const configDetails = configurations?.find(c => c.configuration === unitType) || {}
-
-                newProperties.push({
+                const unitNumber = `${f}${unitNumStr}`
+                
+                newUnits.push({
                     organization_id: projectData.organization_id,
                     project_id: projectId,
-                    title: propertyTitle,
-                    block_name: blockName,
-                    floor_number: f.toString(),
-                    unit_number: `${f}${unitNumStr}`,
-                    configuration: unitType,
-                    type: configDetails.property_type || 'Apartment',
+                    tower_id: tower_id,
+                    config_id: config_id,
+                    floor_number: Number(f),
+                    unit_number: unitNumber,
                     status: 'available',
-                    price: configDetails.price || 0,
-                    size_sqft: configDetails.carpet_area || 0,
-                    bedrooms: unitType.match(/\d+/)?.[0] || null, // Extract "3" from "3BHK"
-                    bathrooms: (unitType.match(/\d+/)?.[0] || 1), // Default logic
-                    description: `Auto-generated unit ${propertyTitle} in ${blockName}`,
-                    show_in_crm: true
+                    
+                    // Inherit from config
+                    transaction_type: config.transaction_type || 'sell',
+                    base_price: config.base_price || 0,
+                    total_price: config.base_price || 0,
+                    carpet_area: config.carpet_area || 0,
+                    built_up_area: config.builtup_area || 0,
+                    super_built_up_area: config.super_builtup_area || 0,
+                    plot_area: config.plot_area || 0,
+                    bedrooms: config.bedrooms || 0,
+                    bathrooms: config.bathrooms || 0,
+                    balconies: config.balconies || 0,
+                    facing: config.facing || null,
+                    
+                    construction_status: 'under_construction',
+                    created_at: new Date().toISOString()
                 })
             }
         }
 
-        if (newProperties.length === 0) {
-            return corsJSON({ error: 'No properties generated. Check parameters.' }, { status: 400 })
+        if (newUnits.length === 0) {
+            return corsJSON({ error: 'No units generated. Check your floor parameters.' }, { status: 400 })
         }
 
-        const { data, error } = await adminClient
-            .from('properties')
-            .insert(newProperties)
+        // 5. Bulk Insert
+        const { data, error: insertError } = await adminClient
+            .from('units')
+            .insert(newUnits)
             .select()
 
-        if (error) {
-            console.error('Bulk create error:', error)
-            return corsJSON({ error: error.message }, { status: 500 })
+        if (insertError) {
+            console.error('Bulk generate insert error:', insertError)
+            return corsJSON({ error: insertError.message }, { status: 500 })
         }
-
-        // Update Project Totals (Available Units)
-        // This is complex because we need to count *all* units. 
-        // For now, let's just return success and let the frontend refresh.
 
         return corsJSON({
             success: true,
             count: data.length,
-            message: `Successfully created ${data.length} units in Block ${blockName}`
+            message: `Successfully generated ${data.length} units for ${towerData.name}`
         })
 
     } catch (e) {
-        console.error('Generate inventory error:', e)
+        console.error('Generate inventory endpoint error:', e)
         return corsJSON({ error: e.message }, { status: 500 })
     }
 }

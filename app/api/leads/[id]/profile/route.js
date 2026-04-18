@@ -1,56 +1,41 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+const PROFILE_SELECT = [
+    'company', 'job_title', 'industry', 'department',
+    'mailing_street', 'mailing_city', 'mailing_state', 'mailing_zip', 'mailing_country',
+    'preferred_category', 'preferred_property_type', 'preferred_configuration', 'preferred_transaction_type',
+    'preferred_location', 'preferred_timeline', 'min_budget', 'max_budget',
+    'pain_points', 'competitor_mentions', 'preferred_contact_method', 'best_contact_time',
+    'custom_fields',
+].join(', ')
+
+const PROFILE_FIELDS = [
+    'company', 'job_title', 'industry', 'department',
+    'mailing_street', 'mailing_city', 'mailing_state', 'mailing_zip', 'mailing_country',
+    'preferred_category', 'preferred_property_type', 'preferred_configuration', 'preferred_transaction_type',
+    'preferred_location', 'preferred_timeline', 'min_budget', 'max_budget',
+    'pain_points', 'competitor_mentions', 'preferred_contact_method', 'best_contact_time',
+    'custom_fields',
+]
+
 export async function GET(request, { params }) {
     try {
         const supabase = await createServerSupabaseClient()
         const { id } = await params
 
-        // Get user profile
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        // Get user's organization
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('organization_id')
-            .eq('id', user.id)
-            .single()
+        const { data: lead, error } = await supabase
+            .from('leads')
+            .select(PROFILE_SELECT)
+            .eq('id', id)
+            .maybeSingle()
 
-        if (!profile?.organization_id) {
-            return NextResponse.json({ error: 'No organization found' }, { status: 403 })
-        }
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-        // Get lead profile or create if doesn't exist
-        let { data: leadProfile, error } = await supabase
-            .from('lead_profiles')
-            .select('*')
-            .eq('lead_id', id)
-            .single()
-
-        if (error && error.code === 'PGRST116') {
-            // Profile doesn't exist, create it
-            const { data: newProfile, error: createError } = await supabase
-                .from('lead_profiles')
-                .insert({
-                    lead_id: id,
-                    organization_id: profile.organization_id
-                })
-                .select()
-                .single()
-
-            if (createError) {
-                return NextResponse.json({ error: createError.message }, { status: 500 })
-            }
-
-            leadProfile = newProfile
-        } else if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 })
-        }
-
-        return NextResponse.json({ profile: leadProfile })
+        return NextResponse.json({ profile: lead ?? null })
     } catch (error) {
         console.error('Error fetching lead profile:', error)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -63,48 +48,31 @@ export async function PUT(request, { params }) {
         const { id } = await params
         const body = await request.json()
 
-        // Get user profile
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+        const updatePayload = {}
+        PROFILE_FIELDS.forEach(field => {
+            if (body[field] !== undefined) updatePayload[field] = body[field]
+        })
+
+        if (Object.keys(updatePayload).length === 0) {
+            const { data: current } = await supabase
+                .from('leads')
+                .select(PROFILE_SELECT)
+                .eq('id', id)
+                .single()
+            return NextResponse.json({ profile: current })
         }
 
-        // Update lead profile
         const { data, error } = await supabase
-            .from('lead_profiles')
-            .update({
-                company: body.company,
-                job_title: body.job_title,
-                location: body.location,
-                industry: body.industry,
-                lead_score: body.lead_score,
-                engagement_level: body.engagement_level,
-                budget_range: body.budget_range,
-                timeline: body.timeline,
-                pain_points: body.pain_points,
-                competitor_mentions: body.competitor_mentions,
-                preferred_contact_method: body.preferred_contact_method,
-                best_contact_time: body.best_contact_time,
-                preferences: body.preferences,
-                preferences: body.preferences,
-                custom_fields: body.custom_fields,
-                mailing_street: body.mailing_street,
-                mailing_city: body.mailing_city,
-                mailing_state: body.mailing_state,
-                mailing_zip: body.mailing_zip,
-                mailing_country: body.mailing_country,
-                min_budget: body.min_budget,
-                max_budget: body.max_budget,
-                property_type_interest: body.property_type_interest,
-                sub_category_interest: body.sub_category_interest
-            })
-            .eq('lead_id', id)
-            .select()
+            .from('leads')
+            .update(updatePayload)
+            .eq('id', id)
+            .select(PROFILE_SELECT)
             .single()
 
-        if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 })
-        }
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
         return NextResponse.json({ profile: data })
     } catch (error) {

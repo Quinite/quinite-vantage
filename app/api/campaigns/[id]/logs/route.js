@@ -56,10 +56,13 @@ export async function GET(request, { params }) {
         id,
         call_status,
         transferred,
-        transferred,
         created_at,
         duration,
-        notes,
+        call_cost,
+        summary,
+        sentiment_score,
+        interest_level,
+        disconnect_reason,
         lead:leads (
           id,
           name,
@@ -72,6 +75,11 @@ export async function GET(request, { params }) {
 
         if (error) throw error
 
+        const answeredLogs = logs?.filter(l => l.duration > 0) || []
+        const avgSentiment = answeredLogs.length > 0
+            ? (answeredLogs.reduce((sum, l) => sum + (parseFloat(l.sentiment_score) || 0), 0) / answeredLogs.length).toFixed(2)
+            : null
+
         return corsJSON({
             campaign: {
                 id: campaign.id,
@@ -80,10 +88,12 @@ export async function GET(request, { params }) {
             logs: logs || [],
             summary: {
                 totalCalls: logs?.length || 0,
+                answeredCalls: answeredLogs.length,
                 transferred: logs?.filter(l => l.transferred).length || 0,
                 conversionRate: logs?.length > 0
                     ? ((logs.filter(l => l.transferred).length / logs.length) * 100).toFixed(2)
-                    : 0
+                    : 0,
+                avgSentiment
             }
         })
     } catch (e) {

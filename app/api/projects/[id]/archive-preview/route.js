@@ -15,10 +15,10 @@ export const GET = withAuth(async (request, { params, profile }) => {
         const admin = createAdminClient()
 
         // 1. Fetch counts in parallel
-        const [campaigns, leads, units, calls] = await Promise.all([
+        const [campaigns, leads, unitsCount, calls] = await Promise.all([
             admin.from('campaigns').select('*', { count: 'exact', head: true }).eq('project_id', id),
             admin.from('leads').select('*', { count: 'exact', head: true }).eq('project_id', id),
-            admin.from('properties').select('*', { count: 'exact', head: true }).eq('project_id', id),
+            admin.from('units').select('*', { count: 'exact', head: true }).eq('project_id', id),
             admin.from('call_logs').select('*', { count: 'exact', head: true }).eq('project_id', id)
         ])
 
@@ -33,7 +33,7 @@ export const GET = withAuth(async (request, { params, profile }) => {
             counts: {
                 campaigns: campaigns.count || 0,
                 leads: leads.count || 0,
-                inventory: units.count || 0,
+                inventory: unitsCount.count || 0,
                 calls: calls.count || 0,
                 running_campaigns: runningCampaigns || 0
             }

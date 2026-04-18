@@ -6,12 +6,12 @@ import { withPermission } from '@/lib/middleware/withAuth'
 import { DealService } from '@/services/deal.service'
 
 /**
- * Maps deal status → inventory property status
+ * Maps deal status → inventory unit status
  * 'won' / 'closed won' → 'sold'
  * 'active' / 'in_progress' / 'negotiation' / 'pending' → 'reserved'
  * 'lost' → 'available'
  */
-function dealStatusToPropertyStatus(dealStatus) {
+function dealStatusToUnitStatus(dealStatus) {
     const s = (dealStatus || '').toLowerCase()
     if (s === 'won' || s === 'closed' || s === 'closed won') return 'sold'
     if (s === 'lost') return 'available'
@@ -26,7 +26,7 @@ export const POST = withPermission('create_deals', async (request, context) => {
     try {
         const { user, profile } = context
         const body = await request.json()
-        const { lead_id, property_id, project_id, amount, status, close_date, title, name } = body
+        const { lead_id, unit_id, project_id, amount, status, close_date, title, name } = body
 
         if (!lead_id) {
             return NextResponse.json({ error: 'Lead ID is required' }, { status: 400 })
@@ -43,7 +43,7 @@ export const POST = withPermission('create_deals', async (request, context) => {
             name: title || name
         }
 
-        if (property_id) dealData.property_id = property_id
+        if (unit_id) dealData.unit_id = unit_id
         if (project_id) dealData.project_id = project_id
         if (close_date) dealData.close_date = close_date
 
@@ -53,22 +53,22 @@ export const POST = withPermission('create_deals', async (request, context) => {
         const adminClient = createAdminClient()
         const leadUpdate = {}
 
-        // Link property / project to the lead
-        if (property_id) {
-            leadUpdate.property_id = property_id
-            const { data: propData } = await adminClient
-                .from('properties')
+        // Link unit / project to the lead
+        if (unit_id) {
+            leadUpdate.unit_id = unit_id
+            const { data: unitData } = await adminClient
+                .from('units')
                 .select('project_id')
-                .eq('id', property_id)
+                .eq('id', unit_id)
                 .single()
-            if (propData?.project_id) leadUpdate.project_id = propData.project_id
+            if (unitData?.project_id) leadUpdate.project_id = unitData.project_id
 
-            // ✅ Auto-sync inventory: update property status based on deal status
-            const newPropertyStatus = dealStatusToPropertyStatus(status || 'active')
+            // ✅ Auto-sync inventory: update unit status based on deal status
+            const newUnitStatus = dealStatusToUnitStatus(status || 'active')
             await adminClient
-                .from('properties')
-                .update({ status: newPropertyStatus, updated_at: new Date().toISOString() })
-                .eq('id', property_id)
+                .from('units')
+                .update({ status: newUnitStatus, updated_at: new Date().toISOString() })
+                .eq('id', unit_id)
 
         } else if (project_id) {
             leadUpdate.project_id = project_id

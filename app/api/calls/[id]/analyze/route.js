@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import OpenAI from 'openai'
 
@@ -9,182 +8,100 @@ const openai = new OpenAI({
 
 /**
  * POST /api/calls/[id]/analyze
- * Manually trigger sentiment analysis for a call
+ * Manually (re)trigger production-grade sentiment analysis.
+ * Standardizes analysis format with the WebSocket server.
  */
-export async function POST(request, res) {
+export async function POST(request, { params }) {
     try {
-        const params = await res.params
-        const { id: callId } = params
+        const { id: callId } = await params;
+        console.log(`🧠 [Analyze API] Manual re-analysis for call: ${callId}`);
 
-        console.log(`🔍 [Analyze Call] Starting analysis for call: ${callId}`)
+        const adminClient = createAdminClient();
 
-        const supabase = await createServerSupabaseClient()
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-        if (authError || !user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        const adminClient = createAdminClient()
-
-        // Get call log with transcript
+        // 1. FETCH CONTEXT: Get transcript and IDs
         const { data: callLog, error: callError } = await adminClient
             .from('call_logs')
-            .select('*')
+            .select(`
+                id, 
+                lead_id, 
+                campaign_id, 
+                organization_id, 
+                conversation_transcript, 
+                call_sid
+            `)
             .eq('id', callId)
-            .single()
+            .single();
 
         if (callError || !callLog) {
-            console.error('❌ Call not found:', callError)
-            return NextResponse.json({ error: 'Call not found' }, { status: 404 })
+            return NextResponse.json({ error: 'Call not found' }, { status: 404 });
         }
 
-        if (!callLog.conversation_transcript) {
-            return NextResponse.json({ error: 'No transcript available for this call' }, { status: 400 })
+        if (!callLog.conversation_transcript || callLog.conversation_transcript.length < 50) {
+            return NextResponse.json({ error: 'Transcript too short for analysis' }, { status: 400 });
         }
 
-        console.log(`📝 [Analyze Call] Transcript length: ${callLog.conversation_transcript.length} characters`)
-
-        // Check if insights already exist
-        const { data: existingInsights } = await adminClient
-            .from('conversation_insights')
-            .select('id')
-            .eq('call_log_id', callId)
-            .single()
-
-        if (existingInsights) {
-            console.log(`⚠️  [Analyze Call] Insights already exist, updating...`)
-        }
-
-        // Analyze with GPT-4
-        console.log(`🤖 [Analyze Call] Calling OpenAI GPT-4...`)
-
+        // 2. AI ANALYSIS: Match WebSocket server's prompt
         const completion = await openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are an expert at analyzing sales call transcripts. Analyze the following conversation and extract key insights in JSON format.
+            model: "gpt-4o-mini",
+            messages: [{
+                role: "system",
+                content: `You are an expert Indian Real Estate Analyst. Analyze this sales transcript.
+                Extract structured insights focused on the lead's intent and budget.
+                Return JSON: {
+                  "sentiment_score": float (-1 to 1),
+                  "sentiment_label": "Positive" | "Neutral" | "Negative",
+                  "interest_level": "high" | "medium" | "low" | "none",
+                  "summary": "1-sentence conversational summary",
+                  "objections": ["list", "of", "objections"],
+                  "budget": "estimated budget if mentioned",
+                  "priority": float (0-100),
+                  "key_takeaways": "bullet points"
+                }`
+            }, {
+                role: "user",
+                content: callLog.conversation_transcript
+            }],
+            response_format: { type: "json_object" },
+            temperature: 0
+        });
 
-Return ONLY a valid JSON object with these exact fields:
-{
-  "overall_sentiment": <number between -1.0 and 1.0>,
-  "sentiment_label": "<positive|neutral|negative>",
-  "primary_emotion": "<string>",
-  "intent": "<string>",
-  "interest_level": "<high|medium|low>",
-  "objections": ["<objection1>", "<objection2>"],
-  "budget_mentioned": <boolean>,
-  "budget_range": "<string or null>",
-  "timeline_mentioned": <boolean>,
-  "timeline": "<string or null>",
-  "key_phrases": ["<phrase1>", "<phrase2>"],
-  "recommended_action": "<string>",
-  "priority_score": <integer 0-100>
-}`
-                },
-                {
-                    role: 'user',
-                    content: `Analyze this sales call transcript:\n\n${callLog.conversation_transcript}`
-                }
-            ],
-            temperature: 0.3,
-            max_tokens: 1000
-        })
+        const analysis = JSON.parse(completion.choices[0].message.content);
 
-        const analysisText = completion.choices[0].message.content.trim()
-        console.log(`✅ [Analyze Call] GPT-4 response received`)
-
-        // Parse JSON response
-        let analysis
-        try {
-            // Remove markdown code blocks if present
-            const jsonText = analysisText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
-            analysis = JSON.parse(jsonText)
-        } catch (parseError) {
-            console.error('❌ Failed to parse GPT-4 response:', analysisText)
-            throw new Error('Invalid JSON response from GPT-4')
-        }
-
-        // Save or update insights
-        const insightData = {
-            call_log_id: callId,
-            lead_id: callLog.lead_id,
-            organization_id: callLog.organization_id,
-            overall_sentiment: analysis.overall_sentiment,
+        // 3. CONSOLIDATED UPDATE: Update call_logs (Single Source of Truth)
+        const { error: updateError } = await adminClient.from('call_logs').update({
+            summary: analysis.summary,
+            sentiment_score: analysis.sentiment_score,
             sentiment_label: analysis.sentiment_label,
-            primary_emotion: analysis.primary_emotion,
-            intent: analysis.intent,
             interest_level: analysis.interest_level,
-            objections: analysis.objections || [],
-            budget_mentioned: analysis.budget_mentioned || false,
-            budget_range: analysis.budget_range,
-            timeline_mentioned: analysis.timeline_mentioned || false,
-            timeline: analysis.timeline,
-            key_phrases: analysis.key_phrases || [],
-            recommended_action: analysis.recommended_action,
-            priority_score: analysis.priority_score,
-            purchase_readiness: analysis.timeline_mentioned ? 'short_term' : 'long_term', // Derived field
-            analyzed_at: new Date().toISOString()
-        }
+            ai_metadata: {
+                objections: analysis.objections,
+                budget_estimated: analysis.budget,
+                priority_score: analysis.priority,
+                key_takeaways: analysis.key_takeaways,
+                manual_analysis_at: new Date().toISOString()
+            }
+        }).eq('id', callId);
 
-        let savedInsight
-        if (existingInsights) {
-            // Update existing
-            const { data, error } = await adminClient
-                .from('conversation_insights')
-                .update(insightData)
-                .eq('id', existingInsights.id)
-                .select()
-                .single()
+        if (updateError) throw updateError;
 
-            if (error) throw error
-            savedInsight = data
-        } else {
-            // Create new
-            const { data, error } = await adminClient
-                .from('conversation_insights')
-                .insert(insightData)
-                .select()
-                .single()
-
-            if (error) throw error
-            savedInsight = data
-        }
-
-        // Update call_logs with sentiment
-        await adminClient
-            .from('call_logs')
-            .update({
-                sentiment_score: analysis.overall_sentiment,
-                interest_level: analysis.interest_level
-            })
-            .eq('id', callId)
-
-        // Update lead with insights
+        // 4. SYNC LEAD BEHAVIORAL DATA
         if (callLog.lead_id) {
-            await adminClient
-                .from('leads')
-                .update({
-                    last_sentiment_score: analysis.overall_sentiment,
-                    interest_level: analysis.interest_level,
-                    purchase_readiness: analysis.timeline_mentioned ? 'short_term' : 'long_term'
-                })
-                .eq('id', callLog.lead_id)
+            await adminClient.from('leads').update({
+                interest_level: analysis.interest_level,
+                score: Math.round(analysis.priority),
+                last_sentiment_score: analysis.sentiment_score,
+                last_contacted_at: new Date().toISOString()
+            }).eq('id', callLog.lead_id);
         }
-
-        console.log(`✅ [Analyze Call] Analysis complete and saved`)
 
         return NextResponse.json({
             success: true,
-            insight: savedInsight,
-            message: 'Call analyzed successfully'
-        })
+            analysis,
+            message: 'Call analysis synchronized successfully'
+        });
 
     } catch (error) {
-        console.error('❌ [Analyze Call] Error:', error)
-        return NextResponse.json({
-            error: error.message || 'Failed to analyze call'
-        }, { status: 500 })
+        console.error('❌ [Analyze API] Error:', error.message);
+        return NextResponse.json({ error: 'Analysis engine failure' }, { status: 500 });
     }
 }

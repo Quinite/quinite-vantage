@@ -254,7 +254,7 @@ export async function POST(req) {
                         project_id: standardized.project_id,
                         organization_id: orgId, // CRITICAL: Explicitly set organization_id
                         stage_id: stageId || null,
-                        lead_source: standardized.lead_source || source,
+                        source: standardized.lead_source || source,
                         external_lead_id: standardized.external_lead_id,
                         raw_data: standardized.raw_data || item,
 

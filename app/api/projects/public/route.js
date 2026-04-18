@@ -32,15 +32,12 @@ export async function GET(request) {
         // Fetch public projects
         let query = admin
             .from('projects')
-            .select('id, name, description, address, project_type, status, image_url, metadata, unit_types, total_units, price_range')
+            .select('id, name, description, address, status, image_url, metadata, unit_types, total_units, price_range')
             .eq('organization_id', org.id)
             .eq('public_visibility', true) // Only visible projects
             .order('created_at', { ascending: false })
             .limit(limit)
 
-        if (projectType && projectType !== 'all') {
-            query = query.eq('project_type', projectType)
-        }
 
         const { data: projects, error } = await query
 

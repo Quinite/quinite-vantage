@@ -6,10 +6,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { logAudit } from '@/lib/permissions'
 import { hasDashboardPermission } from '@/lib/dashboardPermissions'
-import * as fs from 'fs'
-import * as path from 'path'
-import Ajv from 'ajv'
-import { PropertyService } from '@/services/property.service'
 
 /**
  * GET /api/projects
@@ -28,7 +24,6 @@ export const GET = withPermission('view_projects', async (request, context) => {
     const { searchParams } = new URL(request.url)
     const filters = {
       status: searchParams.get('status'),
-      projectType: searchParams.get('project_type'),
       search: searchParams.get('search'),
       archived: searchParams.get('archived') === 'true',
       page: searchParams.get('page') || 1,
@@ -40,7 +35,7 @@ export const GET = withPermission('view_projects', async (request, context) => {
     const admin = createAdminClient()
     let query = admin
       .from('projects')
-      .select('*, campaigns(*)') // Fetch related campaigns
+      .select('*, campaigns(*), unit_configs(id, config_name, property_type, category, base_price, carpet_area, transaction_type, amenities)')
       .eq('organization_id', profile.organization_id)
     
     // Optional archive filtering
@@ -63,9 +58,6 @@ export const GET = withPermission('view_projects', async (request, context) => {
       query = query.eq('status', filters.status)
     }
 
-    if (filters.projectType && filters.projectType !== 'all') {
-      query = query.eq('project_type', filters.projectType)
-    }
 
     // 3. Pagination
     const page = parseInt(filters.page)
@@ -151,76 +143,46 @@ export async function POST(request) {
       }, { status: 200 })
     }
 
-    const {
-      name,
-      description,
-      address,
-      type,
-      metadata,
-      image_url,
-      image_path
-    } = body
-
-    // Validate optional real estate payload if present (Skip if draft)
-    const realEstate = body.real_estate || (metadata && metadata.real_estate)
-    const isDraft = body.is_draft === true
-    
-    if (realEstate && !isDraft) {
-      try {
-        const schemaPath = path.join(process.cwd(), 'lib', 'schemas', 'realEstateProperty.schema.json')
-        const schemaRaw = fs.readFileSync(schemaPath, 'utf8')
-        const schema = JSON.parse(schemaRaw)
-        const ajv = new Ajv({ allErrors: true, strict: false })
-        const validate = ajv.compile(schema)
-        const valid = validate(realEstate)
-        if (!valid) {
-          return corsJSON({
-            error: 'Invalid real_estate payload',
-            details: validate.errors
-          }, { status: 400 })
-        }
-      } catch (err) {
-        console.error('Schema validation error:', err)
-        return corsJSON({ error: 'Schema validation failed' }, { status: 500 })
-      }
-    }
+    const { name, description, address, image_url, image_path } = body
 
     if (!name) {
       return corsJSON({ error: 'Project name is required' }, { status: 400 })
     }
 
+    // Support both flat fields and legacy real_estate nested shape from the form
+    const re = body.real_estate || {}
+
+    const unitTypesArr = Array.isArray(body.unit_types) ? body.unit_types : []
+    const prices = unitTypesArr.map(u => Number(u.price || u.base_price)).filter(p => !isNaN(p) && p > 0)
+
     const payload = {
       name,
       description: description || null,
       address: address || null,
-      project_type: type || null,
-      metadata: metadata || (realEstate ? { real_estate: realEstate } : null),
       image_url: image_url || null,
       image_path: image_path || null,
-      // Inventory fields
-      total_units: body.total_units || 0,
-      unit_types: body.unit_types || null,
-      project_status: body.project_status || 'planning',
-      is_draft: body.is_draft || false,
+      rera_number: re.rera_number || body.rera_number || null,
+      // Location — flat or nested from form
+      city:     re.location?.city     || body.city     || null,
+      state:    re.location?.state    || body.state    || null,
+      country:  re.location?.country  || body.country  || 'India',
+      pincode:  re.location?.pincode  || body.pincode  || null,
+      locality: re.location?.locality || body.locality || null,
+      landmark: re.location?.landmark || body.landmark || null,
+      // Inventory
+      total_units:      body.total_units || 0,
+      project_status:   body.project_status || 'planning',
+      is_draft:         body.is_draft || false,
       show_in_inventory: body.show_in_inventory !== false,
-      possession_date: body.possession_date || null,
-      completion_date: body.completion_date || null,
-      organization_id: profile.organization_id,
-      created_by: user.id,
+      possession_date:  body.possession_date || null,
+      completion_date:  body.completion_date || null,
       public_visibility: body.public_visibility !== undefined ? body.public_visibility : false,
-      city: realEstate?.location?.city || null,
-      state: realEstate?.location?.state || null,
-      country: realEstate?.location?.country || 'India',
-      pincode: realEstate?.location?.pincode || null,
-      locality: realEstate?.location?.locality || null,
-      landmark: realEstate?.location?.landmark || null,
-      min_price: body.unit_types ? Math.min(...body.unit_types.map(u => Number(u.price)).filter(p => !isNaN(p) && p > 0)) : null,
-      max_price: body.unit_types ? Math.max(...body.unit_types.map(u => Number(u.price)).filter(p => !isNaN(p) && p > 0)) : null
+      organization_id:  profile.organization_id,
+      created_by:       user.id,
+      min_price: prices.length ? Math.min(...prices) : null,
+      max_price: prices.length ? Math.max(...prices) : null,
+      amenities: Array.isArray(body.amenities) ? body.amenities : [],
     }
-
-    // Ensure we handle Infinity if no valid prices
-    if (payload.min_price === Infinity) payload.min_price = null
-    if (payload.max_price === -Infinity) payload.max_price = null
 
     const { data: project, error } = await admin
       .from('projects')
@@ -229,6 +191,11 @@ export async function POST(request) {
       .single()
 
     if (error) throw error
+
+    // Sync Unit Configs to unit_configs table
+    if (body.unit_types) {
+      await ProjectService.syncUnitConfigs(project.id, profile.organization_id, body.unit_types, user.id)
+    }
 
     try {
       await logAudit(
@@ -269,12 +236,14 @@ export async function POST(request) {
       console.error('Failed to auto-create campaign:', campError)
     }
 
-    // Automatic Inventory Sync
+    /* 
+    // Manual sync is deprecated in favor of Visual Unit Painting
     try {
       await PropertyService.syncProjectInventory(project, user.id)
     } catch (syncError) {
       console.error('Failed to sync project inventory:', syncError)
     }
+    */
 
     return corsJSON({ project })
   } catch (e) {

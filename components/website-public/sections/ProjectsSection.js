@@ -21,7 +21,7 @@ export default function PublicProjectsSection({ content, organizationId, slug })
             try {
                 const { data, error } = await supabase
                     .from('projects')
-                    .select('*')
+                    .select('*, unit_configs(config_name, carpet_area, base_price)')
                     .eq('organization_id', organizationId)
                     .eq('public_visibility', true)
                     .order('created_at', { ascending: false })
@@ -40,29 +40,20 @@ export default function PublicProjectsSection({ content, organizationId, slug })
     }, [organizationId])
 
     const getProjectDetails = (project) => {
-        const meta = project.metadata || {}
-        const realEstate = meta.real_estate || {}
-        const residential = realEstate.property?.residential || {}
-        const location = realEstate.location || {}
-        const unitTypes = meta.unit_types || []
+        const unitConfigs = project.unit_configs || []
+        const firstConfig = unitConfigs[0] || null
 
-        // Image
-        const image = project.image_url || realEstate.media?.thumbnail || null
+        const image = project.image_url || null
+        const address = project.address || [project.locality, project.city].filter(Boolean).join(', ') || 'Location unavailable'
 
-        // Location
-        const address = project.address || `${location.locality || ''}, ${location.city || ''}`
-        const displayAddress = address.replace(/^, /, '') || 'Location unavailable'
-
-        // Stats
-        const bhk = residential.bhk || (unitTypes.length > 0 ? unitTypes[0].configuration : null)
-        const area = residential.carpet_area || (unitTypes.length > 0 ? unitTypes[0].carpet_area : null)
+        const bhk = firstConfig?.config_name || null
+        const area = firstConfig?.carpet_area || null
 
         return {
             image,
-            address: displayAddress,
-            bhk: bhk ? bhk.replace('bhk', ' BHK').toUpperCase() : null,
+            address,
+            bhk: bhk ? bhk.toUpperCase() : null,
             area: area ? `${area} SqFt` : null,
-            type: realEstate.property?.use_case || project.project_type || 'Residential'
         }
     }
 

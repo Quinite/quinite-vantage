@@ -3,9 +3,6 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { logAudit } from '@/lib/permissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { corsJSON } from '@/lib/cors'
-import path from 'path'
-import fs from 'fs'
-import Ajv from 'ajv'
 import { hasDashboardPermission } from '@/lib/dashboardPermissions'
 
 function handleCORS(response) {
@@ -18,7 +15,7 @@ function handleCORS(response) {
 /* ===================== UPDATE PROJECT ===================== */
 import { withAuth } from '@/lib/middleware/withAuth'
 import { ProjectService } from '@/services/project.service'
-import { PropertyService } from '@/services/property.service'
+import { UnitService } from '@/services/unit.service'
 
 export const PUT = withAuth(async (request, { params, user, profile }) => {
     try {
@@ -78,56 +75,36 @@ export const PUT = withAuth(async (request, { params, user, profile }) => {
         if (body.image_path !== undefined) updates.image_path = body.image_path
 
         if (body.total_units !== undefined) updates.total_units = body.total_units
-        if (body.unit_types !== undefined) updates.unit_types = body.unit_types
         if (body.project_status !== undefined) updates.project_status = body.project_status
         if (body.is_draft !== undefined) updates.is_draft = body.is_draft
-        
         if (body.show_in_inventory !== undefined) updates.show_in_inventory = body.show_in_inventory
         if (body.public_visibility !== undefined) updates.public_visibility = body.public_visibility
         if (body.possession_date !== undefined) updates.possession_date = body.possession_date || null
         if (body.completion_date !== undefined) updates.completion_date = body.completion_date || null
-        
-        // Validate optional real_estate payload (Skip if draft)
-        const realEstate = body.real_estate || (body.metadata && body.metadata.real_estate)
-        
-        if (realEstate?.location) {
-            if (realEstate.location.city !== undefined) updates.city = realEstate.location.city || null
-            if (realEstate.location.state !== undefined) updates.state = realEstate.location.state || null
-            if (realEstate.location.country !== undefined) updates.country = realEstate.location.country || 'India'
-            if (realEstate.location.pincode !== undefined) updates.pincode = realEstate.location.pincode || null
-            if (realEstate.location.locality !== undefined) updates.locality = realEstate.location.locality || null
-            if (realEstate.location.landmark !== undefined) updates.landmark = realEstate.location.landmark || null
-        }
+        if (body.rera_number !== undefined) updates.rera_number = body.rera_number || null
+        if (body.amenities !== undefined) updates.amenities = Array.isArray(body.amenities) ? body.amenities : []
 
-        // Add pricing calculations if unit_types changed
-        if (updates.unit_types) {
-            const min = Math.min(...updates.unit_types.map(u => Number(u.price)).filter(p => !isNaN(p) && p > 0))
-            const max = Math.max(...updates.unit_types.map(u => Number(u.price)).filter(p => !isNaN(p) && p > 0))
-            updates.min_price = min === Infinity ? null : min
-            updates.max_price = max === -Infinity ? null : max
-        }
-        
-        const isDraft = body.is_draft !== undefined ? body.is_draft : existing.is_draft === true
-        
-        if (realEstate && !isDraft) {
-            try {
-                const schemaPath = path.join(process.cwd(), 'lib', 'schemas', 'realEstateProperty.schema.json')
-                const schemaRaw = fs.readFileSync(schemaPath, 'utf8')
-                const schema = JSON.parse(schemaRaw)
-                const ajv = new Ajv({ allErrors: true, strict: false })
-                const validate = ajv.compile(schema)
-                const valid = validate(realEstate)
-                if (!valid) {
-                    return handleCORS(NextResponse.json({ error: 'Invalid real_estate payload', details: validate.errors }, { status: 400 }))
-                }
-                updates.metadata = { ...(body.metadata || {}), real_estate: realEstate }
-            } catch (err) {
-                console.error('Schema validation error:', err)
-                return handleCORS(NextResponse.json({ error: 'Schema validation failed' }, { status: 500 }))
-            }
-        } else if (realEstate && isDraft) {
-            // Still update the metadata if it's a draft, just skip validation
-            updates.metadata = { ...(body.metadata || {}), real_estate: realEstate }
+        // Location — support both flat and legacy real_estate nested shape
+        const re = body.real_estate || {}
+        const loc = re.location || {}
+        const city     = loc.city     ?? body.city
+        const state    = loc.state    ?? body.state
+        const country  = loc.country  ?? body.country
+        const pincode  = loc.pincode  ?? body.pincode
+        const locality = loc.locality ?? body.locality
+        const landmark = loc.landmark ?? body.landmark
+        if (city     !== undefined) updates.city     = city     || null
+        if (state    !== undefined) updates.state    = state    || null
+        if (country  !== undefined) updates.country  = country  || 'India'
+        if (pincode  !== undefined) updates.pincode  = pincode  || null
+        if (locality !== undefined) updates.locality = locality || null
+        if (landmark !== undefined) updates.landmark = landmark || null
+
+        // Recalculate pricing from unit_types if provided (for syncUnitConfigs)
+        if (Array.isArray(body.unit_types)) {
+            const prices = body.unit_types.map(u => Number(u.price || u.base_price)).filter(p => !isNaN(p) && p > 0)
+            updates.min_price = prices.length ? Math.min(...prices) : null
+            updates.max_price = prices.length ? Math.max(...prices) : null
         }
 
         // 6️⃣ Update project
@@ -140,6 +117,11 @@ export const PUT = withAuth(async (request, { params, user, profile }) => {
             .single()
 
         if (error) throw error
+
+        // Sync Unit Configs to unit_configs table if provided
+        if (body.unit_types) {
+            await ProjectService.syncUnitConfigs(project.id, profile.organization_id, body.unit_types, user.id)
+        }
 
         // 7️⃣ Auto-delete old image if replaced
         if (
@@ -165,12 +147,14 @@ export const PUT = withAuth(async (request, { params, user, profile }) => {
             )
         } catch { }
 
-        // Automatic Inventory Sync
+        /* 
+        // Manual sync is deprecated in favor of Visual Unit Painting
         try {
-            await PropertyService.syncProjectInventory(project, user.id)
+            await UnitService.syncProjectInventory(project, user.id)
         } catch (syncError) {
             console.error('Failed to sync project inventory:', syncError)
         }
+        */
 
         return handleCORS(NextResponse.json({ project }))
     } catch (e) {
@@ -275,7 +259,7 @@ export async function DELETE(request, { params }) {
             .eq('project_id', id)
             .eq('organization_id', profile.organization_id),
           adminClient
-            .from('properties')
+            .from('units')
             .update({ archived_at: now, archived_by: user.id })
             .eq('project_id', id)
             .eq('organization_id', profile.organization_id)
@@ -342,15 +326,11 @@ export async function GET(request, { params }) {
             return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
         }
 
-        const { data: project, error } = await adminClient
-            .from('projects')
-            .select('*')
-            .eq('id', id)
-            .eq('organization_id', profile.organization_id)
-            .is('archived_at', null)
-            .single()
+        const project = await ProjectService.getProjectById(id, profile.organization_id)
 
-        if (error) throw error
+        if (!project) {
+            return handleCORS(NextResponse.json({ error: 'Project not found' }, { status: 404 }))
+        }
 
         return handleCORS(NextResponse.json({ project }))
     } catch (e) {

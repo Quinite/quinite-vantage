@@ -15,35 +15,34 @@ export async function POST(request, { params }) {
 
         const adminClient = createAdminClient()
 
-        // 1. Get current property to release status if needed
+        // 1. Get current unit to release status if needed
         const { data: lead } = await adminClient
             .from('leads')
-            .select('property_id')
+            .select('unit_id')
             .eq('id', leadId)
             .single()
 
-        // 2. Unlink from Lead (clear property_id and project_id)
+        // 2. Unlink from Lead (clear unit_id and project_id)
         const { error: updateError } = await adminClient
             .from('leads')
-            .update({ property_id: null, project_id: null }) // We clear both? Or just property? User said "delink". Usually implies clearing current selection.
+            .update({ unit_id: null, project_id: null })
             .eq('id', leadId)
 
         if (updateError) throw updateError
 
-        // 3. Mark property as 'available' if it was reserved?
-        // Logic: If the property is not sold, make it available again.
-        if (lead?.property_id) {
-            const { data: prop } = await adminClient
-                .from('properties')
+        // 3. Mark unit as 'available' if it was reserved?
+        if (lead?.unit_id) {
+            const { data: unit } = await adminClient
+                .from('units')
                 .select('status')
-                .eq('id', lead.property_id)
+                .eq('id', lead.unit_id)
                 .single()
 
-            if (prop && prop.status === 'reserved') {
+            if (unit && unit.status === 'reserved') {
                 await adminClient
-                    .from('properties')
+                    .from('units')
                     .update({ status: 'available' })
-                    .eq('id', lead.property_id)
+                    .eq('id', lead.unit_id)
             }
         }
 

@@ -5,11 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Mail, Phone, Building, MapPin, TrendingUp, X, Edit2, Save } from 'lucide-react'
+import { Phone, Building, MapPin, TrendingUp, X, Edit2, Save } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import LeadActivityTimeline from '@/components/crm/LeadActivityTimeline'
 import ClientPreferencesCard from '@/components/crm/ClientPreferencesCard'
-import PropertyDealsCard from '@/components/crm/PropertyDealsCard'
+import UnitDealsCard from '@/components/crm/UnitDealsCard'
 import ComingUpNextCard from '@/components/crm/ComingUpNextCard'
 import BestTimeToContactCard from '@/components/crm/BestTimeToContactCard'
 import SentimentAnalysisCard from '@/components/crm/SentimentAnalysisCard'
@@ -147,6 +147,11 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                     </div>
                     <h2 className="text-xl font-bold text-foreground">{lead.name}</h2>
                     <p className="text-sm text-muted-foreground">{profile.company || 'No Company'}</p>
+                    {lead.project && (
+                        <Badge variant="outline" className="mt-2 text-xs font-medium text-primary border-primary/30 bg-primary/5">
+                            {lead.project.name}
+                        </Badge>
+                    )}
                 </div>
 
                 <div className="space-y-6">
@@ -167,11 +172,11 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                             </div>
                             <div className="grid grid-cols-[80px_1fr] gap-2 text-sm">
                                 <span className="text-muted-foreground">Title</span>
-                                <span className="font-medium text-blue-600 truncate">{lead.title || profile.job_title || 'N/A'}</span>
+                                <span className="font-medium text-blue-600 truncate">{profile.job_title || 'N/A'}</span>
                             </div>
                             <div className="grid grid-cols-[80px_1fr] gap-2 text-sm">
                                 <span className="text-muted-foreground">Dept</span>
-                                <span className="font-medium text-teal-600 truncate">{lead.department || 'N/A'}</span>
+                                <span className="font-medium text-teal-600 truncate">{profile.department || 'N/A'}</span>
                             </div>
                         </div>
                         <div className="flex gap-2 mt-4">
@@ -220,7 +225,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                     <div className="text-xs text-red-500 font-mono py-1">DEBUG: Tabs Updated</div>
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
                         <TabsList className="h-14 w-full justify-start bg-transparent p-0 space-x-6">
-                            {['overview', 'notes', 'emails', 'timeline'].map(tab => (
+                            {['overview', 'notes', 'timeline'].map(tab => (
                                 <TabsTrigger
                                     key={tab}
                                     value={tab}
@@ -242,33 +247,37 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                                         <div className="flex items-center gap-2">
                                             <Building className="w-5 h-5" />
-                                            <CardTitle className="text-base font-semibold">Properties</CardTitle>
-                                            <Badge variant="secondary" className="rounded-sm px-1.5 py-0 text-xs text-muted-foreground">1</Badge>
-                                        </div>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                            <Edit2 className="w-4 h-4" />
-                                        </Button>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-sm text-muted-foreground">
-                                            {profile.project ? (
-                                                <div className="flex gap-4">
-                                                    <div className="h-16 w-16 bg-muted rounded-lg shrink-0 overflow-hidden">
-                                                        {/* Placeholder for project image */}
-                                                        <div className="w-full h-full bg-secondary flex items-center justify-center">
-                                                            <Building className="w-6 h-6 text-muted-foreground/50" />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-semibold text-primary">{profile.project.name}</p>
-                                                        <p className="text-xs text-muted-foreground mt-1">Ready to Occupy ✓</p>
-                                                        <p className="text-xs text-muted-foreground mt-2 line-clamp-2">Amenities: Pool, Gym, WiFi...</p>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <p>No associated properties</p>
+                                            <CardTitle className="text-base font-semibold">Assigned Unit</CardTitle>
+                                            {lead.unit && (
+                                                <Badge variant="secondary" className="rounded-sm px-1.5 py-0 text-xs text-muted-foreground">1</Badge>
                                             )}
                                         </div>
+                                    </CardHeader>
+                                    <CardContent>
+                                        {lead.unit ? (
+                                            <div className="flex gap-3 items-center">
+                                                <div className="h-14 w-14 bg-primary/5 rounded-lg shrink-0 flex items-center justify-center border border-primary/10">
+                                                    <Building className="w-6 h-6 text-primary/40" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-sm text-foreground">
+                                                        Unit {lead.unit.unit_number}
+                                                    </p>
+                                                    {lead.unit.base_price && (
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                            {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(lead.unit.base_price)}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-6 text-center">
+                                                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-2">
+                                                    <Building className="w-4 h-4 text-muted-foreground/50" />
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">No unit assigned</p>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </div>
@@ -278,7 +287,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
 
                             {/* Row 2 */}
                             <div className="col-span-12 md:col-span-6 lg:col-span-5">
-                                <PropertyDealsCard deals={lead.deals || []} />
+                                <UnitDealsCard deals={lead.deals || []} />
                             </div>
                             <div className="col-span-12 md:col-span-6 lg:col-span-7 grid grid-rows-2 gap-6">
                                 <div className="row-span-1">
@@ -317,15 +326,6 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                                 </div>
                             </CardContent>
                         </Card>
-                    )}
-
-                    {activeTab === 'emails' && (
-                        <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground bg-card rounded-xl border border-dashed m-1">
-                            <Mail className="w-12 h-12 mb-4 opacity-50" />
-                            <h3 className="text-lg font-medium">Email Integration</h3>
-                            <p className="max-w-xs text-center mt-2">Connect your email to view communication history directly in the timeline.</p>
-                            <Button variant="outline" className="mt-4">Connect Email</Button>
-                        </div>
                     )}
 
                     {activeTab === 'timeline' && (

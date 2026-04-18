@@ -25,9 +25,6 @@ export class ProjectService {
             query = query.eq('status', filters.status)
         }
 
-        if (filters.projectType) {
-            query = query.eq('project_type', filters.projectType)
-        }
 
         // Pagination
         const page = filters.page ? parseInt(filters.page) : 1
@@ -64,7 +61,8 @@ export class ProjectService {
                 *,
                 leads:leads(count),
                 campaigns:campaigns(count),
-                properties:properties(count)
+                units:units(count),
+                unit_configs:unit_configs(*)
             `)
             .eq('id', projectId)
             .eq('organization_id', organizationId)
@@ -157,16 +155,65 @@ export class ProjectService {
             .select('*', { count: 'exact', head: true })
             .eq('project_id', projectId)
 
-        // Get properties count
-        const { count: propertiesCount } = await adminClient
-            .from('properties')
+        // Get units count
+        const { count: unitsCount } = await adminClient
+            .from('units')
             .select('*', { count: 'exact', head: true })
             .eq('project_id', projectId)
 
         return {
             leadsCount: leadsCount || 0,
             campaignsCount: campaignsCount || 0,
-            propertiesCount: propertiesCount || 0
+            unitsCount: unitsCount || 0
+        }
+    }
+
+    /**
+     * Sync legacy unit_types JSON to unit_configs table
+     */
+    static async syncUnitConfigs(projectId, organizationId, unitTypes, userId) {
+        if (!unitTypes || !Array.isArray(unitTypes)) return
+
+        const adminClient = createAdminClient()
+
+        // 1. Map legacy unit_types to unit_configs schema
+        const configs = unitTypes.map(ut => ({
+            id: ut.id && ut.id.length === 36 ? ut.id : undefined, // Keep ID if valid UUID
+            project_id: projectId,
+            organization_id: organizationId,
+            category: ut.category || 'residential',
+            property_type: ut.property_type || ut.type || 'Apartment',
+            config_name: ut.configuration || ut.config_name || 'Standard',
+            carpet_area: Number(ut.carpet_area) || 0,
+            built_up_area: Number(ut.built_up_area) || Number(ut.builtup_area) || 0,
+            super_built_up_area: Number(ut.super_built_up_area) || Number(ut.super_builtup_area) || 0,
+            plot_area: Number(ut.plot_area) || 0,
+            transaction_type: ut.transaction_type || 'sell',
+            base_price: Number(ut.price) || Number(ut.base_price) || 0,
+            amenities: Array.isArray(ut.amenities) ? ut.amenities : [],
+            updated_at: new Date().toISOString(),
+            updated_by: userId,
+        }))
+
+        // 2. Perform upsert
+        for (const config of configs) {
+            if (config.id) {
+                await adminClient.from('unit_configs').upsert(config)
+            } else {
+                // If no ID, check by config_name to avoid duplicates
+                const { data: existing } = await adminClient
+                    .from('unit_configs')
+                    .select('id')
+                    .eq('project_id', projectId)
+                    .eq('config_name', config.config_name)
+                    .maybeSingle()
+                
+                if (existing) {
+                    await adminClient.from('unit_configs').update(config).eq('id', existing.id)
+                } else {
+                    await adminClient.from('unit_configs').insert({ ...config, created_at: new Date().toISOString(), created_by: userId })
+                }
+            }
         }
     }
 }

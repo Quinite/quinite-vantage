@@ -4,9 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
 /**
- * Maps deal status → inventory property status
+ * Maps deal status → inventory unit status
  */
-function dealStatusToPropertyStatus(dealStatus) {
+function dealStatusToUnitStatus(dealStatus) {
     const s = (dealStatus || '').toLowerCase()
     if (s === 'won' || s === 'closed' || s === 'closed won') return 'sold'
     if (s === 'lost') return 'available'
@@ -37,10 +37,10 @@ export async function PATCH(request, { params }) {
         if (close_date !== undefined) updatePayload.close_date = close_date
         if (name !== undefined) updatePayload.name = name
 
-        // Fetch existing deal to get property_id and lead_id
+        // Fetch existing deal to get unit_id and lead_id
         const { data: existingDeal, error: fetchError } = await adminClient
             .from('deals')
-            .select('id, property_id, lead_id, status')
+            .select('id, unit_id, lead_id, status')
             .eq('id', id)
             .single()
 
@@ -58,22 +58,22 @@ export async function PATCH(request, { params }) {
 
         if (updateError) throw updateError
 
-        // ✅ Auto-sync inventory property status when deal status changes
-        if (status && status !== existingDeal.status && existingDeal.property_id) {
-            const newPropertyStatus = dealStatusToPropertyStatus(status)
+        // ✅ Auto-sync inventory unit status when deal status changes
+        if (status && status !== existingDeal.status && existingDeal.unit_id) {
+            const newUnitStatus = dealStatusToUnitStatus(status)
 
             await adminClient
-                .from('properties')
-                .update({ status: newPropertyStatus, updated_at: new Date().toISOString() })
-                .eq('id', existingDeal.property_id)
+                .from('units')
+                .update({ status: newUnitStatus, updated_at: new Date().toISOString() })
+                .eq('id', existingDeal.unit_id)
 
-            // If deal is lost → remove the property link from the lead
-            if (newPropertyStatus === 'available' && existingDeal.lead_id) {
+            // If deal is lost → remove the unit link from the lead
+            if (newUnitStatus === 'available' && existingDeal.lead_id) {
                 await adminClient
                     .from('leads')
-                    .update({ property_id: null })
+                    .update({ unit_id: null })
                     .eq('id', existingDeal.lead_id)
-                    .eq('property_id', existingDeal.property_id)
+                    .eq('unit_id', existingDeal.unit_id)
             }
         }
 
@@ -99,10 +99,10 @@ export async function DELETE(request, { params }) {
         const adminClient = createAdminClient()
         const { id } = await params
 
-        // Fetch the deal to get property_id before deleting
+        // Fetch the deal to get unit_id before deleting
         const { data: deal } = await adminClient
             .from('deals')
-            .select('property_id, lead_id')
+            .select('unit_id, lead_id')
             .eq('id', id)
             .single()
 
@@ -116,28 +116,28 @@ export async function DELETE(request, { params }) {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        // If the deleted deal had a property, check if any other active deals exist for it
-        if (deal?.property_id) {
+        // If the deleted deal had a unit, check if any other active deals exist for it
+        if (deal?.unit_id) {
             const { data: remainingDeals } = await adminClient
                 .from('deals')
                 .select('id, status')
-                .eq('property_id', deal.property_id)
+                .eq('unit_id', deal.unit_id)
                 .neq('status', 'lost')
 
             if (!remainingDeals || remainingDeals.length === 0) {
-                // No more active deals → mark property as available
+                // No more active deals → mark unit as available
                 await adminClient
-                    .from('properties')
+                    .from('units')
                     .update({ status: 'available', updated_at: new Date().toISOString() })
-                    .eq('id', deal.property_id)
+                    .eq('id', deal.unit_id)
 
                 // Unlink from lead too
                 if (deal.lead_id) {
                     await adminClient
                         .from('leads')
-                        .update({ property_id: null })
+                        .update({ unit_id: null })
                         .eq('id', deal.lead_id)
-                        .eq('property_id', deal.property_id)
+                        .eq('unit_id', deal.unit_id)
                 }
             }
         }

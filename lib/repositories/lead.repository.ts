@@ -24,19 +24,24 @@ export class LeadRepository extends BaseRepository<Lead> {
             .from(this.tableName)
             .select(`
         *,
-        project:projects(id, name),
+        project:projects(id, name, image_url, address),
         stage:pipeline_stages(id, name, color, pipeline_id),
         deals(id, amount, status),
-        property:properties(id, title, price, project:projects(id, name)),
-        projects:projects(id, name, image_url, address, project_type),
+        unit:units!properties_lead_id_fkey(id, unit_number, base_price, total_price, project:projects(id, name)),
         call_logs(*),
         assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name, avatar_url)
       `)
             .eq('id', id)
             .eq('organization_id', organizationId)
-            .single()
+            .maybeSingle()
 
         if (error) throw error
+
+        // units FK is on units.lead_id (one-to-many) so PostgREST returns an array — normalise to single object
+        if (data && Array.isArray(data.unit)) {
+            data.unit = data.unit[0] ?? null
+        }
+
         return data
     }
 

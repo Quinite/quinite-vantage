@@ -33,10 +33,10 @@ export async function POST(request) {
 
         const mappedStatus = statusMap[callStatus] || callStatus
 
-        // Update call log
+        // [1] UPDATE CALL LOG
         const adminClient = createAdminClient()
 
-        const { error } = await adminClient
+        const { data: currentLog } = await adminClient
             .from('call_logs')
             .update({
                 call_status: mappedStatus,
@@ -47,9 +47,23 @@ export async function POST(request) {
                 }
             })
             .eq('call_sid', callSid)
+            .select('lead_id')
+            .single()
 
-        if (error) {
-            console.error('Error updating call status:', error)
+        // [2] SYNC LEAD STATUS (Lifecycle Management)
+        if (currentLog?.lead_id) {
+            let leadCallStatus = 'pending'
+            if (mappedStatus === 'completed') leadCallStatus = 'called'
+            else if (['no_answer', 'failed'].includes(mappedStatus)) leadCallStatus = 'failed'
+            else if (mappedStatus === 'in_progress') leadCallStatus = 'in_progress'
+
+            await adminClient
+                .from('leads')
+                .update({ 
+                    call_status: leadCallStatus,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', currentLog.lead_id)
         }
 
         return NextResponse.json({ success: true })

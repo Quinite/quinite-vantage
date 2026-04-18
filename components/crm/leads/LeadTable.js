@@ -291,7 +291,9 @@ export function LeadTable({
                                         {lead.project ? (
                                             <div className="flex flex-col">
                                                 <span className="font-medium text-sm text-slate-700">{lead.project.name}</span>
-                                                <span className="text-xs text-muted-foreground capitalize">{lead.project.project_type?.replace('_', ' ')}</span>
+                                                <span className="text-xs text-muted-foreground capitalize">
+                                                    {'Project'}
+                                                </span>
                                             </div>
                                         ) : (
                                             <span className="text-muted-foreground text-sm">-</span>

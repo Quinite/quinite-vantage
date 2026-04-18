@@ -1,16 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Building, Plus, Search, Filter, Home, CheckCircle2, Clock, MapPin, Edit } from 'lucide-react'
+import { Building, Search, Filter, Home, TrendingUp } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import StatusChangeModal from '@/components/inventory/StatusChangeModal'
-import EditPropertyModal from '@/components/inventory/EditPropertyModal'
-import { toast } from 'react-hot-toast'
-import Link from 'next/link'
 import {
     Select,
     SelectContent,
@@ -19,224 +14,164 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 
-import { useInventoryProperties } from '@/hooks/useInventory'
+import { useInventoryUnits } from '@/hooks/useInventory'
 import { useQueryClient } from '@tanstack/react-query'
+import { getStatusConfig } from '@/lib/inventory'
+import { cn } from '@/lib/utils'
+import { UnitCard } from '@/components/inventory/UnitCard'
+import { usePermission } from '@/contexts/PermissionContext'
 
 export default function ProjectInventoryTab({ projectId, project, onMetricsUpdate }) {
     const queryClient = useQueryClient()
+    const canManage = usePermission('manage_inventory')
+    const canEdit = usePermission('edit_inventory')
     
-    // 1. Parallel Fetching (Hydrates instantly if hovered earlier)
     const { 
-        data: properties = [], 
+        data: units = [], 
         isLoading: loading,
-        refetch: fetchProperties 
-    } = useInventoryProperties(projectId)
+        refetch: fetchUnits 
+    } = useInventoryUnits(projectId)
 
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
-    const [selectedProperty, setSelectedProperty] = useState(null)
-    const [showStatusModal, setShowStatusModal] = useState(false)
-    const [editingProperty, setEditingProperty] = useState(null)
-    const [showEditModal, setShowEditModal] = useState(false)
 
-
-    const handleStatusChanged = (updatedProperty, projectMetrics) => {
-        // Sync everything
-        queryClient.invalidateQueries({ queryKey: ['inventory-properties', projectId] })
+    const handleActionComplete = () => {
+        queryClient.invalidateQueries({ queryKey: ['inventory-units', projectId] })
         queryClient.invalidateQueries({ queryKey: ['inventory-project', projectId] })
         queryClient.invalidateQueries({ queryKey: ['inventory-projects'] })
-
-        if (onMetricsUpdate && projectMetrics) {
-            onMetricsUpdate(projectMetrics)
+        if (onMetricsUpdate) {
+            // Refetch project summary? 
         }
     }
 
-    const handlePropertyUpdated = (updatedProperty) => {
-        queryClient.invalidateQueries({ queryKey: ['inventory-properties', projectId] })
-        queryClient.invalidateQueries({ queryKey: ['inventory-projects'] })
-    }
+    const filteredUnits = useMemo(() => {
+        return units.filter(p => {
+            const matchesSearch = !search || 
+                (p.unit_number?.toLowerCase().includes(search.toLowerCase())) ||
+                (p.title?.toLowerCase().includes(search.toLowerCase()))
+            const matchesStatus = statusFilter === 'all' || p.status === statusFilter
+            return matchesSearch && matchesStatus
+        })
+    }, [units, search, statusFilter])
 
-
-    const filteredProperties = properties.filter(p => {
-        const matchesSearch = p.title?.toLowerCase().includes(search.toLowerCase()) ||
-            p.address?.toLowerCase().includes(search.toLowerCase())
-        const matchesStatus = statusFilter === 'all' || p.status === statusFilter
-        return matchesSearch && matchesStatus
-    })
-
-    const statusConfig = {
-        available: { color: 'bg-green-100 text-green-700 border-green-300', label: 'Available', icon: Home },
-        reserved: { color: 'bg-amber-100 text-amber-700 border-amber-300', label: 'Reserved', icon: Clock },
-        sold: { color: 'bg-purple-100 text-purple-700 border-purple-300', label: 'Sold', icon: CheckCircle2 }
-    }
-
-    const statusCounts = {
-        all: properties.length,
-        available: properties.filter(p => p.status === 'available').length,
-        reserved: properties.filter(p => p.status === 'reserved').length,
-        sold: properties.filter(p => p.status === 'sold').length
-    }
+    const statusCounts = useMemo(() => ({
+        all: units.length,
+        available: units.filter(p => p.status === 'available').length,
+        reserved: units.filter(p => p.status === 'reserved').length,
+        sold: units.filter(p => p.status === 'sold').length
+    }), [units])
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <LoadingSpinner size="lg" />
+            <div className="flex items-center justify-center h-64 bg-slate-50/50 rounded-2xl border border-slate-200">
+                <LoadingSpinner />
             </div>
         )
     }
 
     return (
-        <div className="space-y-4">
-            {/* Header with Actions */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                    <h3 className="text-lg font-semibold text-foreground">Project Inventory</h3>
-                    <p className="text-sm text-muted-foreground">
-                        {properties.length} {properties.length === 1 ? 'property' : 'properties'} in this project
-                    </p>
+        <div className="space-y-6 animate-in fade-in duration-500 pb-12">
+            {/* Minimal Dashboard Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-all hover:border-slate-300">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-200/50 shadow-sm">
+                        <Building className="w-5 h-5 text-slate-900" />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold tracking-tight text-slate-900 leading-none">Project Inventory</h3>
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mt-1.5 flex items-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                             {units.length} total units registered
+                        </p>
+                    </div>
+                </div>
+                
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full md:w-auto">
+                    {Object.entries(statusCounts).map(([status, count]) => {
+                        if (status === 'all' || count === 0) return null
+                        const config = getStatusConfig(status)
+                        return (
+                            <div key={status} className={cn("flex flex-col items-end px-4 py-2 rounded-xl border border-slate-100 bg-slate-50/50 grow md:grow-0 min-w-[90px]")}>
+                                <span className={cn("text-[9px] font-bold uppercase tracking-widest leading-none mb-1.5 opacity-50", config.text)}>{status}</span>
+                                <span className={cn("text-lg font-bold tabular-nums leading-none tracking-tight", config.text)}>{count}</span>
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
 
-            {/* Configuration Summary */}
-            {project?.unit_types && project.unit_types.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-xs text-blue-700 font-medium">
-                        📋 Configuration-Driven Inventory: Properties are automatically created from unit configurations.
-                        Edit individual properties below to customize pricing or details.
-                    </p>
-                </div>
-            )}
-
-
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
+            {/* Filters Bar - Refined */}
+            <div className="flex flex-col md:flex-row gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-10 transition-all hover:border-slate-300">
                 <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
-                        placeholder="Search properties..."
+                        placeholder="Search by unit number or title..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="pl-10"
+                        className="pl-10 h-11 bg-slate-50 border-slate-100 rounded-xl text-sm font-medium focus:bg-white focus:ring-0 transition-all"
                     />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                        <Filter className="w-4 h-4 mr-2" />
-                        <SelectValue placeholder="Filter by Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All ({statusCounts.all})</SelectItem>
-                        <SelectItem value="available">Available ({statusCounts.available})</SelectItem>
-                        <SelectItem value="reserved">Reserved ({statusCounts.reserved})</SelectItem>
-                        <SelectItem value="sold">Sold ({statusCounts.sold})</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                    <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val)}>
+                        <SelectTrigger className="w-full md:w-[220px] h-11 bg-slate-50 border-slate-100 rounded-xl text-xs font-bold text-slate-600 uppercase tracking-wider pl-3">
+                            <div className="flex items-center gap-2">
+                                <Filter className="w-3.5 h-3.5 text-blue-500" />
+                                <SelectValue placeholder="STATUS FILTER" />
+                                {statusFilter !== 'all' && (
+                                    <Badge variant="secondary" className="h-4 px-1 text-[8px] bg-blue-100 text-blue-600 ml-1">1</Badge>
+                                )}
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl border-slate-100 shadow-2xl p-1">
+                            <SelectItem value="all" className="text-xs font-bold uppercase tracking-wider py-2.5">ALL UNITS ({statusCounts.all})</SelectItem>
+                            <SelectItem value="available" className="text-xs font-bold uppercase tracking-wider py-2.5">AVAILABLE ({statusCounts.available})</SelectItem>
+                            <SelectItem value="reserved" className="text-xs font-bold uppercase tracking-wider py-2.5">RESERVED ({statusCounts.reserved})</SelectItem>
+                            <SelectItem value="sold" className="text-xs font-bold uppercase tracking-wider py-2.5 text-rose-600">SOLD ({statusCounts.sold})</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    { (search || statusFilter !== 'all') && (
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-11 px-4 text-slate-400 hover:text-slate-900 rounded-xl text-xs font-bold uppercase tracking-widest"
+                            onClick={() => { setSearch(''); setStatusFilter('all'); }}
+                        >
+                            Reset
+                        </Button>
+                    )}
+                </div>
             </div>
 
-            {/* Properties Grid */}
+            {/* Dynamic Content */}
             {
-                filteredProperties.length === 0 ? (
-                    <div className="text-center py-12 border border-dashed rounded-lg bg-muted/5">
-                        <Building className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                        <h3 className="text-lg font-semibold text-foreground mb-2">
-                            {search || statusFilter !== 'all' ? 'No Properties Found' : 'No Properties Yet'}
+                filteredUnits.length === 0 ? (
+                    <div className="text-center py-28 bg-white border border-dashed rounded-3xl border-slate-200 shadow-sm transition-all hover:bg-slate-50/50 group">
+                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                            <Home className="w-10 h-10 text-slate-200 group-hover:text-blue-200 transition-colors" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">
+                             {search || statusFilter !== 'all' ? 'No Matching Units' : 'Inventory Empty'}
                         </h3>
-                        <p className="text-sm text-muted-foreground mb-4">
+                        <p className="text-[11px] font-bold text-slate-400 max-w-sm mx-auto uppercase tracking-widest leading-relaxed opacity-60">
                             {search || statusFilter !== 'all'
-                                ? 'Try adjusting your search or filters'
-                                : 'Add properties to this project to start tracking inventory'}
+                                ? 'Adjust your search parameters or check the status filter'
+                                : 'Generate units from the structural grid to see them here'}
                         </p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredProperties.map(property => {
-                            const status = statusConfig[property.status] || statusConfig.available
-                            const StatusIcon = status.icon
-
-                            return (
-                                <Card key={property.id} className="border-border hover:shadow-md transition-shadow">
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <CardTitle className="text-sm font-bold text-foreground line-clamp-1">
-                                                {property.title}
-                                            </CardTitle>
-                                            <Badge variant="outline" className={`${status.color} border text-[10px] font-semibold px-2 py-0.5 whitespace-nowrap`}>
-                                                {status.label}
-                                            </Badge>
-                                        </div>
-                                        {property.address && (
-                                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                                <MapPin className="w-3 h-3 flex-shrink-0" />
-                                                <span className="line-clamp-1">{property.address}</span>
-                                            </p>
-                                        )}
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        {/* Price */}
-                                        {property.price && (
-                                            <div>
-                                                <p className="text-xs text-muted-foreground">Price</p>
-                                                <p className="text-lg font-bold text-foreground">
-                                                    ₹{property.price.toLocaleString('en-IN')}
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Actions */}
-                                        <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="text-xs"
-                                                onClick={() => {
-                                                    setEditingProperty(property)
-                                                    setShowEditModal(true)
-                                                }}
-                                            >
-                                                <Edit className="w-3 h-3 mr-1" />
-                                                Edit
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="text-xs"
-                                                onClick={() => {
-                                                    setSelectedProperty(property)
-                                                    setShowStatusModal(true)
-                                                }}
-                                            >
-                                                Change Status
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            )
-                        })}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xxl:grid-cols-5 gap-5">
+                        {filteredUnits.map(unit => (
+                            <UnitCard 
+                                key={unit.id} 
+                                unit={unit}
+                                onActionComplete={handleActionComplete}
+                                canManage={canManage}
+                                canEdit={canEdit}
+                            />
+                        ))}
                     </div>
                 )
             }
-
-            {/* Status Change Modal */}
-            <StatusChangeModal
-                property={selectedProperty}
-                isOpen={showStatusModal}
-                onClose={() => {
-                    setShowStatusModal(false)
-                    setSelectedProperty(null)
-                }}
-                onStatusChanged={handleStatusChanged}
-            />
-
-            {/* Edit Property Modal */}
-            <EditPropertyModal
-                property={editingProperty}
-                isOpen={showEditModal}
-                onClose={() => {
-                    setShowEditModal(false)
-                    setEditingProperty(null)
-                }}
-                onPropertyUpdated={handlePropertyUpdated}
-            />
         </div >
     )
 }

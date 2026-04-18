@@ -1,338 +1,621 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { Badge } from '@/components/ui/badge'
-import {
-    Edit, Home, Building2, Store, Factory, LandPlot, Layers,
-    User, IndianRupee, Maximize2, ChevronDown
-} from 'lucide-react'
-import EditPropertyModal from '@/components/inventory/EditPropertyModal'
-import StatusChangeModal from '@/components/inventory/StatusChangeModal'
+import { useState, useMemo, useEffect } from 'react';
+import { 
+  Plus, 
+  Building2, 
+  Layers, 
+  Home,
+  Info, 
+  MoreVertical,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  LandPlot,
+  X,
+  Check,
+  MousePointer2,
+  Zap,
+  Trash,
+  ChevronRight,
+  Compass,
+  Store,
+  Briefcase,
+  ShoppingBag,
+  Factory,
+  ConciergeBell
+} from 'lucide-react';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useInventory, useUnitConfigs } from '@/hooks/useInventory';
+import { 
+  formatINR, 
+  getInventoryStats, 
+  getStatusConfig,
+  buildEmptyFloorSlots,
+  generateUnitNumber
+} from '@/lib/inventory';
+import UnitDrawer from './UnitDrawer';
+import TowerDrawer from './TowerDrawer';
+import FloorPlanLand from './FloorPlanLand';
+import { toast } from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
 
-import { useInventoryProperties } from '@/hooks/useInventory'
-import { useQueryClient } from '@tanstack/react-query'
+export default function VisualUnitGrid({ projectId, project, organizationId, readOnly = false }) {
+  // Only treat as land if every unit config is land category.
+  // A single non-land config (or any existing towers) means tower/floor view.
+  const allConfigsAreLand =
+    project?.unit_configs?.length > 0 &&
+    project.unit_configs.every(c => c.category === 'land');
+  const projectType = allConfigsAreLand ? 'land' : 'residential';
+  
+  const { 
+    towers = [], 
+    units = {}, 
+    isLoading, 
+    addTower, 
+    updateTower, 
+    deleteTower,
+    addUnit, 
+    updateUnit, 
+    deleteUnit,
+    updateUnitStatus,
+  } = useInventory({ projectId, organizationId });
 
-export default function VisualUnitGrid({ projectId, onMetricsUpdate }) {
-    const queryClient = useQueryClient()
+  const normalizeProjectStatus = (status) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('ready') || s.includes('move')) return 'ready_to_move';
+    if (s.includes('complete') || s.includes('finished')) return 'completed';
+    return 'under_construction';
+  };
+
+  const { data: unitConfigs = [], isLoading: configsLoading } = useUnitConfigs(projectId);
+  
+  const queryClient = useQueryClient();
+  const [activeTowerId, setActiveTowerId] = useState(null);
+  const [selectedConfig, setSelectedConfig] = useState(null); 
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState(null);
+  const [selectedUnit, setSelectedUnit] = useState(null);
+  const [targetFloor, setTargetFloor] = useState(null);
+
+  useEffect(() => {
+    if (towers.length > 0 && !activeTowerId) {
+      setActiveTowerId(towers[0].id);
+    }
+  }, [towers, activeTowerId]);
+
+  const activeTower = towers.find(t => t.id === activeTowerId);
+  const towerUnits = units[activeTowerId] || [];
+  const unassignedUnits = units['unassigned'] || [];
+
+  const unitCountsByConfig = useMemo(() => {
+    const allUnits = Object.values(units).flat();
+    return allUnits.reduce((acc, unit) => {
+      const configId = unit.config_id;
+      if (configId) {
+        acc[configId] = (acc[configId] || 0) + 1;
+      }
+      return acc;
+    }, {});
+  }, [units]);
+
+  const getIcon = (type) => {
+    const icons = {
+      Apartment: Building2,
+      Villa: Home,
+      'Villa Bungalow': Home,
+      Penthouse: ConciergeBell,
+      Office: Briefcase,
+      Retail: ShoppingBag,
+      Showroom: Store,
+      Industrial: Factory,
+      Plot: Home,
+      Land: Building2,
+    };
+    return icons[type] || Building2;
+  };
+
+  const stats = useMemo(() => getInventoryStats(towerUnits), [towerUnits]);
+
+  const handlePaintUnit = async (floorNum, slotIndex = null) => {
+    if (!selectedConfig) return;
     
-    // 1. Parallel Fetching (Hydrates instantly if hovered earlier)
-    const { 
-        data: properties = [], 
-        isLoading: loading,
-        refetch: fetchProperties 
-    } = useInventoryProperties(projectId)
+    try {
+      const currentFloorUnits = towerUnits.filter(u => Number(u.floor_number) === Number(floorNum));
+      const nextIndex = slotIndex !== null ? slotIndex : currentFloorUnits.length;
 
-    const [selectedProperty, setSelectedProperty] = useState(null)
-    const [statusModalOpen, setStatusModalOpen] = useState(false)
-    const [hoveredId, setHoveredId] = useState(null)
-
-    const handleUpdate = (updatedProp) => {
-        // Sync everything
-        queryClient.invalidateQueries({ queryKey: ['inventory-properties', projectId] })
-        queryClient.invalidateQueries({ queryKey: ['inventory-project', projectId] })
-        queryClient.invalidateQueries({ queryKey: ['inventory-projects'] })
+      await addUnit({
+        tower_id: activeTowerId,
+        project_id: projectId,
+        organization_id: organizationId,
+        floor_number: floorNum,
+        config_id: selectedConfig.id,
+        unit_number: generateUnitNumber(activeTower?.name, floorNum, nextIndex),
+        status: 'available',
+        transaction_type: selectedConfig.transaction_type || 'sell',
+        construction_status: normalizeProjectStatus(project?.status),
+        bedrooms: selectedConfig.config_name?.match(/\d+/) ? parseInt(selectedConfig.config_name.match(/\d+/)[0]) : null,
+        metadata: {
+           slot_index: nextIndex
+        },
+        carpet_area: selectedConfig.carpet_area || 0,
+        built_up_area: selectedConfig.built_up_area || selectedConfig.builtup_area || 0,
+        super_built_up_area: selectedConfig.super_built_up_area || selectedConfig.super_builtup_area || 0,
+        plot_area: selectedConfig.plot_area || 0,
+        base_price: selectedConfig.base_price || 0,
+        total_price: selectedConfig.base_price || 0,
+        facing: 'North',
+      });
+      return true;
+    } catch (error) {
+      console.error('Painting error:', error);
+      return false;
     }
+  };
 
+  const handleFillFloor = async (floorNum) => {
+    if (!selectedConfig) return;
+    
+    const slots = buildEmptyFloorSlots(activeTower, towerUnits, floorNum);
+    const emptyCount = slots.filter(s => !s).length;
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'available': return 'bg-emerald-500 hover:bg-emerald-600 border-emerald-700'
-            case 'reserved': return 'bg-amber-400 hover:bg-amber-500 border-amber-600'
-            case 'sold': return 'bg-rose-500 hover:bg-rose-600 border-rose-700'
-            default: return 'bg-slate-400 hover:bg-slate-500 border-slate-600'
-        }
+    if (emptyCount === 0) return;
+
+    let addedCount = 0;
+    const toastId = toast.loading(`Filling floor ${floorNum}...`);
+    
+    for (let i = 0; i < slots.length; i++) {
+      if (!slots[i]) {
+        const success = await handlePaintUnit(floorNum, i);
+        if (success) addedCount++;
+      }
     }
-
-    const getStatusBadgeColor = (status) => {
-        switch (status) {
-            case 'available': return 'bg-emerald-100 text-emerald-800 border-emerald-200'
-            case 'reserved': return 'bg-amber-100 text-amber-800 border-amber-200'
-            case 'sold': return 'bg-rose-100 text-rose-800 border-rose-200'
-            default: return 'bg-slate-100 text-slate-600 border-slate-200'
-        }
+    
+    if (addedCount > 0) {
+       toast.success(`Added ${addedCount} units to floor ${floorNum}.`, { id: toastId });
+    } else {
+       toast.error(`Failed to add units.`, { id: toastId });
     }
+  };
 
-    const getPropertyIcon = (type) => {
-        const t = (type || '').toLowerCase()
-        if (t.includes('villa') || t.includes('bungalow')) return Home
-        if (t.includes('commercial') || t.includes('office') || t.includes('shop')) return Store
-        if (t.includes('industrial')) return Factory
-        if (t.includes('plot') || t.includes('land')) return LandPlot
-        return Building2
+  const handleOpenAddUnit = (floorNum, slotIndex = null) => {
+    if (selectedConfig) {
+       handlePaintUnit(floorNum, slotIndex);
+    } else {
+       setTargetFloor(floorNum);
+       setDrawerMode('add_unit');
+       setSelectedUnit(null);
+       setDrawerOpen(true);
     }
+  };
 
-    const handleUnitClick = (property) => {
-        setHoveredId(null)
-        setSelectedProperty(property)
-        setStatusModalOpen(true)
-    }
+  const handleEditUnit = (unit) => {
+    setSelectedUnit(unit);
+    setTargetFloor(unit.floor_number);
+    setDrawerMode('edit_unit');
+    setDrawerOpen(true);
+  };
 
-    /** Get the first lead associated with a property */
-    const getPrimaryLead = (property) => {
-        const leads = property.leads
-        if (!leads || leads.length === 0) return null
-        // For sold/reserved, show the most relevant lead
-        if (property.status === 'sold') {
-            return leads.find(l => l.status === 'won' || l.status === 'closed') || leads[0]
-        }
-        if (property.status === 'reserved') {
-            return leads.find(l => l.status === 'active' || l.status === 'new') || leads[0]
-        }
-        return leads[0]
-    }
-
-    // Group properties by Block
-    const groupedProperties = properties.reduce((acc, prop) => {
-        const block = prop.block_name || 'Unassigned'
-        if (!acc[block]) acc[block] = []
-        acc[block].push(prop)
-        return acc
-    }, {})
-
-    const sortedBlocks = Object.keys(groupedProperties).sort()
-
-    sortedBlocks.forEach(block => {
-        groupedProperties[block].sort((a, b) =>
-            a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })
-        )
-    })
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center py-20 text-muted-foreground">
-                <div className="animate-pulse space-y-2 text-center">
-                    <Layers className="w-8 h-8 mx-auto opacity-30" />
-                    <p className="text-sm">Loading inventory...</p>
-                </div>
-            </div>
-        )
-    }
-
+  if (isLoading) {
     return (
-        <div className="space-y-8">
+      <div className="space-y-4 p-6">
+        <div className="flex gap-2">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-24" />)}
+        </div>
+        <Skeleton className="h-[400px] w-full" />
+      </div>
+    );
+  }
 
-            {/* Legend */}
-            <div className="flex flex-wrap items-center gap-4 bg-background p-3 rounded-lg border shadow-sm w-fit">
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-sm bg-emerald-500" />
-                    <span className="text-sm">Available</span>
+  // Show land plot view only when: explicitly land project, loading done, and no towers have been created
+  if (projectType === 'land' && !isLoading && towers.length === 0) {
+     return <FloorPlanLand
+        projectId={projectId}
+        project={project}
+        units={Object.values(units).flat()}
+        organizationId={organizationId}
+        onAddUnit={addUnit}
+        onUpdateUnit={updateUnit}
+        onDeleteUnit={deleteUnit}
+     />;
+  }
+
+  return (
+    <div className="flex flex-col lg:flex-row h-full bg-slate-50 border border-slate-200 overflow-hidden shadow-sm min-h-[700px] rounded-2xl">
+      {/* Configuration Palette */}
+      <aside className="w-full lg:w-72 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-xl z-20">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 uppercase tracking-wider">
+              <Layers className="w-4 h-4 text-blue-600" /> Unit Configs
+            </h3>
+            <p className="text-[10px] text-slate-400 font-medium mt-0.5 uppercase tracking-wider">Select to fill grid</p>
+          </div>
+          {selectedConfig && (
+             <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-full"
+              onClick={() => setSelectedConfig(null)}
+             >
+               <X className="w-4 h-4" />
+             </Button>
+          )}
+        </div>
+        
+        <div className="flex-1 overflow-auto p-3 space-y-4 custom-scrollbar">
+          <div>
+            <div className="flex items-center justify-between px-1 mb-3">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Unit Configs</p>
+              <span className="text-[10px] font-medium text-slate-400">{unitConfigs.length} Configs</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              {unitConfigs.length > 0 ? unitConfigs.map((config) => {
+                const isSelected = selectedConfig?.id === config.id;
+                const placed = unitCountsByConfig[config.id] || 0;
+                const Icon = getIcon(config.property_type);
+
+                return (
+                  <div 
+                    key={config.id}
+                    onClick={() => setSelectedConfig(isSelected ? null : config)}
+                    className={cn(
+                      "px-3.5 py-3 rounded-2xl border transition-all relative group bg-white overflow-hidden cursor-pointer",
+                      isSelected 
+                        ? "border-blue-500 bg-blue-50/60 shadow-sm" 
+                        : "border-slate-100 hover:border-slate-300 hover:shadow-sm"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                       <div className={cn(
+                         "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all",
+                         isSelected ? "bg-blue-600 text-white shadow-md" : "bg-slate-50 text-slate-400 border border-slate-100/50"
+                       )}>
+                          <Icon className="w-4 h-4" />
+                       </div>
+                       <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center gap-2">
+                             <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-tight truncate">
+                               {config.config_name || config.property_type}
+                             </h4>
+                             <span className="text-[10px] font-bold text-blue-600 shrink-0 bg-blue-50/50 px-1.5 py-0.5 rounded border border-blue-100/50">
+                               {formatINR(config.base_price).replace('.00', '').replace('₹', '₹ ')}
+                             </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                             <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight truncate">
+                                   {config.property_type} • {config.carpet_area || config.plot_area} sqft
+                                </span>
+                             </div>
+                             <span className={cn(
+                               "text-[10px] font-semibold px-1.5 py-0.5 rounded leading-none italic bg-slate-100/80 text-slate-500"
+                             )}>
+                               {placed} Placed
+                             </span>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div className="text-center py-10 px-4 border-2 border-dashed rounded-2xl bg-slate-50 border-slate-200">
+                  <p className="text-[9px] text-slate-400 font-black uppercase italic">Inventory types missing</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-sm bg-amber-400" />
-                    <span className="text-sm">Reserved</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col bg-slate-100/50 min-w-0">
+        <div className="p-4 bg-white border-b border-slate-200 flex items-center justify-between">
+          <div className="flex gap-1 overflow-x-auto no-scrollbar">
+            {towers.map(tower => (
+              <Button
+                key={tower.id}
+                variant={activeTowerId === tower.id ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTowerId(tower.id)}
+                className={cn(
+                  "px-4 transition-all rounded-lg font-bold shrink-0",
+                  activeTowerId === tower.id && "bg-slate-900 text-white hover:bg-slate-800"
+                )}
+              >
+                {tower.name}
+              </Button>
+            ))}
+            <Button variant="outline" size="sm" onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="text-blue-600 border-blue-100 hover:bg-blue-50 shrink-0">
+              <Plus className="w-4 h-4 mr-1" /> Tower
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="bg-white hidden sm:flex">{stats.total} Total Units</Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="rounded-xl">
+                <DropdownMenuItem onClick={() => { setSelectedUnit(null); setDrawerMode('edit_tower'); setDrawerOpen(true); }}>Edit Tower</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-red-600" onClick={() => deleteTower(activeTowerId)}>Delete Tower</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto p-4 md:p-8 overflow-x-auto">
+          <div className="max-w-[1400px] mx-auto space-y-12 pb-20">
+            {selectedConfig && (
+              <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between animate-in slide-in-from-top-3 sticky top-0 z-50">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 bg-white/20 rounded-xl animate-pulse">
+                    <Zap className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-yellow-300 text-sm uppercase tracking-tight">Quick-Fill Active</h4>
+                    <p className="text-[10px] opacity-90 font-bold uppercase tracking-widest">Click empty boxes to place <span className="underline">{selectedConfig.config_name || selectedConfig.property_type}</span></p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-sm bg-rose-500" />
-                    <span className="text-sm">Sold</span>
-                </div>
+                <Button variant="secondary" size="sm" onClick={() => setSelectedConfig(null)} className="h-8 font-black text-xs uppercase px-4 rounded-lg">Done</Button>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <div className="w-max min-w-full space-y-4">
+                {activeTower ? (
+                  Array.from({ length: activeTower.total_floors + 1 }, (_, i) => activeTower.total_floors - i).map(floorNum => (
+                    <FloorRow
+                      key={floorNum}
+                      floorNum={floorNum}
+                      tower={activeTower}
+                      units={towerUnits}
+                      onUnitClick={handleEditUnit}
+                      onAddUnit={handleOpenAddUnit}
+                      onStatusChange={updateUnitStatus}
+                      onDeleteUnit={deleteUnit}
+                      onFillFloor={() => handleFillFloor(floorNum)}
+                      paintingActive={!!selectedConfig}
+                    />
+                  ))
+                ) : (
+                  <div className="h-[400px] flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl bg-white/50">
+                    <Building2 className="w-16 h-16 mb-4 opacity-10" />
+                    <p className="text-lg font-black uppercase tracking-wider text-slate-300">No towers defined</p>
+                    <Button onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="mt-6 bg-slate-900 text-white rounded-xl h-12 px-8 font-bold">Create Tower</Button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Render Groups */}
-            {properties.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground bg-slate-50 rounded-lg border border-dashed">
-                    <Layers className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p>No inventory units created yet.</p>
-                    <p className="text-xs mt-1">Go to &quot;Edit Project&quot; to bulk generate units.</p>
-                </div>
-            ) : (
-                sortedBlocks.map(block => {
-                    const blockProps = groupedProperties[block]
-
-                    const floorGroups = blockProps.reduce((acc, prop) => {
-                        const floorKey = prop.floor_number || 'Unassigned'
-                        if (!acc[floorKey]) acc[floorKey] = []
-                        acc[floorKey].push(prop)
-                        return acc
-                    }, {})
-
-                    const sortedFloors = Object.keys(floorGroups).sort((a, b) => {
-                        const numA = parseInt(a)
-                        const numB = parseInt(b)
-                        if (isNaN(numA) && isNaN(numB)) return a.localeCompare(b)
-                        if (isNaN(numA)) return 1
-                        if (isNaN(numB)) return -1
-                        return numB - numA
-                    })
-
-                    sortedFloors.forEach(f => {
-                        floorGroups[f].sort((a, b) =>
-                            a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })
-                        )
-                    })
-
-                    return (
-                        <div key={block} className="space-y-4 pt-4 first:pt-0">
-                            {block !== 'Unassigned' && (
-                                <div className="flex items-center gap-2 text-base font-semibold text-foreground border-b pb-2">
-                                    <Building2 className="w-5 h-5 text-primary" />
-                                    Block {block}
-                                    <Badge variant="secondary" className="ml-2">
-                                        {blockProps.length} Units
-                                    </Badge>
-                                </div>
-                            )}
-
-                            <div className="space-y-4">
-                                {sortedFloors.map(floor => (
-                                    <div key={floor} className="flex flex-col sm:flex-row gap-4 border-l-2 border-slate-200 pl-4 py-1">
-                                        {/* Floor Label */}
-                                        <div className="w-full sm:w-24 shrink-0 flex items-start pt-2">
-                                            <div className="bg-slate-100 px-3 py-1 rounded text-xs font-semibold text-slate-600 w-full text-center sm:text-left">
-                                                {floor === '0' || floor === 'Unassigned' ? floor : `Floor ${floor}`}
-                                            </div>
-                                        </div>
-
-                                        {/* Units Grid */}
-                                        <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
-                                            {floorGroups[floor].map(property => {
-                                                const Icon = getPropertyIcon(property.type)
-                                                const isHovered = hoveredId === property.id
-                                                const primaryLead = getPrimaryLead(property)
-                                                const showLead = (property.status === 'sold' || property.status === 'reserved') && primaryLead
-
-                                                return (
-                                                    <div key={property.id} className="relative group">
-                                                        {/* Unit Button */}
-                                                        <button
-                                                            onClick={() => handleUnitClick(property)}
-                                                            onMouseEnter={() => setHoveredId(property.id)}
-                                                            onMouseLeave={() => setHoveredId(null)}
-                                                            className={`
-                                                                w-full aspect-square rounded-lg border-b-4 transition-all duration-150
-                                                                active:scale-95 flex flex-col items-center justify-center p-2 gap-0.5
-                                                                text-white shadow-sm relative overflow-hidden
-                                                                ${getStatusColor(property.status)}
-                                                            `}
-                                                        >
-                                                            <Icon className="w-4 h-4 opacity-90 group-hover:scale-110 transition-transform shrink-0" />
-                                                            <span className="font-bold text-[10px] sm:text-[11px] truncate w-full text-center leading-tight">
-                                                                {property.unit_number || property.title.replace(/^(Unit|Flat|Apt)\s*/i, '')}
-                                                            </span>
-                                                            {/* Lead name shown on card for sold/reserved */}
-                                                            {showLead && (
-                                                                <span className="text-[7px] truncate w-full text-center opacity-90 leading-tight font-medium bg-black/20 px-1 rounded">
-                                                                    {primaryLead.name?.split(' ')[0]}
-                                                                </span>
-                                                            )}
-                                                            {property.configuration && (
-                                                                <span className="absolute top-0.5 right-1 text-[7px] bg-black/20 px-1 py-0 rounded backdrop-blur-[1px]">
-                                                                    {property.configuration}
-                                                                </span>
-                                                            )}
-                                                        </button>
-
-                                                        {/* Custom Hover Card - Fixed Positioning */}
-                                                        {isHovered && (
-                                                            <div
-                                                                className="absolute z-50 bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 pointer-events-none"
-                                                                onMouseEnter={() => setHoveredId(property.id)}
-                                                            >
-                                                                {/* Arrow */}
-                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-slate-800" />
-
-                                                                <div className="bg-slate-800 text-white rounded-xl shadow-2xl p-3 w-52 text-xs space-y-2 border border-slate-700">
-                                                                    {/* Header */}
-                                                                    <div className="flex items-center justify-between border-b border-slate-600 pb-2">
-                                                                        <p className="font-bold text-sm text-white truncate">
-                                                                            {property.title}
-                                                                        </p>
-                                                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize border ${getStatusBadgeColor(property.status)}`}>
-                                                                            {property.status}
-                                                                        </span>
-                                                                    </div>
-
-                                                                    {/* Details Grid */}
-                                                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-slate-300">
-                                                                        {property.configuration && (
-                                                                            <>
-                                                                                <span className="text-slate-400 flex items-center gap-1">
-                                                                                    <Building2 className="w-3 h-3" /> Type
-                                                                                </span>
-                                                                                <span className="font-medium text-white">{property.configuration}</span>
-                                                                            </>
-                                                                        )}
-                                                                        {property.size_sqft && (
-                                                                            <>
-                                                                                <span className="text-slate-400 flex items-center gap-1">
-                                                                                    <Maximize2 className="w-3 h-3" /> Area
-                                                                                </span>
-                                                                                <span className="font-medium text-white">{property.size_sqft} sqft</span>
-                                                                            </>
-                                                                        )}
-                                                                        {property.price && (
-                                                                            <>
-                                                                                <span className="text-slate-400 flex items-center gap-1">
-                                                                                    <IndianRupee className="w-3 h-3" /> Price
-                                                                                </span>
-                                                                                <span className="font-medium text-white">
-                                                                                    ₹{parseInt(property.price).toLocaleString('en-IN')}
-                                                                                </span>
-                                                                            </>
-                                                                        )}
-                                                                    </div>
-
-                                                                    {/* Lead Name for sold/reserved */}
-                                                                    {showLead && (
-                                                                        <div className="border-t border-slate-600 pt-2 flex items-center gap-2">
-                                                                            <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center shrink-0">
-                                                                                <User className="w-3 h-3 text-slate-300" />
-                                                                            </div>
-                                                                            <div className="overflow-hidden">
-                                                                                <p className="text-slate-400 text-[10px] capitalize">
-                                                                                    {property.status === 'sold' ? 'Buyer' : 'Reserved by'}
-                                                                                </p>
-                                                                                <p className="font-semibold text-white truncate">{primaryLead.name}</p>
-                                                                                {primaryLead.phone && (
-                                                                                    <p className="text-slate-400 text-[10px]">{primaryLead.phone}</p>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Multiple leads indicator */}
-                                                                    {property.leads && property.leads.length > 1 && (
-                                                                        <p className="text-slate-400 text-[10px] text-center">
-                                                                            +{property.leads.length - 1} more lead{property.leads.length > 2 ? 's' : ''}
-                                                                        </p>
-                                                                    )}
-
-                                                                    <p className="text-slate-500 text-center text-[10px] pt-1 border-t border-slate-700">
-                                                                        Click to change status
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )
-                })
+            {/* Unassigned Section */}
+            {unassignedUnits.length > 0 && (
+              <div className="pt-16 border-t-2 border-slate-200 border-dashed animate-in fade-in slide-in-from-bottom-8">
+                 <div className="flex items-center gap-4 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500 shadow-lg shadow-emerald-100 flex items-center justify-center text-white">
+                      <LandPlot className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Other Assets</h3>
+                      <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Inventory not mapped to structural grid</p>
+                    </div>
+                 </div>
+                 
+                 <div className="flex gap-4 overflow-x-auto pb-6 custom-scrollbar scroll-smooth">
+                    {unassignedUnits.map(unit => (
+                      <div key={unit.id} className="min-w-[110px] max-w-[110px]">
+                        <UnitCell unit={unit} onClick={() => handleEditUnit(unit)} onStatusChange={updateUnitStatus} onDelete={() => deleteUnit(unit.id)} />
+                      </div>
+                    ))}
+                    <button 
+                      onClick={() => { setTargetFloor(null); setDrawerMode('add_unit'); setSelectedUnit(null); setDrawerOpen(true); }}
+                      className="h-[80px] min-w-[110px] rounded-xl border-2 border-dashed border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50 transition-all flex flex-col items-center justify-center text-slate-400 hover:text-emerald-500 group"
+                    >
+                       <Plus className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
+                       <span className="text-[8px] font-black uppercase tracking-tighter">New Asset</span>
+                    </button>
+                 </div>
+              </div>
             )}
-
-            {/* Modals */}
-            {selectedProperty && (
-                <StatusChangeModal
-                    property={selectedProperty}
-                    isOpen={statusModalOpen}
-                    onClose={() => {
-                        setStatusModalOpen(false)
-                        setSelectedProperty(null)
-                    }}
-                    onStatusChanged={(updatedProp, updatedProjectMetrics) => {
-                        handleUpdate(updatedProp)
-                        setStatusModalOpen(false)
-                        setSelectedProperty(null)
-                        if (onMetricsUpdate && updatedProjectMetrics) {
-                            onMetricsUpdate(updatedProjectMetrics)
-                        }
-                    }}
-                />
-            )}
+          </div>
         </div>
-    )
+      </div>
+
+      <UnitDrawer 
+        open={drawerOpen && drawerMode?.includes('unit')}
+        onClose={() => setDrawerOpen(false)}
+        mode={drawerMode?.includes('add') ? 'add' : 'edit'}
+        unit={selectedUnit}
+        tower={activeTower}
+        project={project}
+        projectType={projectType}
+        unitConfigs={unitConfigs}
+        floorNumber={targetFloor}
+        towerId={activeTowerId}
+        projectId={projectId}
+        organizationId={organizationId}
+        onSave={drawerMode?.includes('add') ? addUnit : (data) => updateUnit(selectedUnit.id, data)}
+        onDelete={deleteUnit}
+      />
+      
+      <TowerDrawer 
+        open={drawerOpen && drawerMode?.includes('tower')}
+        onClose={() => setDrawerOpen(false)}
+        mode={drawerMode === 'add_tower' ? 'add' : 'edit'}
+        tower={activeTower}
+        projectId={projectId}
+        organizationId={organizationId}
+        existingTowers={towers}
+        onSave={drawerMode === 'add_tower' ? addTower : (data) => updateTower(activeTowerId, data)}
+        onDelete={deleteTower}
+      />
+    </div>
+  );
+}
+
+function FloorRow({ floorNum, tower, units, onUnitClick, onAddUnit, onStatusChange, onDeleteUnit, onFillFloor, paintingActive }) {
+  const slots = useMemo(() => buildEmptyFloorSlots(tower, units, floorNum), [tower, units, floorNum]);
+  const isGround = floorNum === 0;
+
+  return (
+    <div className="flex items-start gap-3 group/row !mt-2">
+      <div className="w-14 pt-1.5 shrink-0 flex flex-col items-end gap-1.5">
+        <span className={cn(
+          "text-[10px] font-black px-2 py-0.5 rounded-lg border-2 shadow-sm transition-all group-hover/row:bg-blue-500 group-hover/row:text-white",
+          isGround ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-200 text-slate-500"
+        )}>
+          {isGround ? 'G' : `F${floorNum}`}
+        </span>
+        {paintingActive && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={onFillFloor}
+                  className="h-6 rounded-full px-2 text-xs text-blue-600 bg-white hover:bg-blue-500 hover:text-white shadow-sm transition-all"
+                >
+                  <span className="flex items-center gap-0.5">
+                    <Zap className="w-2 h-2 fill-current" />Fill Floor
+                  </span> 
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="bg-slate-900 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg flex items-center gap-2">
+                <Zap className="w-3 h-3 text-yellow-400" />
+                <span>Fill whole floor with active config</span>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+
+      <div className="flex gap-2 pb-2 pt-0.5 select-none">
+        {slots.map((unit, idx) => (
+          <div key={idx} className="shrink-0 min-w-[110px] max-w-[110px]">
+            {unit ? (
+              <UnitCell unit={unit} onClick={() => onUnitClick(unit)} onStatusChange={onStatusChange} onDelete={() => onDeleteUnit(unit.id)} />
+            ) : (
+              <div 
+                onClick={() => onAddUnit(floorNum, idx)}
+                className="h-[80px] rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center justify-center cursor-pointer group/box shadow-sm"
+              >
+                 <Plus className="w-4 h-4 text-slate-200 group-hover/box:text-blue-400 transition-colors scale-75" />
+              </div>
+            )}
+          </div>
+        ))}
+        <div className="shrink-0 flex items-center pt-1.5 px-2">
+           <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 rounded-full opacity-0 group-hover/row:opacity-100 transition-all bg-white border border-slate-100 shadow-sm"
+            onClick={() => onAddUnit(floorNum, slots.length)}
+           >
+             <Plus className="w-3.5 h-3.5 text-slate-300" />
+           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnitCell({ unit, onClick, onStatusChange, onDelete }) {
+  const style = getStatusConfig(unit.status);
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div 
+            onClick={onClick}
+            className={cn(
+              "p-2.5 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden h-[80px] flex flex-col justify-between shadow-sm group/cell",
+              style.bg,
+              style.border,
+              "hover:shadow-md hover:-translate-y-0.5 active:scale-95"
+            )}
+          >
+            {/* Header: Number and Delete */}
+            <div className="flex justify-between items-start">
+              <span className={cn(
+                "text-[8px] font-bold leading-none px-1 py-0.5 rounded-md shadow-sm border border-black/5", 
+                style.bg === 'bg-white' ? "bg-slate-50 border-slate-100" : "bg-white/40 border-white/10", 
+                style.text
+              )}>
+                {unit.unit_number}
+              </span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="p-1 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-500 opacity-0 group-hover/cell:opacity-100 transition-all"
+              >
+                <Trash className="w-2.5 h-2.5" />
+              </button>
+            </div>
+
+            {/* Price section */}
+            <div className={cn("text-[10px] font-black tracking-tight leading-none mb-1", style.text)}>
+              {formatINR(unit.total_price || unit.base_price)}
+            </div>
+
+            {/* Area and Configuration */}
+            <div className="flex items-center gap-1.5 overflow-hidden">
+               <span className={cn("text-[7px] font-bold uppercase truncate opacity-70", style.text)}>
+                  {unit.config?.config_name || unit.config?.property_type || '...'}
+               </span>
+               <span className={cn("text-[7px] font-medium opacity-40 px-1 border-l", style.text)}>
+                  {unit.carpet_area || unit.plot_area || '--'} <span className="text-[5px]">SQFT</span>
+               </span>
+            </div>
+
+            {/* Footer: Facing and Lead tag */}
+            <div className="flex items-center justify-between mt-auto pt-1">
+               <span className={cn("text-[8px] font-black uppercase tracking-widest", style.text)}>
+                {unit.facing || 'North'}
+               </span>
+               {unit.lead_id && (
+                  <Badge className="h-3.5 px-1 bg-blue-500 text-white border-0 text-[6px] font-black rounded-sm shadow-sm">LEAD</Badge>
+               )}
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="p-4 bg-white border border-slate-200 shadow-xl rounded-xl z-50">
+           <div className="space-y-2 min-w-[170px]">
+              <div className="flex justify-between items-center border-b pb-2">
+                 <p className="font-black text-slate-900">Unit {unit.unit_number}</p>
+                 <Badge variant="outline" className="text-[8px] uppercase font-black">{unit.status}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-y-2 text-[11px] font-medium pt-1">
+                 <span className="text-slate-400 uppercase tracking-tighter text-[9px] font-bold">Config</span> 
+                 <span className="text-right text-slate-700 font-bold truncate">{unit.config?.config_name}</span>
+                 
+                 <span className="text-slate-400 uppercase tracking-tighter text-[9px] font-bold">Area</span> 
+                 <span className="text-right text-slate-700 font-bold">{unit.carpet_area || unit.plot_area} sqft</span>
+                 
+                 <span className="text-slate-400 uppercase tracking-tighter text-[9px] font-bold">Facing</span> 
+                 <span className="text-right text-slate-700 font-bold">{unit.facing || 'North'}</span>
+                 
+                 <span className="text-slate-400 uppercase tracking-tighter text-[9px] font-bold">Price</span> 
+                 <span className="text-right font-black text-blue-600">{formatINR(unit.total_price || unit.base_price)}</span>
+              </div>
+           </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }

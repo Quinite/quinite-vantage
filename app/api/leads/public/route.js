@@ -50,7 +50,6 @@ export async function POST(request) {
             organization_id: organization_id || null,
             stage_id: NEW_LEAD_STAGE_ID,
             source: 'website',
-            lead_source: 'Website',
             score: 0,
             raw_data: {
                 submitted_at: new Date().toISOString(),

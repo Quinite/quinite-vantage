@@ -23,7 +23,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot, ArrowUpRight, ConciergeBell, ShoppingBag, Factory, Zap } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +40,8 @@ import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
 import { useProjects } from '@/hooks/useProjects'
 import { formatCurrency } from '@/lib/utils/currency'
+import { PROJECT_AMENITY_MAP } from '@/lib/amenities-constants'
+import { DynamicIcon } from '@/components/amenities/DynamicIcon'
 
 const ProjectForm = dynamic(() => import('@/components/projects/ProjectForm'), {
   loading: () => <Skeleton className="h-96 w-full" />
@@ -51,6 +59,22 @@ const formatPrice = (price) => {
   if (n >= 10000000) return (n / 10000000).toFixed(2) + ' Cr'
   if (n >= 100000) return (n / 100000).toFixed(2) + ' Lac'
   return n.toLocaleString('en-IN')
+}
+
+const getIcon = (type) => {
+  const icons = {
+    'Apartment': Building2,
+    'Villa': Home,
+    'Villa Bungalow': Home,
+    'Penthouse': ConciergeBell,
+    'Office': Briefcase,
+    'Retail': ShoppingBag,
+    'Showroom': Store,
+    'Industrial': Factory,
+    'Plot': Home,
+    'Land': Building2
+  }
+  return icons[type] || Building2
 }
 
 export default function ProjectsPage() {
@@ -134,64 +158,32 @@ export default function ProjectsPage() {
   const handleCreate = async (formData) => {
     setSubmitting(true)
     try {
-      // Transform logic (map flat form fields to nested schema)
       const payload = {
         name: formData.name,
         description: formData.description,
         address: formData.address,
         image_url: formData.imageUrl,
         image_path: formData.imagePath,
-        // Inventory fields
-        total_units: safeParseFloat(formData.totalUnits),
-        available_units: safeParseFloat(formData.availableUnits),
-        sold_units: safeParseFloat(formData.soldUnits),
-        reserved_units: safeParseFloat(formData.reservedUnits),
-        unit_types: formData.unitTypes,
-        project_status: formData.projectStatus || 'planning',
-        is_draft: formData.isDraft || false,
+        rera_number: formData.reraNumber || null,
+        // Location (flat)
+        city:     formData.locCity     || null,
+        state:    formData.locState    || null,
+        country:  formData.locCountry  || 'India',
+        pincode:  formData.locPincode  || null,
+        locality: formData.locLocality || null,
+        landmark: formData.locLandmark || null,
+        // Inventory
+        total_units:       safeParseFloat(formData.totalUnits),
+        available_units:   safeParseFloat(formData.availableUnits),
+        sold_units:        safeParseFloat(formData.soldUnits),
+        reserved_units:    safeParseFloat(formData.reservedUnits),
+        unit_types:        formData.unitTypes,
+        project_status:    formData.projectStatus || 'planning',
+        is_draft:          formData.isDraft || false,
         show_in_inventory: formData.showInInventory !== false,
-        real_estate: {
-          rera_number: formData.reraNumber,
-          transaction: formData.transaction,
-          property: {
-            plot_area: safeParseFloat(formData.plotArea),
-            category: formData.propertyCategory,
-            use_case: formData.propertyUseCase,
-            ...(formData.propertyCategory === 'residential' ? {
-              residential: {
-                bhk: formData.bhk,
-                carpet_area: safeParseFloat(formData.carpetArea),
-                built_up_area: safeParseFloat(formData.builtUpArea),
-                super_built_up_area: safeParseFloat(formData.superBuiltUpArea)
-              }
-            } : {}),
-            ...(formData.propertyCategory === 'commercial' ? {
-              commercial: {
-                area: safeParseFloat(formData.commercialArea),
-                built_up_area: safeParseFloat(formData.commercialBuiltUpArea),
-                ground_floor: formData.groundFloor
-              }
-            } : {}),
-            ...(formData.propertyCategory === 'land' ? {
-              land: {
-                plot_area: safeParseFloat(formData.plotArea)
-              }
-            } : {})
-          },
-          location: {
-            city: formData.locCity,
-            locality: formData.locLocality,
-            landmark: formData.locLandmark,
-            state: formData.locState,
-            country: formData.locCountry,
-            pincode: formData.locPincode
-          },
-          pricing: { min: safeParseFloat(formData.priceMin), max: safeParseFloat(formData.priceMax) },
-          media: { thumbnail: formData.imageUrl || null },
-          description: formData.description || ''
-        },
-        possession_date: formData.possessionDate || null,
-        completion_date: formData.completionDate || null
+        possession_date:   formData.possessionDate || null,
+        completion_date:   formData.completionDate || null,
+        amenities:         Array.isArray(formData.amenities) ? formData.amenities : [],
       }
 
       const res = await fetch('/api/projects', {
@@ -218,64 +210,32 @@ export default function ProjectsPage() {
     setSubmitting(true)
 
     try {
-      // Same transform logic as create (ensure consistency)
       const payload = {
         name: formData.name,
         description: formData.description,
         address: formData.address,
         image_url: formData.imageUrl,
         image_path: formData.imagePath,
-        // Inventory fields
-        total_units: safeParseFloat(formData.totalUnits),
-        available_units: safeParseFloat(formData.availableUnits),
-        sold_units: safeParseFloat(formData.soldUnits),
-        reserved_units: safeParseFloat(formData.reservedUnits),
-        unit_types: formData.unitTypes,
-        project_status: formData.projectStatus || 'planning',
-        is_draft: formData.isDraft || false,
+        rera_number: formData.reraNumber || null,
+        // Location (flat)
+        city:     formData.locCity     || null,
+        state:    formData.locState    || null,
+        country:  formData.locCountry  || 'India',
+        pincode:  formData.locPincode  || null,
+        locality: formData.locLocality || null,
+        landmark: formData.locLandmark || null,
+        // Inventory
+        total_units:       safeParseFloat(formData.totalUnits),
+        available_units:   safeParseFloat(formData.availableUnits),
+        sold_units:        safeParseFloat(formData.soldUnits),
+        reserved_units:    safeParseFloat(formData.reservedUnits),
+        unit_types:        formData.unitTypes,
+        project_status:    formData.projectStatus || 'planning',
+        is_draft:          formData.isDraft || false,
         show_in_inventory: formData.showInInventory !== false,
-        real_estate: {
-          rera_number: formData.reraNumber,
-          transaction: formData.transaction,
-          property: {
-            plot_area: safeParseFloat(formData.plotArea),
-            category: formData.propertyCategory,
-            use_case: formData.propertyUseCase,
-            ...(formData.propertyCategory === 'residential' ? {
-              residential: {
-                bhk: formData.bhk,
-                carpet_area: safeParseFloat(formData.carpetArea),
-                built_up_area: safeParseFloat(formData.builtUpArea),
-                super_built_up_area: safeParseFloat(formData.superBuiltUpArea)
-              }
-            } : {}),
-            ...(formData.propertyCategory === 'commercial' ? {
-              commercial: {
-                area: safeParseFloat(formData.commercialArea),
-                built_up_area: safeParseFloat(formData.commercialBuiltUpArea),
-                ground_floor: formData.groundFloor
-              }
-            } : {}),
-            ...(formData.propertyCategory === 'land' ? {
-              land: {
-                plot_area: safeParseFloat(formData.plotArea)
-              }
-            } : {})
-          },
-          location: {
-            city: formData.locCity,
-            locality: formData.locLocality,
-            landmark: formData.locLandmark,
-            state: formData.locState,
-            country: formData.locCountry,
-            pincode: formData.locPincode
-          },
-          pricing: { min: safeParseFloat(formData.priceMin), max: safeParseFloat(formData.priceMax) },
-          media: { thumbnail: formData.imageUrl || null },
-          description: formData.description || ''
-        },
-        possession_date: formData.possessionDate || null,
-        completion_date: formData.completionDate || null
+        possession_date:   formData.possessionDate || null,
+        completion_date:   formData.completionDate || null,
+        amenities:         Array.isArray(formData.amenities) ? formData.amenities : [],
       }
 
       const res = await fetch(`/api/projects/${editingProject.id}`, {
@@ -455,11 +415,52 @@ export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-muted/5">
       {/* Header */}
-      <div className="p-6 border-b border-border bg-background">
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-            Projects
-          </h1>
+      <div className="px-6 py-5 border-b border-border bg-background">
+        <div className="flex items-center gap-3">
+          {/* Title */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold text-foreground">Projects</h1>
+            {!loading && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {projects.length} project{projects.length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+
+          {/* Search */}
+          <div className="w-64 shrink-0">
+            <Input
+              placeholder="Search projects…"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
+              className="h-9 bg-muted/40 border-border/60 focus:bg-background"
+            />
+          </div>
+
+          {/* View toggle */}
+          <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/50 shrink-0">
+            {[['grid', LayoutGrid], ['list', List]].map(([mode, Icon]) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`h-7 w-7 flex items-center justify-center rounded-md transition-all ${
+                  viewMode === mode ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+              </button>
+            ))}
+          </div>
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </Button>
 
           <PermissionTooltip
             hasPermission={canCreate}
@@ -468,66 +469,13 @@ export default function ProjectsPage() {
             <Button
               onClick={() => setCreateOpen(true)}
               disabled={!canCreate}
-              className="w-auto"
+              className="h-9 shrink-0"
             >
-              {!canCreate && <Lock className="w-3.5 h-3.5 mr-2" />}
-              <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">New Project</span>
-              <span className="sm:hidden">New</span>
+              {!canCreate ? <Lock className="w-3.5 h-3.5 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+              New Project
             </Button>
           </PermissionTooltip>
         </div>
-
-        {/* Filter Card */}
-        <Card className="bg-card">
-          <CardContent className="p-4">
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <Input
-                  placeholder="Search projects..."
-                  className="w-full"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value)
-                    setPage(1) // Reset to page 1 on search
-                  }}
-                />
-              </div>
-
-              {/* View Toggle */}
-              <div className="bg-muted/50 p-1 rounded-lg flex items-center gap-1 border border-border/50 shrink-0">
-                <Button
-                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className={`h-7 w-7 p-0 ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                  onClick={() => setViewMode('grid')}
-                  title="Grid View"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className={`h-7 w-7 p-0 ${viewMode === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                  onClick={() => setViewMode('list')}
-                  title="List View"
-                >
-                  <List className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => refetch()}
-                className="shrink-0"
-                disabled={isFetching}
-              >
-                <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="p-6 space-y-6">
@@ -558,10 +506,19 @@ export default function ProjectsPage() {
                 </div>
               ))
             ) : projects.length === 0 ? (
-              <div className="col-span-full text-center py-20 text-muted-foreground">
-                <Building2 className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                <p className="text-lg font-medium">No projects found</p>
-                <p className="mt-1 text-sm">Create your first project to get started</p>
+              <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
+                <div className="p-4 rounded-2xl bg-muted/50 mb-4">
+                  <Building2 className="w-8 h-8 text-muted-foreground/40" />
+                </div>
+                <p className="text-sm font-semibold text-foreground">No projects found</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-4">
+                  {searchTerm ? `No results for "${searchTerm}"` : 'Create your first project to get started'}
+                </p>
+                {!searchTerm && canCreate && (
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <Plus className="w-3.5 h-3.5 mr-1.5" /> New Project
+                  </Button>
+                )}
               </div>
             ) : (
               projects.map(project => (
@@ -722,9 +679,9 @@ export default function ProjectsPage() {
                             {viewingProject.project_status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </Badge>
                         )}
-                        {viewingProject.project_type && (
-                          <Badge variant="outline" className="bg-white/20 text-white border-white/40">
-                            {viewingProject.project_type}
+                        {viewingProject.rera_number && (
+                          <Badge variant="outline" className="bg-white/20 text-white border-white/40 uppercase">
+                            RERA: {viewingProject.rera_number}
                           </Badge>
                         )}
                       </div>
@@ -766,56 +723,22 @@ export default function ProjectsPage() {
                 )}
 
                 {(() => {
-                  let meta = {}
-                  try {
-                    meta = typeof viewingProject.metadata === 'string'
-                      ? JSON.parse(viewingProject.metadata)
-                      : viewingProject.metadata || {}
-                  } catch (e) {
-                    console.error("Failed to parse metadata", e)
-                  }
-                  const re = meta.real_estate || {}
-                  const prop = re.property || {}
-                  const loc = re.location || {}
-                  const price = re.pricing || {}
-                  const res = prop.residential || {}
-                  const comm = prop.commercial || {}
-                  const land = prop.land || {}
-                  const amenities = meta.amenities || []
-
-                  // Use metadata-based pricing as fallback
-                  const priceRange = price || {}
-
                   return (
                     <div className="space-y-6">
                       {/* Top Summary Bar */}
-                      <div className={`grid grid-cols-1 ${re.rera_number ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-4`}>
-                        <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 flex flex-col justify-center">
-                          <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest mb-1">Project Category</p>
+                      {viewingProject.rera_number && (
+                        <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50 flex flex-col justify-center">
+                          <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest mb-1">RERA Number</p>
                           <div className="flex items-center gap-2">
-                             <div className="p-1.5 bg-white rounded-lg shadow-sm border border-indigo-200">
-                               <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                             </div>
-                             <p className="text-base font-bold text-slate-900 capitalize">
-                               {[prop.category, prop.use_case].filter(Boolean).join(' - ') || 'N/A'}
-                             </p>
+                            <div className="p-1.5 bg-white rounded-lg shadow-sm border border-amber-200">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                            </div>
+                            <p className="text-base font-bold text-slate-900 uppercase">
+                              {viewingProject.rera_number}
+                            </p>
                           </div>
                         </div>
-
-                        {re.rera_number && (
-                          <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50 flex flex-col justify-center">
-                            <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest mb-1">RERA Number</p>
-                            <div className="flex items-center gap-2">
-                               <div className="p-1.5 bg-white rounded-lg shadow-sm border border-amber-200">
-                                 <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
-                               </div>
-                               <p className="text-base font-bold text-slate-900 uppercase">
-                                 {re.rera_number}
-                               </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      )}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Elegant Inventory Card */}
@@ -823,11 +746,18 @@ export default function ProjectsPage() {
                           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                             <h3 className="font-bold text-slate-900 flex items-center gap-2">
                               <Layout className="w-4 h-4 text-blue-500" />
-                              Inventory Status
+                                Inventory Status
                             </h3>
-                            <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-[10px]">
-                              Total: {viewingProject.total_units || 0} Units
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-[10px] font-bold uppercase tracking-wider gap-1 pt-0 pb-0 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-100/50"
+                                onClick={() => router.push(`/dashboard/admin/inventory/projects/${viewingProject.id}`)}
+                              >
+                                Manage <ArrowUpRight className="w-3 h-3" />
+                              </Button>
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-3 gap-3">
@@ -869,7 +799,7 @@ export default function ProjectsPage() {
 
                         {/* Financial Card */}
                         <div className="space-y-4">
-                          {(viewingProject.min_price || priceRange?.min) ? (
+                          {viewingProject.min_price ? (
                             <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-3xl shadow-lg shadow-emerald-200 relative overflow-hidden group">
                               <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-2 -translate-y-2 group-hover:scale-110 transition-transform">
                                 <IndianRupee className="w-24 h-24" />
@@ -877,11 +807,11 @@ export default function ProjectsPage() {
                               <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-[0.2em] mb-3 relative z-10">Starting Investment</p>
                               <div className="relative z-10 flex flex-col">
                                 <p className="text-3xl font-black text-white tracking-tight leading-none mb-1">
-                                  ₹ {formatPrice(viewingProject.min_price || priceRange.min)}
+                                  ₹ {formatPrice(viewingProject.min_price)}
                                 </p>
-                                {(viewingProject.max_price || priceRange.max) && (viewingProject.max_price || priceRange.max) !== (viewingProject.min_price || priceRange.min) && (
+                                {viewingProject.max_price && viewingProject.max_price !== viewingProject.min_price && (
                                   <p className="text-emerald-100 text-sm font-medium mt-1">
-                                    Up to ₹ {formatPrice(viewingProject.max_price || priceRange.max)}
+                                    Up to ₹ {formatPrice(viewingProject.max_price)}
                                   </p>
                                 )}
                               </div>
@@ -894,25 +824,25 @@ export default function ProjectsPage() {
 
                           {/* Date Badges */}
                           <div className="flex gap-3">
-                            {(viewingProject.possession_date || re.possession_date) && (
+                            {viewingProject.possession_date && (
                               <div className="flex-1 bg-white border border-slate-200 p-3 rounded-2xl flex items-center gap-3">
                                 <div className="p-2 bg-blue-50 rounded-xl">
                                   <Calendar className="w-4 h-4 text-blue-600" />
                                 </div>
                                 <div>
                                   <p className="text-[10px] text-slate-500 font-bold uppercase">Possession</p>
-                                  <p className="text-xs font-bold text-slate-900">{new Date(viewingProject.possession_date || re.possession_date).toLocaleDateString()}</p>
+                                  <p className="text-xs font-bold text-slate-900">{new Date(viewingProject.possession_date).toLocaleDateString()}</p>
                                 </div>
                               </div>
                             )}
-                            {(viewingProject.completion_date || re.completion_date) && (
+                            {viewingProject.completion_date && (
                               <div className="flex-1 bg-white border border-slate-200 p-3 rounded-2xl flex items-center gap-3">
                                 <div className="p-2 bg-slate-50 rounded-xl">
                                   <CheckCircle2 className="w-4 h-4 text-slate-600" />
                                 </div>
                                 <div>
                                   <p className="text-[10px] text-slate-500 font-bold uppercase">Completion</p>
-                                  <p className="text-xs font-bold text-slate-900">{new Date(viewingProject.completion_date || re.completion_date).toLocaleDateString()}</p>
+                                  <p className="text-xs font-bold text-slate-900">{new Date(viewingProject.completion_date).toLocaleDateString()}</p>
                                 </div>
                               </div>
                             )}
@@ -920,26 +850,26 @@ export default function ProjectsPage() {
                         </div>
 
                         {/* Full Width Location Details */}
-                        <div className="md:col-span-2 bg-slate-50/50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                        <div className="md:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
                           <div className="flex items-center justify-between">
                             <h3 className="font-bold text-slate-900 flex items-center gap-2">
                               <MapPin className="w-4 h-4 text-red-500" />
-                              Prime Location
+                              Location
                             </h3>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                              <div className="space-y-1">
                                <p className="text-[10px] text-slate-500 font-bold uppercase">City / Region</p>
-                               <p className="text-sm font-bold text-slate-900">{loc.city || 'N/A'}</p>
+                               <p className="text-sm font-bold text-slate-900">{viewingProject.city || 'N/A'}</p>
                              </div>
                              <div className="space-y-1">
                                <p className="text-[10px] text-slate-500 font-bold uppercase">Locality / Sector</p>
-                               <p className="text-sm font-bold text-slate-900">{loc.locality || 'N/A'}</p>
+                               <p className="text-sm font-bold text-slate-900">{viewingProject.locality || 'N/A'}</p>
                              </div>
                              <div className="space-y-1">
                                <p className="text-[10px] text-slate-500 font-bold uppercase">Landmark</p>
                                <p className="text-sm font-bold text-slate-900 italic text-slate-600">
-                                 {loc.landmark ? `Near ${loc.landmark}` : 'No landmark added'}
+                                 {viewingProject.landmark ? `Near ${viewingProject.landmark}` : 'No landmark added'}
                                </p>
                              </div>
                           </div>
@@ -952,60 +882,107 @@ export default function ProjectsPage() {
                         </div>
 
                         {/* Unit Breakdown Improved */}
-                        {viewingProject.unit_types && viewingProject.unit_types.length > 0 && (
+                        {viewingProject.unit_configs?.length > 0 && (
                           <div className="md:col-span-2 space-y-4">
                             <h3 className="font-bold text-slate-900 flex items-center gap-2 pl-1">
                               <Layers className="w-4 h-4 text-blue-500" />
-                              Inventory Configurations
+                              Unit Configurations
                             </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {viewingProject.unit_types.map((unit, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                                  <div className="absolute top-0 right-0 bg-blue-50 text-blue-600 px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase">
-                                    {unit.count} Units
-                                  </div>
-                                  <div className="space-y-3">
-                                    <div>
-                                      <p className="text-sm font-black text-slate-900">{unit.configuration || unit.property_type}</p>
-                                      <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{unit.category} • {unit.transaction_type}</p>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                              {viewingProject.unit_configs.map((config, idx) => {
+                                const Icon = getIcon(config.property_type || config.type)
+                                return (
+                                  <div key={idx} className="border border-slate-200 rounded-2xl p-3.5 bg-white hover:shadow-md hover:border-slate-300 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
+                                    <div className="mb-4 flex gap-3">
+                                      <div className="w-10 h-10 shrink-0 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors">
+                                        <Icon className="w-5 h-5 text-slate-500 group-hover:text-blue-600 transition-colors" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
+                                          <h4 className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                                            {config.config_name || config.property_type || config.type || 'Standard'}
+                                          </h4>
+                                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                            <TooltipProvider>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <div className="flex items-center bg-indigo-50 border border-indigo-100 rounded-md px-1.5 py-0.5 cursor-default transition-colors hover:bg-indigo-100">
+                                                    <span className="text-[10px] font-bold text-indigo-700">{config.count || 0} Units</span>
+                                                  </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p className="text-xs">Project Units</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                            <Badge variant="outline" className="text-[8px] bg-slate-50 uppercase tracking-widest font-bold px-1.5 py-0">
+                                              {config.transaction_type || 'Sell'}
+                                            </Badge>
+                                          </div>
+                                        </div>
+                                        <p className="text-[10px] font-semibold text-slate-400 capitalize tracking-wide truncate">
+                                          {(config.category || 'Residential')} • {(config.property_type || config.type || 'Apartment')}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center justify-between items-end pt-2">
-                                      {unit.carpet_area > 0 && (
-                                        <div className="flex flex-col">
-                                          <span className="text-[9px] text-slate-400 font-bold uppercase">Carpet Area</span>
-                                          <span className="text-xs font-bold text-slate-700">{unit.carpet_area} sq.ft</span>
+
+                                    <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                      {config.carpet_area > 0 && (
+                                        <div className="flex justify-between items-center px-0.5">
+                                          <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">Carpet</span>
+                                          <span className="font-bold text-[10px] text-slate-700">{config.carpet_area} sqft</span>
                                         </div>
                                       )}
-                                      {unit.price > 0 && (
-                                        <div className="text-right flex flex-col">
-                                          <span className="text-[9px] text-emerald-600 font-bold uppercase">Price</span>
-                                          <span className="text-sm font-black text-emerald-600">₹ {formatPrice(unit.price)}</span>
+                                      {(config.built_up_area > 0 || config.builtup_area > 0) && (
+                                        <div className="flex justify-between items-center px-0.5">
+                                          <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">Built-up</span>
+                                          <span className="font-bold text-[10px] text-slate-700">{config.built_up_area || config.builtup_area} sqft</span>
+                                        </div>
+                                      )}
+                                      {config.plot_area > 0 && (
+                                        <div className="flex justify-between items-center px-0.5">
+                                          <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">Plot Area</span>
+                                          <span className="font-bold text-[10px] text-slate-700">{config.plot_area} sqft</span>
+                                        </div>
+                                      )}
+
+                                      {(config.base_price > 0 || config.price > 0) && (
+                                        <div className="pt-2 mt-2 border-t border-slate-200">
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-widest">Base Price</span>
+                                            <span className="font-black text-blue-600 text-[10px]">₹ {formatPrice(config.base_price || config.price)}</span>
+                                          </div>
                                         </div>
                                       )}
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )}
 
-                        {/* Amenities Professionalized */}
-                        {amenities && amenities.length > 0 && (
+                        {/* Amenities */}
+                        {viewingProject.amenities && viewingProject.amenities.length > 0 && (
                           <div className="md:col-span-2 bg-slate-900 p-6 rounded-3xl text-white space-y-4 shadow-xl shadow-slate-200">
                              <div className="flex items-center gap-2 mb-2">
                                <div className="p-2 bg-slate-800 rounded-xl">
                                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
                                </div>
-                               <h3 className="font-bold text-base">Key Amenities</h3>
+                               <h3 className="font-bold text-base">Society Amenities</h3>
+                               <span className="ml-auto text-xs text-slate-400">{viewingProject.amenities.length} amenities</span>
                              </div>
                              <div className="flex flex-wrap gap-2.5">
-                               {amenities.map((amenity, idx) => (
-                                 <div key={idx} className="bg-slate-800 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border border-slate-700 hover:bg-slate-700 transition-colors">
-                                   <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                   {amenity}
-                                 </div>
-                               ))}
+                               {viewingProject.amenities.map((id, idx) => {
+                                 const amenity = PROJECT_AMENITY_MAP[id]
+                                 if (!amenity) return null
+                                 return (
+                                   <div key={idx} className="bg-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border border-slate-700 hover:bg-slate-700 transition-colors">
+                                     <DynamicIcon name={amenity.icon} className="w-3.5 h-3.5 text-amber-400" />
+                                     {amenity.label}
+                                   </div>
+                                 )
+                               })}
                              </div>
                           </div>
                         )}

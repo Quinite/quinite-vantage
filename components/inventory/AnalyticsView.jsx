@@ -1,216 +1,570 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Building2, Home, Wallet, TrendingUp, Users, Percent } from "lucide-react"
+'use client'
 
-export function AnalyticsView({ properties = [], projects = [] }) {
-    // Calculate stats from ACTUAL properties, not total_units field
-    const totalUnits = properties.length
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+    ResponsiveContainer, Legend, Cell,
+} from 'recharts'
+import { formatINR } from '@/lib/inventory'
+import { cn } from '@/lib/utils'
+import Link from 'next/link'
+import {
+    Wallet, TrendingUp, PiggyBank, BadgeDollarSign,
+    FolderKanban, ChevronRight, ArrowUpRight, Percent,
+} from 'lucide-react'
 
-    // Calculate available and sold from properties
-    const availableUnits = properties.filter(p => p.status === 'available').length
-    const soldUnits = properties.filter(p => p.status === 'sold').length
-    const reservedUnits = properties.filter(p => p.status === 'reserved').length
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-    // Calculate total value from properties
-    const totalValue = properties.reduce((acc, curr) => acc + (curr.price || 0), 0)
+const pct    = (n, t)  => (t > 0 ? Math.round((n / t) * 100) : 0)
+const trunc  = (s, n)  => (s?.length > n ? s.slice(0, n) + '…' : s || '—')
 
-    // Group by type
-    const byType = properties.reduce((acc, curr) => {
-        acc[curr.type] = (acc[curr.type] || 0) + 1
+const PROJECT_STATUS = {
+    planning:           { label: 'Planning',           bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200'   },
+    under_construction: { label: 'Under Construction', bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200'  },
+    ready_to_move:      { label: 'Ready to Move',      bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+    completed:          { label: 'Completed',          bg: 'bg-violet-50',  text: 'text-violet-700',  border: 'border-violet-200'  },
+}
+
+// Custom tooltip shared style
+const tooltipStyle = {
+    fontSize: 12,
+    borderRadius: 8,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.07)',
+    padding: '8px 12px',
+}
+
+// ── sub-components ────────────────────────────────────────────────────────────
+
+function SectionCard({ title, subtitle, children, action }) {
+    return (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+                <div>
+                    <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+                    {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+                </div>
+                {action}
+            </div>
+            {children}
+        </div>
+    )
+}
+
+// ── main ──────────────────────────────────────────────────────────────────────
+
+export function AnalyticsView({ units = [], projects = [] }) {
+
+    // ── aggregate revenue stats ─────────────────────────────────────────────
+    const price        = u => Number(u.total_price || u.base_price) || 0
+    const totalValue   = units.reduce((s, u) => s + price(u), 0)
+    const soldValue    = units.filter(u => u.status === 'sold')     .reduce((s, u) => s + price(u), 0)
+    const reservedValue= units.filter(u => u.status === 'reserved') .reduce((s, u) => s + price(u), 0)
+    const availValue   = units.filter(u => u.status === 'available').reduce((s, u) => s + price(u), 0)
+
+    const totalUnits   = units.length
+    const sold         = units.filter(u => u.status === 'sold').length
+    const reserved     = units.filter(u => u.status === 'reserved').length
+    const available    = units.filter(u => u.status === 'available').length
+    const convRate     = pct(sold + reserved, totalUnits)
+
+    // ── per-project data ────────────────────────────────────────────────────
+    const projectRows = projects
+        .map(p => {
+            const pu    = units.filter(u => u.project_id === p.id)
+            const pSold = pu.filter(u => u.status === 'sold')
+            const pRes  = pu.filter(u => u.status === 'reserved')
+            const pAvail= pu.filter(u => u.status === 'available')
+            const pTotal= p.total_units || pu.length
+            const sv    = pSold .reduce((s, u) => s + price(u), 0)
+            const rv    = pRes  .reduce((s, u) => s + price(u), 0)
+            const av    = pAvail.reduce((s, u) => s + price(u), 0)
+            const tv    = pu    .reduce((s, u) => s + price(u), 0)
+            const avgP  = pu.length > 0 ? tv / pu.length : 0
+            const sp    = pct(pSold.length + pRes.length, pTotal)
+            return {
+                id:        p.id,
+                name:      p.name,
+                status:    p.project_status,
+                pTotal,
+                sold:      pSold.length,
+                reserved:  pRes.length,
+                available: pAvail.length,
+                soldValue: sv,
+                resValue:  rv,
+                availValue:av,
+                totalValue:tv,
+                avgPrice:  avgP,
+                salesPct:  sp,
+            }
+        })
+        .sort((a, b) => b.salesPct - a.salesPct)
+
+    // ── chart data ──────────────────────────────────────────────────────────
+
+    // Stacked bar: unit counts per project
+    const projectBarData = projectRows.map(r => ({
+        name:      trunc(r.name, 14),
+        fullName:  r.name,
+        Sold:      r.sold,
+        Reserved:  r.reserved,
+        Available: r.available,
+    }))
+
+    // Grouped bar: revenue per project
+    const revenueBarData = projectRows
+        .filter(r => r.totalValue > 0)
+        .map(r => ({
+            name:      trunc(r.name, 14),
+            fullName:  r.name,
+            'Sold Value':     Math.round(r.soldValue    / 100000),  // in Lakhs
+            'Available Value':Math.round(r.availValue   / 100000),
+        }))
+
+    // Unit type breakdown with conversion
+    const byType = units.reduce((acc, u) => {
+        const t = u.type || 'Unknown'
+        if (!acc[t]) acc[t] = { total: 0, sold: 0, reserved: 0, available: 0, value: 0 }
+        acc[t].total++
+        acc[t].value += price(u)
+        if (u.status === 'sold')      acc[t].sold++
+        if (u.status === 'reserved')  acc[t].reserved++
+        if (u.status === 'available') acc[t].available++
         return acc
     }, {})
+    const typeRows = Object.entries(byType)
+        .map(([type, d]) => ({ type, ...d, conv: pct(d.sold + d.reserved, d.total), avgPrice: d.total > 0 ? d.value / d.total : 0 }))
+        .sort((a, b) => b.total - a.total)
 
-    // Stats cards configuration
-    const stats = [
-        {
-            title: "Total Inventory Value",
-            value: `₹${(totalValue / 10000000).toFixed(2)} Cr`,
-            description: "Total value of all listed properties",
-            icon: Wallet,
-            className: "text-blue-600 bg-blue-50"
-        },
-        {
-            title: "Total Properties",
-            value: totalUnits,
-            description: `${availableUnits} Available, ${soldUnits} Sold`,
-            icon: Building2,
-            className: "text-purple-600 bg-purple-50"
-        },
-        {
-            title: "Active Projects",
-            value: projects.length,
-            description: "Projects currently in inventory",
-            icon: Home,
-            className: "text-green-600 bg-green-50"
-        },
-        {
-            title: "Occupancy Rate",
-            value: totalUnits ? `${Math.round((soldUnits / totalUnits) * 100)}%` : "0%",
-            description: "Percentage of inventory sold",
-            icon: Percent,
-            className: "text-amber-600 bg-amber-50"
-        }
-    ]
+    const typeBarData = typeRows.map(t => ({
+        name: t.type.replace(/_/g, ' '),
+        Sold: t.sold,
+        Reserved: t.reserved,
+        Available: t.available,
+    }))
 
+    // ── render ──────────────────────────────────────────────────────────────
     return (
-        <div className="space-y-6 p-6 animate-in fade-in duration-500">
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {stats.map((stat, i) => {
-                    const Icon = stat.icon
-                    return (
-                        <Card key={i} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group">
-                            <CardContent className="p-0">
-                                {/* Gradient Background */}
-                                <div className={`p-6 bg-gradient-to-br ${i === 0 ? 'from-blue-500 to-blue-600' :
-                                    i === 1 ? 'from-purple-500 to-purple-600' :
-                                        i === 2 ? 'from-green-500 to-green-600' :
-                                            'from-amber-500 to-amber-600'
-                                    }`}>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex-1">
-                                            <p className="text-xs font-medium text-white/80 uppercase tracking-wider mb-1">
-                                                {stat.title}
-                                            </p>
-                                            <div className="text-3xl font-bold text-white mb-1 group-hover:scale-105 transition-transform">
-                                                {stat.value}
-                                            </div>
-                                            <p className="text-xs text-white/70 mt-1">
-                                                {stat.description}
-                                            </p>
+        <div className="space-y-5 p-6 animate-in fade-in duration-300">
+
+            {/* ── Revenue KPI Strip ──────────────────────────────────────── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                    {
+                        label:   'Total Portfolio Value',
+                        value:   formatINR(totalValue),
+                        sub:     `${totalUnits} units across ${projects.length} projects`,
+                        icon:    Wallet,
+                        bg:      'bg-blue-600',
+                        glow:    'shadow-blue-200',
+                    },
+                    {
+                        label:   'Realised Revenue',
+                        value:   formatINR(soldValue),
+                        sub:     `${sold} units sold · ${pct(sold, totalUnits)}% of inventory`,
+                        icon:    BadgeDollarSign,
+                        bg:      'bg-indigo-600',
+                        glow:    'shadow-indigo-200',
+                    },
+                    {
+                        label:   'Pipeline Value',
+                        value:   formatINR(reservedValue),
+                        sub:     `${reserved} units reserved · pending conversion`,
+                        icon:    PiggyBank,
+                        bg:      'bg-amber-500',
+                        glow:    'shadow-amber-200',
+                    },
+                    {
+                        label:   'Available Opportunity',
+                        value:   formatINR(availValue),
+                        sub:     `${available} units · ${pct(available, totalUnits)}% still available`,
+                        icon:    TrendingUp,
+                        bg:      'bg-emerald-600',
+                        glow:    'shadow-emerald-200',
+                    },
+                ].map(({ label, value, sub, icon: Icon, bg, glow }) => (
+                    <div key={label} className={cn('rounded-xl text-white p-5 space-y-3 shadow-lg', bg, glow)}>
+                        <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">{label}</p>
+                            <div className="h-8 w-8 rounded-lg bg-white/15 flex items-center justify-center">
+                                <Icon className="w-4 h-4 text-white" />
+                            </div>
+                        </div>
+                        <p className="text-2xl font-black tabular-nums leading-none">{value}</p>
+                        <p className="text-[11px] text-white/60 font-medium leading-snug">{sub}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Two-col: Project Inventory Chart + Conversion ──────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                {/* Stacked bar: unit counts per project */}
+                <SectionCard
+                    title="Project Inventory Breakdown"
+                    subtitle="Unit distribution across projects"
+                    action={
+                        <Link href="/dashboard/admin/inventory/projects" className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                            Projects <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                    }
+                >
+                    <div className="p-5">
+                        {projectBarData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={Math.max(180, projectBarData.length * 44)}>
+                                <BarChart
+                                    data={projectBarData}
+                                    layout="vertical"
+                                    margin={{ top: 0, right: 16, left: 4, bottom: 0 }}
+                                    barCategoryGap="28%"
+                                >
+                                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis
+                                        type="number"
+                                        tick={{ fontSize: 11, fill: '#94a3b8' }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                    />
+                                    <YAxis
+                                        type="category"
+                                        dataKey="name"
+                                        tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        width={96}
+                                    />
+                                    <Tooltip
+                                        contentStyle={tooltipStyle}
+                                        formatter={(val, name, props) => [`${val} units`, name]}
+                                        labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
+                                    />
+                                    <Legend
+                                        iconType="circle"
+                                        iconSize={8}
+                                        wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
+                                    />
+                                    <Bar dataKey="Sold"      stackId="a" fill="#6366f1" radius={[0, 0, 0, 0]} />
+                                    <Bar dataKey="Reserved"  stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} />
+                                    <Bar dataKey="Available" stackId="a" fill="#10b981" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyChart />
+                        )}
+                    </div>
+                </SectionCard>
+
+                {/* Sales conversion panel */}
+                <SectionCard title="Sales Conversion" subtitle="Overall and per-project velocity">
+                    <div className="p-5 space-y-5">
+                        {/* Big conversion rate */}
+                        <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="h-12 w-12 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+                                <Percent className="w-6 h-6 text-indigo-600" />
+                            </div>
+                            <div>
+                                <p className="text-3xl font-black text-slate-900 tabular-nums">{convRate}%</p>
+                                <p className="text-xs text-slate-500 font-medium mt-0.5">Overall conversion rate</p>
+                                <p className="text-[11px] text-slate-400">{sold + reserved} of {totalUnits} units sold or reserved</p>
+                            </div>
+                        </div>
+
+                        {/* Per-project velocity */}
+                        <div className="space-y-2.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Per Project</p>
+                            {projectRows.length === 0 ? (
+                                <p className="text-sm text-slate-400 text-center py-4">No projects</p>
+                            ) : (
+                                projectRows.map(p => (
+                                    <div key={p.id} className="space-y-1">
+                                        <div className="flex items-center justify-between text-xs">
+                                            <span className="font-medium text-slate-700 truncate max-w-[140px]">{p.name}</span>
+                                            <span className={cn(
+                                                'font-bold tabular-nums',
+                                                p.salesPct >= 80 ? 'text-rose-500' :
+                                                p.salesPct >= 50 ? 'text-amber-600' :
+                                                'text-indigo-600'
+                                            )}>
+                                                {p.salesPct}%
+                                            </span>
                                         </div>
-                                        <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
-                                            <Icon className="h-6 w-6 text-white" />
+                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                            <div className="h-full bg-indigo-500" style={{ width: `${pct(p.sold, p.pTotal)}%`     }} />
+                                            <div className="h-full bg-amber-400"  style={{ width: `${pct(p.reserved, p.pTotal)}%` }} />
                                         </div>
                                     </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )
-                })}
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </SectionCard>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Property Types Distribution */}
-                <Card className="col-span-1 border-slate-200 shadow-md hover:shadow-lg transition-shadow">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                            <div className="p-2 bg-blue-50 rounded-lg">
-                                <Building2 className="w-5 h-5 text-blue-600" />
+            {/* ── Two-col: Revenue by Project + Unit Type Analysis ───────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                {/* Revenue by project — grouped bar */}
+                <SectionCard
+                    title="Revenue by Project"
+                    subtitle="Sold value vs available opportunity (₹ Lakhs)"
+                >
+                    <div className="p-5">
+                        {revenueBarData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={Math.max(200, revenueBarData.length * 52)}>
+                                <BarChart
+                                    data={revenueBarData}
+                                    layout="vertical"
+                                    margin={{ top: 0, right: 16, left: 4, bottom: 0 }}
+                                    barCategoryGap="30%"
+                                    barGap={4}
+                                >
+                                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis
+                                        type="number"
+                                        tick={{ fontSize: 11, fill: '#94a3b8' }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tickFormatter={v => `${v}L`}
+                                    />
+                                    <YAxis
+                                        type="category"
+                                        dataKey="name"
+                                        tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        width={96}
+                                    />
+                                    <Tooltip
+                                        contentStyle={tooltipStyle}
+                                        formatter={(val, name, props) => [`₹${val.toLocaleString('en-IN')}L`, name]}
+                                        labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
+                                    />
+                                    <Legend
+                                        iconType="circle"
+                                        iconSize={8}
+                                        wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
+                                    />
+                                    <Bar dataKey="Sold Value"      fill="#6366f1" radius={[0, 4, 4, 0]} />
+                                    <Bar dataKey="Available Value" fill="#10b981" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyChart />
+                        )}
+                    </div>
+                </SectionCard>
+
+                {/* Unit type analysis */}
+                <SectionCard
+                    title="Unit Type Analysis"
+                    subtitle="Conversion rate and inventory by configuration"
+                >
+                    {typeRows.length === 0 ? (
+                        <div className="p-10 text-center text-slate-400 text-sm">No unit data</div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {/* header */}
+                            <div className="grid grid-cols-[1fr_60px_60px_60px_72px] gap-2 px-5 py-2.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                                <span>Type</span>
+                                <span className="text-center">Total</span>
+                                <span className="text-center">Sold</span>
+                                <span className="text-center">Avail</span>
+                                <span className="text-right">Conv.</span>
                             </div>
-                            Inventory Distribution
-                        </CardTitle>
-                        <CardDescription>Breakdown by property type</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {Object.entries(byType).length === 0 ? (
-                                <p className="text-sm text-muted-foreground text-center py-8">No data available</p>
-                            ) : (
-                                Object.entries(byType).map(([type, count], idx) => {
-                                    const percentage = properties.length ? (count / properties.length) * 100 : 0
-                                    const colors = [
-                                        'bg-blue-500',
-                                        'bg-purple-500',
-                                        'bg-green-500',
-                                        'bg-amber-500',
-                                        'bg-pink-500'
-                                    ]
-                                    const bgColors = [
-                                        'bg-blue-100',
-                                        'bg-purple-100',
-                                        'bg-green-100',
-                                        'bg-amber-100',
-                                        'bg-pink-100'
-                                    ]
-                                    return (
-                                        <div key={type} className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`w-3 h-3 rounded-full ${colors[idx % colors.length]}`} />
-                                                    <span className="text-sm font-medium capitalize">{type.replace('_', ' ')}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-muted-foreground">{percentage.toFixed(0)}%</span>
-                                                    <span className="text-sm font-semibold min-w-[3ch]">{count}</span>
-                                                </div>
-                                            </div>
-                                            <div className={`w-full h-2.5 ${bgColors[idx % bgColors.length]} rounded-full overflow-hidden`}>
-                                                <div
-                                                    className={`h-full ${colors[idx % colors.length]} rounded-full transition-all duration-500`}
-                                                    style={{ width: `${percentage}%` }}
-                                                />
-                                            </div>
+                            {typeRows.map(t => {
+                                const convColor =
+                                    t.conv >= 70 ? 'text-rose-600 bg-rose-50 border-rose-200' :
+                                    t.conv >= 40 ? 'text-amber-600 bg-amber-50 border-amber-200' :
+                                    'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                return (
+                                    <div key={t.type} className="grid grid-cols-[1fr_60px_60px_60px_72px] gap-2 items-center px-5 py-3 hover:bg-slate-50/60 transition-colors">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-slate-800 uppercase tracking-wide truncate">
+                                                {t.type.replace(/_/g, ' ')}
+                                            </p>
+                                            <p className="text-[11px] text-slate-400 font-medium">
+                                                Avg {formatINR(t.avgPrice)}
+                                            </p>
                                         </div>
-                                    )
-                                })
-                            )}
+                                        <p className="text-sm font-bold text-slate-600 text-center tabular-nums">{t.total}</p>
+                                        <p className="text-sm font-bold text-indigo-600 text-center tabular-nums">{t.sold}</p>
+                                        <p className="text-sm font-bold text-emerald-600 text-center tabular-nums">{t.available}</p>
+                                        <div className="flex justify-end">
+                                            <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full border tabular-nums', convColor)}>
+                                                {t.conv}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
-                    </CardContent>
-                </Card>
-
-                {/* Project Performance */}
-                <Card className="col-span-1 border-slate-200 shadow-md hover:shadow-lg transition-shadow">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                            <div className="p-2 bg-green-50 rounded-lg">
-                                <TrendingUp className="w-5 h-5 text-green-600" />
-                            </div>
-                            Top Projects
-                        </CardTitle>
-                        <CardDescription>By inventory volume</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {projects.length === 0 ? (
-                                <p className="text-sm text-muted-foreground text-center py-8">No projects found</p>
-                            ) : (
-                                projects
-                                    .sort((a, b) => (b.total_units || 0) - (a.total_units || 0))
-                                    .slice(0, 5)
-                                    .map(project => {
-                                        const projectProperties = properties.filter(p => p.project_id === project.id)
-                                        const soldCount = projectProperties.filter(p => p.status === 'sold').length
-                                        const totalUnits = project.total_units || 0
-                                        const soldPercentage = totalUnits ? (soldCount / totalUnits) * 100 : 0
-
-                                        return (
-                                            <div key={project.id} className="space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3 flex-1">
-                                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-sm font-bold text-white shadow-md">
-                                                            {project.name.substring(0, 2).toUpperCase()}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-semibold truncate">{project.name}</p>
-                                                            <p className="text-xs text-muted-foreground truncate">{project.address || 'No address'}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right ml-2">
-                                                        <div className="text-sm font-bold text-foreground">{totalUnits}</div>
-                                                        <div className="text-xs text-muted-foreground">units</div>
-                                                    </div>
-                                                </div>
-                                                {/* Progress bar */}
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="text-muted-foreground">{soldCount} sold</span>
-                                                        <span className="text-muted-foreground">{soldPercentage.toFixed(0)}%</span>
-                                                    </div>
-                                                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500"
-                                                            style={{ width: `${soldPercentage}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
+                    )}
+                </SectionCard>
             </div>
+
+            {/* ── Unit type chart ─────────────────────────────────────────── */}
+            {typeBarData.length > 0 && (
+                <SectionCard
+                    title="Inventory by Configuration"
+                    subtitle="Sold, reserved, and available units per unit type"
+                >
+                    <div className="p-5">
+                        <ResponsiveContainer width="100%" height={220}>
+                            <BarChart
+                                data={typeBarData}
+                                margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+                                barCategoryGap="30%"
+                            >
+                                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                                <XAxis
+                                    dataKey="name"
+                                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                />
+                                <YAxis
+                                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                />
+                                <Tooltip contentStyle={tooltipStyle} />
+                                <Legend
+                                    iconType="circle"
+                                    iconSize={8}
+                                    wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
+                                />
+                                <Bar dataKey="Sold"      fill="#6366f1" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="Reserved"  fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="Available" fill="#10b981" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </SectionCard>
+            )}
+
+            {/* ── Full Project Performance Table ─────────────────────────── */}
+            <SectionCard
+                title="Full Project Performance"
+                subtitle="Detailed metrics for each project"
+                action={
+                    <Link href="/dashboard/admin/inventory/projects" className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                        Manage <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
+                }
+            >
+                {projectRows.length === 0 ? (
+                    <div className="py-16 text-center text-slate-400">
+                        <FolderKanban className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                        <p className="text-sm font-medium text-slate-500">No projects yet</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b bg-slate-50/50">
+                                    {['Project', 'Status', 'Total', 'Sold', 'Reserved', 'Available', 'Avg Price', 'Portfolio Value', 'Sold Value', 'Sales %'].map(h => (
+                                        <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap first:sticky first:left-0 first:bg-slate-50/50 first:z-10">
+                                            {h}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {projectRows.map(p => {
+                                    const sc = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning
+                                    const barWidth = pct(p.sold + p.reserved, p.pTotal)
+                                    return (
+                                        <tr
+                                            key={p.id}
+                                            className="hover:bg-slate-50/60 transition-colors group"
+                                        >
+                                            {/* Project name — sticky */}
+                                            <td className="px-5 py-3.5 sticky left-0 bg-white group-hover:bg-slate-50/60 z-10">
+                                                <div className="flex items-center gap-2.5 min-w-[160px]">
+                                                    <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center text-[10px] font-black text-blue-700 shrink-0">
+                                                        {p.name?.substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <Link
+                                                        href={`/dashboard/admin/inventory/projects/${p.id}`}
+                                                        className="font-semibold text-slate-800 hover:text-blue-600 transition-colors truncate max-w-[140px]"
+                                                    >
+                                                        {p.name}
+                                                    </Link>
+                                                </div>
+                                            </td>
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sc.bg, sc.text, sc.border)}>
+                                                    {sc.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-center font-bold text-slate-700 tabular-nums">{p.pTotal}</td>
+                                            <td className="px-5 py-3.5 text-center">
+                                                <span className="font-bold text-indigo-600 tabular-nums">{p.sold}</span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-center">
+                                                <span className="font-bold text-amber-600 tabular-nums">{p.reserved}</span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-center">
+                                                <span className="font-bold text-emerald-600 tabular-nums">{p.available}</span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-slate-600 font-medium whitespace-nowrap tabular-nums">
+                                                {p.avgPrice > 0 ? formatINR(p.avgPrice) : '—'}
+                                            </td>
+                                            <td className="px-5 py-3.5 text-slate-700 font-semibold whitespace-nowrap tabular-nums">
+                                                {p.totalValue > 0 ? formatINR(p.totalValue) : '—'}
+                                            </td>
+                                            <td className="px-5 py-3.5 text-indigo-700 font-semibold whitespace-nowrap tabular-nums">
+                                                {p.soldValue > 0 ? formatINR(p.soldValue) : '—'}
+                                            </td>
+                                            <td className="px-5 py-3.5 w-[160px]">
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                        <span className="text-slate-400">{p.sold + p.reserved} / {p.pTotal}</span>
+                                                        <span className={cn('font-bold tabular-nums', p.salesPct >= 80 ? 'text-rose-500' : 'text-slate-700')}>
+                                                            {p.salesPct}%
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                                        <div className="h-full bg-indigo-500" style={{ width: `${pct(p.sold, p.pTotal)}%`     }} />
+                                                        <div className="h-full bg-amber-400"  style={{ width: `${pct(p.reserved, p.pTotal)}%` }} />
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                            {/* Footer totals */}
+                            <tfoot>
+                                <tr className="border-t-2 border-slate-200 bg-slate-50/80">
+                                    <td className="px-5 py-3 sticky left-0 bg-slate-50/80 z-10">
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Totals</span>
+                                    </td>
+                                    <td />
+                                    <td className="px-5 py-3 text-center font-black text-slate-800 tabular-nums">{totalUnits}</td>
+                                    <td className="px-5 py-3 text-center font-black text-indigo-700 tabular-nums">{sold}</td>
+                                    <td className="px-5 py-3 text-center font-black text-amber-600 tabular-nums">{reserved}</td>
+                                    <td className="px-5 py-3 text-center font-black text-emerald-700 tabular-nums">{available}</td>
+                                    <td />
+                                    <td className="px-5 py-3 font-black text-slate-800 whitespace-nowrap tabular-nums">{formatINR(totalValue)}</td>
+                                    <td className="px-5 py-3 font-black text-indigo-700 whitespace-nowrap tabular-nums">{formatINR(soldValue)}</td>
+                                    <td className="px-5 py-3">
+                                        <span className="text-sm font-black text-slate-700 tabular-nums">{convRate}%</span>
+                                        <span className="text-[11px] text-slate-400 ml-1">overall</span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                )}
+            </SectionCard>
+        </div>
+    )
+}
+
+function EmptyChart() {
+    return (
+        <div className="h-40 flex items-center justify-center text-slate-400">
+            <p className="text-sm">No data available</p>
         </div>
     )
 }

@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress'
 
 import { formatCurrency } from '@/lib/utils/currency'
 
-export default function ProjectMetrics({ project }) {
+export default function ProjectMetrics({ project, unitConfigs = [] }) {
     if (!project) return null
 
     const totalUnits = project.total_units || 0
@@ -135,20 +135,23 @@ export default function ProjectMetrics({ project }) {
             )}
 
             {/* Unit Types Breakdown */}
-            {project.unit_types && Object.keys(project.unit_types).length > 0 && (
+            {unitConfigs && unitConfigs.length > 0 && (
                 <Card className="border-border">
                     <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-semibold">Unit Types</CardTitle>
+                        <CardTitle className="text-sm font-semibold">Unit Configurations</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                            {Object.entries(project.unit_types).map(([type, count]) => (
-                                count > 0 && (
-                                    <div key={type} className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        <p className="text-xs font-medium text-muted-foreground">{type}</p>
-                                        <p className="text-xl font-bold text-foreground">{count}</p>
+                            {unitConfigs.map((config) => (
+                                <div key={config.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                    <p className="text-xs font-medium text-muted-foreground">{config.config_name || config.property_type}</p>
+                                    <div className="flex justify-between items-end mt-1">
+                                        <p className="text-xl font-bold text-foreground">
+                                            {formatINR(config.base_price)}
+                                        </p>
+                                        <Badge variant="outline" className="text-[9px] uppercase">{config.transaction_type}</Badge>
                                     </div>
-                                )
+                                </div>
                             ))}
                         </div>
                     </CardContent>

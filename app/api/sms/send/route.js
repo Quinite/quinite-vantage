@@ -46,21 +46,6 @@ export async function POST(request) {
 
         console.log('✅ SMS sent:', response);
 
-        // Log SMS attempt
-        await supabase.from('call_attempts').insert({
-            organization_id: lead.organization_id,
-            lead_id: leadId,
-            campaign_id: campaignId,
-            attempt_number: 1, // Will be updated by retry logic
-            channel: 'sms',
-            outcome: 'sent',
-            attempted_at: new Date().toISOString(),
-            metadata: {
-                message_uuid: response.messageUuid,
-                message: smsMessage
-            }
-        });
-
         // Update lead
         await supabase
             .from('leads')
@@ -76,17 +61,6 @@ export async function POST(request) {
         });
     } catch (error) {
         console.error('❌ SMS error:', error);
-
-        // Log failed attempt
-        await supabase.from('call_attempts').insert({
-            organization_id: lead.organization_id,
-            lead_id: leadId,
-            campaign_id: campaignId,
-            channel: 'sms',
-            outcome: 'failed',
-            attempted_at: new Date().toISOString(),
-            metadata: { error: error.message }
-        });
 
         return Response.json({
             error: 'Failed to send SMS',

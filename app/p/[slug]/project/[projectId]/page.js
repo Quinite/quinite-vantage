@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { ArrowLeft, MapPin, Building2, BedDouble, Bath, Ruler, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils/currency' // Assuming this exists
+import { ALL_AMENITY_MAP } from '@/lib/amenities-constants'
+import { DynamicIcon } from '@/components/amenities/DynamicIcon'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +38,15 @@ export default async function PublicProjectPage({ params }) {
                 slug,
                 name,
                 website_config
+            ),
+            unit_configs (
+                id,
+                config_name,
+                property_type,
+                category,
+                carpet_area,
+                base_price,
+                amenities
             )
         `)
         .eq('id', projectId)
@@ -49,9 +60,6 @@ export default async function PublicProjectPage({ params }) {
 
     const org = project.organizations
     const settings = org.website_config?.settings || {}
-    const re = project.metadata?.real_estate || project.real_estate || {}
-    const location = re.location || {}
-    const property = re.property || {}
 
     // Theme
     const themeStyles = {
@@ -91,7 +99,7 @@ export default async function PublicProjectPage({ params }) {
                             <h1 className="text-4xl md:text-6xl font-bold text-white mb-2">{project.name}</h1>
                             <div className="flex items-center text-white/90 text-lg">
                                 <MapPin className="w-5 h-5 mr-2" />
-                                {location.locality}, {location.city}
+                                {[project.locality, project.city].filter(Boolean).join(', ') || project.address || ''}
                             </div>
                         </div>
                     </div>
@@ -109,20 +117,20 @@ export default async function PublicProjectPage({ params }) {
                         </section>
 
                         {/* Configurations / Configurations Grid */}
-                        {project.unit_types && project.unit_types.length > 0 && (
+                        {project.unit_configs && project.unit_configs.length > 0 && (
                             <section>
                                 <h2 className="text-2xl font-bold text-slate-900 mb-6">Configurations</h2>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {project.unit_types.map((ut, idx) => (
+                                    {project.unit_configs.map((ut, idx) => (
                                         <div key={idx} className="border border-slate-200 rounded-xl p-6 hover:shadow-md transition-shadow">
                                             <div className="flex justify-between items-start mb-4">
                                                 <div>
-                                                    <h3 className="font-bold text-lg">{ut.configuration || ut.property_type}</h3>
+                                                    <h3 className="font-bold text-lg">{ut.config_name || ut.property_type}</h3>
                                                     <p className="text-sm text-slate-500">{ut.carpet_area} sqft Carpet</p>
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="font-bold text-primary text-xl">
-                                                        {formatCurrency(ut.price, 'INR')}
+                                                        {formatCurrency(ut.base_price, 'INR')}
                                                     </p>
                                                     <p className="text-xs text-slate-400"> onwards</p>
                                                 </div>
@@ -138,16 +146,22 @@ export default async function PublicProjectPage({ params }) {
                         )}
 
                         {/* Amenities */}
-                        {re.amenities && re.amenities.length > 0 && (
+                        {project.amenities && project.amenities.length > 0 && (
                             <section>
-                                <h2 className="text-2xl font-bold text-slate-900 mb-6">Amenities</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {re.amenities.map(amenity => (
-                                        <div key={amenity} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-                                            <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                            <span className="font-medium text-slate-700 capitalize">{amenity.replace('_', ' ')}</span>
+                                <h2 className="text-2xl font-bold text-slate-900 mb-6">Society Amenities</h2>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                    {project.amenities.map(id => {
+                                        const amenity = ALL_AMENITY_MAP[id]
+                                        if (!amenity) return null
+                                        return (
+                                        <div key={id} className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-xl hover:bg-white hover:border-slate-200 hover:shadow-sm transition-all">
+                                            <div className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shrink-0 shadow-sm">
+                                                <DynamicIcon name={amenity.icon} className="w-4 h-4 text-slate-600" />
+                                            </div>
+                                            <span className="font-semibold text-sm text-slate-700">{amenity.label}</span>
                                         </div>
-                                    ))}
+                                        )
+                                    })}
                                 </div>
                             </section>
                         )}
@@ -168,7 +182,7 @@ export default async function PublicProjectPage({ params }) {
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Type</label>
-                                    <p className="font-medium text-slate-900 capitalize">{property.category || '-'}</p>
+                                    <p className="font-medium text-slate-900 capitalize">{project.unit_configs?.[0]?.category || '-'}</p>
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Developer</label>

@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Building2, Megaphone, Package, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, Building2, Megaphone, Package, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { formatCurrency } from '@/lib/utils/currency'
 import ProjectMetrics from '@/components/projects/ProjectMetrics'
 import ProjectInventoryTab from '@/components/projects/ProjectInventoryTab'
+import AmenitiesDisplay from '@/components/amenities/AmenitiesDisplay'
 
 export default function ProjectDetailsPage() {
     const router = useRouter()
@@ -166,31 +167,21 @@ export default function ProjectDetailsPage() {
                                     </Badge>
                                 </div>
                             )}
-                            {project.real_estate?.property?.category && (
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-1">Property Category</p>
-                                    <Badge variant="secondary" className="capitalize">
-                                        {project.real_estate.property.category === 'residential' && '🏠 Residential'}
-                                        {project.real_estate.property.category === 'commercial' && '🏢 Commercial'}
-                                        {project.real_estate.property.category === 'land' && '🌳 Land'}
-                                    </Badge>
-                                </div>
-                            )}
 
                             {/* Dates */}
-                            {((['planning', 'under_construction'].includes(project.project_status)) || project.is_draft || project.project_status === 'draft') && (project.possession_date || project.real_estate?.possession_date) && (
+                            {((['planning', 'under_construction'].includes(project.project_status)) || project.is_draft || project.project_status === 'draft') && project.possession_date && (
                                 <div className="mt-4">
                                     <p className="text-sm font-medium text-muted-foreground mb-1">Expected Possession</p>
                                     <p className="text-sm font-semibold text-slate-900 border-l-2 border-blue-500 pl-2">
-                                        {new Date(project.possession_date || project.real_estate.possession_date).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                                        {new Date(project.possession_date).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
                                     </p>
                                 </div>
                             )}
-                            {['ready_to_move', 'completed'].includes(project.project_status) && (project.completion_date || project.real_estate?.completion_date) && (
+                            {['ready_to_move', 'completed'].includes(project.project_status) && project.completion_date && (
                                 <div className="mt-4">
                                     <p className="text-sm font-medium text-muted-foreground mb-1">Completion Date</p>
                                     <p className="text-sm font-semibold text-slate-900 border-l-2 border-green-500 pl-2">
-                                        {new Date(project.completion_date || project.real_estate.completion_date).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                                        {new Date(project.completion_date).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
                                     </p>
                                 </div>
                             )}
@@ -199,25 +190,25 @@ export default function ProjectDetailsPage() {
                         {/* Location Details */}
                         <Card className="p-6">
                             <h3 className="text-lg font-semibold text-foreground mb-4">Location Details</h3>
-                            {project.real_estate?.location?.city && (
+                            {project.city && (
                                 <div className="mb-3">
                                     <p className="text-sm font-medium text-muted-foreground mb-1">City</p>
-                                    <p className="text-sm text-foreground">{project.real_estate.location.city}</p>
+                                    <p className="text-sm text-foreground">{project.city}</p>
                                 </div>
                             )}
-                            {project.real_estate?.location?.locality && (
+                            {project.locality && (
                                 <div className="mb-3">
                                     <p className="text-sm font-medium text-muted-foreground mb-1">Locality</p>
-                                    <p className="text-sm text-foreground">{project.real_estate.location.locality}</p>
+                                    <p className="text-sm text-foreground">{project.locality}</p>
                                 </div>
                             )}
-                            {project.real_estate?.location?.landmark && (
+                            {project.landmark && (
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-1">Landmark</p>
-                                    <p className="text-sm text-foreground">{project.real_estate.location.landmark}</p>
+                                    <p className="text-sm text-foreground">{project.landmark}</p>
                                 </div>
                             )}
-                            {!project.real_estate?.location && project.address && (
+                            {!project.city && project.address && (
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-1">Address</p>
                                     <p className="text-sm text-foreground">{project.address}</p>
@@ -227,19 +218,19 @@ export default function ProjectDetailsPage() {
                     </div>
 
                     {/* Unit Configurations */}
-                    {project.unit_types && project.unit_types.length > 0 && (
+                    {project.unit_configs && project.unit_configs.length > 0 && (
                         <Card className="p-6">
                             <h3 className="text-lg font-semibold text-foreground mb-4">Unit Configurations</h3>
                             <div className="grid gap-4 md:grid-cols-2">
-                                {project.unit_types.map((unitType, idx) => (
+                                {project.unit_configs.map((unitType, idx) => (
                                     <div key={idx} className="border rounded-lg p-4 bg-gradient-to-br from-white to-slate-50 hover:shadow-md transition-shadow">
                                         <div className="flex justify-between items-start mb-3">
                                             <div>
                                                 <h4 className="font-semibold text-foreground">
-                                                    {unitType.configuration || unitType.property_type}
+                                                    {unitType.config_name || unitType.property_type}
                                                 </h4>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {unitType.property_type && unitType.configuration && `${unitType.property_type}`}
+                                                    {unitType.property_type}
                                                 </p>
                                             </div>
                                             <Badge variant="outline" className="text-xs">
@@ -248,23 +239,17 @@ export default function ProjectDetailsPage() {
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-3 text-sm">
-                                            {unitType.carpet_area && (
+                                            {unitType.carpet_area > 0 && (
                                                 <div>
                                                     <p className="text-xs text-muted-foreground">Area</p>
                                                     <p className="font-medium">{unitType.carpet_area} sqft</p>
                                                 </div>
                                             )}
-                                            {unitType.count && (
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Units</p>
-                                                    <p className="font-medium">{unitType.count} units</p>
-                                                </div>
-                                            )}
-                                            {unitType.price && unitType.price > 0 && (
+                                            {unitType.base_price > 0 && (
                                                 <div className="col-span-2">
                                                     <p className="text-xs text-muted-foreground">Price</p>
                                                     <p className="font-bold text-green-600">
-                                                        {formatCurrency(unitType.price)}
+                                                        {formatCurrency(unitType.base_price)}
                                                     </p>
                                                 </div>
                                             )}
@@ -272,6 +257,22 @@ export default function ProjectDetailsPage() {
                                     </div>
                                 ))}
                             </div>
+                        </Card>
+                    )}
+
+                    {/* Society Amenities */}
+                    {project.amenities?.length > 0 && (
+                        <Card className="p-6">
+                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-amber-500" />
+                                Society Amenities
+                                <span className="text-sm font-normal text-slate-400">({project.amenities.length})</span>
+                            </h3>
+                            <AmenitiesDisplay
+                                amenityIds={project.amenities}
+                                context="project"
+                                variant="grid"
+                            />
                         </Card>
                     )}
 

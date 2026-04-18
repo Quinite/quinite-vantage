@@ -45,8 +45,9 @@ function ConversationInsightsContent({ campaignId = null, dateRange = 30 }) {
 
     const fetchInsights = async () => {
         let query = supabase
-            .from('conversation_insights')
+            .from('call_logs')
             .select('*')
+            .not('sentiment_score', 'is', null) // Only fetch analyzed calls
             .gte('created_at', new Date(Date.now() - dateRange * 24 * 60 * 60 * 1000).toISOString())
             .order('created_at', { ascending: false })
 
@@ -65,9 +66,9 @@ function ConversationInsightsContent({ campaignId = null, dateRange = 30 }) {
 
     const calculateStats = (data) => {
         const totalInsights = data.length
-        const avgSentiment = data.reduce((sum, i) => sum + (i.overall_sentiment || 0), 0) / totalInsights
+        const avgSentiment = data.reduce((sum, i) => sum + (i.sentiment_score || 0), 0) / (totalInsights || 1)
         const highInterest = data.filter(i => i.interest_level === 'high').length
-        const budgetMentioned = data.filter(i => i.budget_mentioned).length
+        const budgetMentioned = data.filter(i => i.ai_metadata?.budget_estimated).length
 
         setStats({
             totalInsights,
@@ -79,9 +80,9 @@ function ConversationInsightsContent({ campaignId = null, dateRange = 30 }) {
 
     // Sentiment Distribution
     const getSentimentData = () => {
-        const positive = insights.filter(i => i.overall_sentiment > 0.3).length
-        const neutral = insights.filter(i => i.overall_sentiment >= -0.3 && i.overall_sentiment <= 0.3).length
-        const negative = insights.filter(i => i.overall_sentiment < -0.3).length
+        const positive = insights.filter(i => i.sentiment_score > 0.3).length
+        const neutral = insights.filter(i => i.sentiment_score >= -0.3 && i.sentiment_score <= 0.3).length
+        const negative = insights.filter(i => i.sentiment_score < -0.3).length
 
         return [
             { name: 'Positive', value: positive, color: '#10b981', fill: '#10b981' },
@@ -103,18 +104,18 @@ function ConversationInsightsContent({ campaignId = null, dateRange = 30 }) {
         ]
     }
 
-    // Purchase Readiness
+    // Purchase Readiness (Derived from Interest and Metadata)
     const getPurchaseReadinessData = () => {
-        const immediate = insights.filter(i => i.purchase_readiness === 'immediate').length
-        const shortTerm = insights.filter(i => i.purchase_readiness === 'short_term').length
-        const longTerm = insights.filter(i => i.purchase_readiness === 'long_term').length
-        const notReady = insights.filter(i => i.purchase_readiness === 'not_ready').length
+        const high = insights.filter(i => i.interest_level === 'high').length
+        const medium = insights.filter(i => i.interest_level === 'medium').length
+        const low = insights.filter(i => i.interest_level === 'low').length
+        const none = insights.filter(i => i.interest_level === 'none').length
 
         return [
-            { name: 'Immediate', value: immediate, fill: '#10b981' },
-            { name: 'Short Term', value: shortTerm, fill: '#3b82f6' },
-            { name: 'Long Term', value: longTerm, fill: '#f59e0b' },
-            { name: 'Not Ready', value: notReady, fill: '#ef4444' }
+            { name: 'Immediate', value: high, fill: '#10b981' },
+            { name: 'Short Term', value: medium, fill: '#3b82f6' },
+            { name: 'Long Term', value: low, fill: '#f59e0b' },
+            { name: 'Not Ready', value: none, fill: '#ef4444' }
         ]
     }
 
@@ -122,8 +123,9 @@ function ConversationInsightsContent({ campaignId = null, dateRange = 30 }) {
     const getCommonObjections = () => {
         const objectionCounts = {}
         insights.forEach(insight => {
-            if (insight.objections && Array.isArray(insight.objections)) {
-                insight.objections.forEach(obj => {
+            const objections = insight.ai_metadata?.objections
+            if (objections && Array.isArray(objections)) {
+                objections.forEach(obj => {
                     objectionCounts[obj] = (objectionCounts[obj] || 0) + 1
                 })
             }
@@ -138,29 +140,22 @@ function ConversationInsightsContent({ campaignId = null, dateRange = 30 }) {
     // Budget Ranges
     const getBudgetRanges = () => {
         const ranges = {
-            'Under 50L': 0,
-            '50L-1Cr': 0,
-            '1Cr-2Cr': 0,
-            '2Cr+': 0,
+            'Mentioned': 0,
             'Not Mentioned': 0
         }
 
         insights.forEach(insight => {
-            if (!insight.budget_mentioned || !insight.budget_range) {
-                ranges['Not Mentioned']++
+            if (insight.ai_metadata?.budget_estimated) {
+                ranges['Mentioned']++
             } else {
-                const range = insight.budget_range
-                if (range < 5000000) ranges['Under 50L']++
-                else if (range < 10000000) ranges['50L-1Cr']++
-                else if (range < 20000000) ranges['1Cr-2Cr']++
-                else ranges['2Cr+']++
+                ranges['Not Mentioned']++
             }
         })
 
         return Object.entries(ranges).map(([name, value], index) => ({
             name,
             value,
-            fill: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6b7280'][index]
+            fill: ['#10b981', '#6b7280'][index]
         }))
     }
 

@@ -3,52 +3,43 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar, Plus, Flag, Clock, CheckCircle2, Trash2 } from 'lucide-react'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog'
+import { Calendar, Plus, Flag, CheckCircle2, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar as CalendarComponent } from '@/components/ui/calendar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { toast } from 'react-hot-toast'
+import TaskFormFields, { formDataToPayload, EMPTY_FORM } from '@/components/crm/TaskFormFields'
 
 export default function ComingUpNextCard({ leadId }) {
     const [tasks, setTasks] = useState([])
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [users, setUsers] = useState([])
-    const [newTask, setNewTask] = useState({
-        title: '',
-        description: '',
-        due_date: new Date(),
-        due_time: '09:00',
-        priority: 'medium',
-        assigned_to: ''
-    })
+    const [teamMembers, setTeamMembers] = useState([])
+    const [formData, setFormData] = useState(EMPTY_FORM)
 
     useEffect(() => {
         if (leadId) {
             fetchTasks()
-            fetchUsers()
         }
     }, [leadId])
 
-    const fetchUsers = async () => {
-        try {
-            const res = await fetch('/api/users')
-            if (res.ok) {
-                const data = await res.json()
-                setUsers(data.users || [])
-            }
-        } catch (error) {
-            console.error('Error fetching users:', error)
+    useEffect(() => {
+        if (isDialogOpen && teamMembers.length === 0) {
+            fetch('/api/admin/users')
+                .then(r => r.ok ? r.json() : null)
+                .then(d => { if (d?.users) setTeamMembers(d.users) })
+                .catch(() => {})
         }
-    }
+    }, [isDialogOpen])
 
     const fetchTasks = async () => {
         try {
@@ -65,7 +56,7 @@ export default function ComingUpNextCard({ leadId }) {
     }
 
     const handleAddTask = async () => {
-        if (!newTask.title.trim()) {
+        if (!formData.title.trim()) {
             toast.error('Please enter a task title')
             return
         }
@@ -75,15 +66,7 @@ export default function ComingUpNextCard({ leadId }) {
             const res = await fetch(`/api/leads/${leadId}/tasks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: newTask.title,
-                    description: newTask.description,
-                    due_date: newTask.due_date,
-                    due_time: newTask.due_time,
-                    priority: newTask.priority,
-                    assigned_to: newTask.assigned_to || null,
-                    status: 'pending'
-                })
+                body: JSON.stringify(formDataToPayload(formData)),
             })
 
             if (!res.ok) {
@@ -93,14 +76,7 @@ export default function ComingUpNextCard({ leadId }) {
 
             toast.success('Task created successfully')
             setIsDialogOpen(false)
-            setNewTask({
-                title: '',
-                description: '',
-                due_date: new Date(),
-                due_time: '09:00',
-                priority: 'medium',
-                assigned_to: ''
-            })
+            setFormData(EMPTY_FORM)
             fetchTasks()
         } catch (error) {
             console.error('Error creating task:', error)
@@ -158,12 +134,6 @@ export default function ComingUpNextCard({ leadId }) {
         }
     }
 
-    const getUserName = (userId) => {
-        if (!userId) return 'Unassigned'
-        const user = users.find(u => u.id === userId)
-        return user?.full_name || user?.email || 'Unknown'
-    }
-
     if (loading) {
         return (
             <Card className="h-full border-0 shadow-sm ring-1 ring-gray-200">
@@ -180,7 +150,7 @@ export default function ComingUpNextCard({ leadId }) {
                 <CardContent>
                     <div className="space-y-3">
                         {[1, 2, 3].map(i => (
-                            <div key={i} className="h-20 bg-gray-50 rounded-xl animate-pulse" /> // Increased height placeholder
+                            <div key={i} className="h-20 bg-gray-50 rounded-xl animate-pulse" />
                         ))}
                     </div>
                 </CardContent>
@@ -203,124 +173,14 @@ export default function ComingUpNextCard({ leadId }) {
                             </p>
                         </div>
                     </div>
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                        <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full">
-                                <Plus className="h-4 w-4" />
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px]">
-                            <DialogHeader>
-                                <DialogTitle>Add Task</DialogTitle>
-                                <DialogDescription>Create a new task for this lead</DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="title">Title *</Label>
-                                    <Input
-                                        id="title"
-                                        placeholder="e.g., Follow up call"
-                                        value={newTask.title}
-                                        onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                                        className="h-9"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="description">Description</Label>
-                                    <Textarea
-                                        id="description"
-                                        placeholder="Add details about this task..."
-                                        value={newTask.description}
-                                        onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                                        className="min-h-[80px] resize-none"
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label>Due Date</Label>
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <Button variant="outline" className="w-full justify-start text-left font-normal h-9">
-                                                    <Calendar className="mr-2 h-4 w-4" />
-                                                    {newTask.due_date ? format(newTask.due_date, 'MMM d, yyyy') : <span>Pick date</span>}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="start">
-                                                <CalendarComponent
-                                                    mode="single"
-                                                    selected={newTask.due_date}
-                                                    onSelect={(date) => setNewTask({ ...newTask, due_date: date })}
-                                                    initialFocus
-                                                />
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="time">Time</Label>
-                                        <div className="relative">
-                                            <Clock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                                            <Input
-                                                id="time"
-                                                type="time"
-                                                value={newTask.due_time}
-                                                onChange={(e) => setNewTask({ ...newTask, due_time: e.target.value })}
-                                                className="h-9 pl-9"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label>Priority</Label>
-                                        <Select value={newTask.priority} onValueChange={(val) => setNewTask({ ...newTask, priority: val })}>
-                                            <SelectTrigger className="h-9">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="high">🔴 High</SelectItem>
-                                                <SelectItem value="medium">🟠 Medium</SelectItem>
-                                                <SelectItem value="low">🔵 Low</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Assign To</Label>
-                                        <Select
-                                            value={newTask.assigned_to || undefined}
-                                            onValueChange={(val) => setNewTask({ ...newTask, assigned_to: val })}
-                                            disabled={users.length === 0}
-                                        >
-                                            <SelectTrigger className="h-9">
-                                                <SelectValue placeholder={users.length === 0 ? "No users available" : "Unassigned"} />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {users.length === 0 ? (
-                                                    <div className="px-2 py-1.5 text-xs text-gray-500">
-                                                        No users in organization
-                                                    </div>
-                                                ) : (
-                                                    users.map(user => (
-                                                        <SelectItem key={user.id} value={user.id}>
-                                                            {user.full_name || user.email}
-                                                        </SelectItem>
-                                                    ))
-                                                )}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                                <Button onClick={handleAddTask} disabled={saving}>
-                                    {saving ? 'Creating...' : 'Create Task'}
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full"
+                        onClick={() => setIsDialogOpen(true)}
+                    >
+                        <Plus className="h-4 w-4" />
+                    </Button>
                 </div>
             </CardHeader>
 
@@ -377,7 +237,6 @@ export default function ComingUpNextCard({ leadId }) {
                                             {task.title}
                                         </p>
 
-                                        {/* Actions: Priority (if not completed) & Delete */}
                                         <div className="flex items-center gap-2 shrink-0">
                                             {task.status !== 'completed' && (
                                                 <Flag className={cn("w-4 h-4", getPriorityColor(task.priority))} />
@@ -420,18 +279,18 @@ export default function ComingUpNextCard({ leadId }) {
                                             )}
                                         </div>
 
-                                        {task.assigned_to && (
+                                        {task.assigned_to && task.assignee && (
                                             <div className="flex items-center gap-1.5">
                                                 <Avatar className="h-6 w-6 border border-white ring-1 ring-gray-100">
                                                     <AvatarFallback className={cn(
                                                         "text-[10px] font-bold",
                                                         task.status === 'completed' ? "bg-gray-100 text-gray-400" : "bg-indigo-50 text-indigo-600"
                                                     )}>
-                                                        {getUserName(task.assigned_to).substring(0, 2).toUpperCase()}
+                                                        {(task.assignee.full_name || '').substring(0, 2).toUpperCase()}
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <span className={cn("text-xs font-medium", task.status === 'completed' ? "text-gray-300" : "text-gray-600")}>
-                                                    {getUserName(task.assigned_to).split(' ')[0]}
+                                                    {(task.assignee.full_name || '').split(' ')[0]}
                                                 </span>
                                             </div>
                                         )}
@@ -442,6 +301,30 @@ export default function ComingUpNextCard({ leadId }) {
                     </div>
                 )}
             </CardContent>
+
+            {/* Create Task Dialog */}
+            <Dialog open={isDialogOpen} onOpenChange={open => { setIsDialogOpen(open); if (!open) setFormData(EMPTY_FORM) }}>
+                <DialogContent className="sm:max-w-[460px]">
+                    <DialogHeader>
+                        <DialogTitle>Add Task</DialogTitle>
+                        <DialogDescription>Create a new task for this lead</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-2">
+                        <TaskFormFields
+                            formData={formData}
+                            onChange={(field, value) => setFormData(f => ({ ...f, [field]: value }))}
+                            teamMembers={teamMembers}
+                            canAssignOthers={teamMembers.length > 0}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleAddTask} disabled={saving}>
+                            {saving ? 'Creating...' : 'Create Task'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Card>
     )
 }

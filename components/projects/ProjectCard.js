@@ -1,93 +1,83 @@
 'use client'
 
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription
-} from '@/components/ui/card'
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
-    Building2,
-    Home,
-    MapPin,
-    Edit,
-    Trash2,
-    Eye,
-    Store,
-    LandPlot,
-    Briefcase,
-    Lock,
-    Globe,
-    Archive,
-    RefreshCw
+    Building2, MapPin,
+    Eye, Megaphone, MoreHorizontal, Edit,
+    Globe, EyeOff, Archive, RefreshCw,
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
-import PermissionTooltip from '@/components/permissions/PermissionTooltip'
-
 import { formatCurrency } from '@/lib/utils/currency'
+import { cn } from '@/lib/utils'
 
-// Helper Components
-const PropertyCategoryIcon = ({ category }) => {
-    const icons = {
-        residential: <Home className="w-4 h-4" />,
-        commercial: <Store className="w-4 h-4" />,
-        land: <LandPlot className="w-4 h-4" />
+// ── Status config ──────────────────────────────────────────────────────────
+const STATUS = {
+    planning:            { label: 'Planning',           cls: 'bg-blue-50 text-blue-700 border-blue-200'     },
+    under_construction:  { label: 'Under Construction', cls: 'bg-amber-50 text-amber-700 border-amber-200'  },
+    ready_to_move:       { label: 'Ready to Move',      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    completed:           { label: 'Completed',          cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+    draft:               { label: 'Draft',              cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+    archived:            { label: 'Archived',           cls: 'bg-slate-100 text-slate-500 border-slate-200' },
+}
+
+function resolveStatus(project, isArchived) {
+    if (isArchived)                                                return STATUS.archived
+    if (project.is_draft || project.project_status === 'draft')   return STATUS.draft
+    return STATUS[project.project_status] ?? STATUS.planning
+}
+
+function resolvePriceRange(project) {
+    if (project.unit_configs?.length) {
+        const prices = project.unit_configs.map(u => u.base_price).filter(p => p > 0)
+        if (prices.length) return { min: Math.min(...prices), max: Math.max(...prices) }
     }
-    return icons[category] || <Building2 className="w-4 h-4" />
+    if (project.min_price || project.max_price) return { min: project.min_price, max: project.max_price }
+    return null
 }
 
-const TransactionBadge = ({ transaction }) => {
-    return (
-        <Badge variant="secondary" className="font-medium text-[10px] uppercase tracking-wider bg-background/80 backdrop-blur-sm border-0">
-            {transaction}
-        </Badge>
-    )
-}
-
-export default function ProjectCard({ project, onEdit, onDelete, onView, onStartCampaign, onToggleVisibility, deleting, isArchived, onRestore, currency = 'INR', locale = 'en-IN' }) {
-    const canEdit = usePermission('edit_projects')
+// ── Card ──────────────────────────────────────────────────────────────────
+export default function ProjectCard({
+    project, onEdit, onDelete, onView, onStartCampaign,
+    onToggleVisibility, deleting, isArchived, onRestore,
+    currency = 'INR', locale = 'en-IN',
+}) {
+    const canEdit   = usePermission('edit_projects')
     const canDelete = usePermission('delete_projects')
 
-    const re = project.metadata?.real_estate || project.real_estate || {}
+    const status     = resolveStatus(project, isArchived)
+    const priceRange = resolvePriceRange(project)
 
-    // Safe accessors
-    const property = re.property || {}
-    const location = re.location || {}
-    const pricing = re.pricing || {}
+    const total     = project.total_units     || 0
+    const sold      = project.sold_units      || 0
+    const reserved  = project.reserved_units  || 0
+    const available = project.available_units ?? Math.max(0, total - sold - reserved)
 
-    // Determine category-specific details string
-    const getDetailsString = () => {
-        const category = property.category
+    const soldPct     = total > 0 ? (sold     / total) * 100 : 0
+    const reservedPct = total > 0 ? (reserved / total) * 100 : 0
+    const occupiedPct = Math.round(soldPct + reservedPct)
 
-        // If unit_types exist, show total units count
-        if (project.unit_types && project.unit_types.length > 0) {
-            const totalUnits = project.unit_types.reduce((sum, ut) => sum + (parseInt(ut.count) || 0), 0)
-            const configCount = project.unit_types.length
-            return `${totalUnits} Units • ${configCount} Configuration${configCount > 1 ? 's' : ''}`
-        }
+    const configs = [...new Set(
+        (project.unit_configs ?? []).map(u => u.config_name ?? u.property_type).filter(Boolean)
+    )]
 
-        // Fallback to old structure if no unit_types
-        if (category === 'residential') {
-            const res = property.residential || {}
-            return `${res.bhk || ''} • ${res.carpet_area || 0} sqft`
-        }
-        if (category === 'commercial') {
-            const comm = property.commercial || {}
-            return `${comm.area || 0} sqft • ${comm.ground_floor ? 'Ground Floor' : 'Upper Floor'}`
-        }
-        if (category === 'land') {
-            const land = property.land || {}
-            return `${land.plot_area || 0} sqft Plot`
-        }
-        return ''
-    }
+    const locationStr = [project.locality, project.city].filter(Boolean).join(', ')
 
     return (
-        <Card className={`hover:shadow-md transition-all duration-300 border-border bg-card group overflow-hidden rounded-xl ${isArchived ? 'grayscale-[0.6] opacity-90' : ''}`}>
-            <div className="relative h-48 bg-muted/30">
+        <div className={cn(
+            'group flex flex-col rounded-2xl border border-gray-200 bg-white overflow-hidden',
+            'shadow-sm hover:shadow-md hover:border-gray-300 transition-all duration-200',
+            isArchived && 'opacity-60 grayscale-[0.5]',
+        )}>
+
+            {/* ── Hero ──────────────────────────────────────────────────── */}
+            <div className="relative h-44 bg-slate-100 shrink-0 overflow-hidden">
                 {project.image_url ? (
                     <img
                         src={project.image_url}
@@ -95,193 +85,176 @@ export default function ProjectCard({ project, onEdit, onDelete, onView, onStart
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-muted/20">
-                        <Building2 className="w-10 h-10 opacity-20" />
+                    <div className="w-full h-full flex items-center justify-center">
+                        <Building2 className="w-10 h-10 text-slate-200" />
                     </div>
                 )}
-                <div className="absolute top-3 right-3 flex gap-2">
+
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/5 to-transparent" />
+
+                {/* Top badges */}
+                <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
+                    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border backdrop-blur-sm whitespace-nowrap', status.cls)}>
+                        {status.label}
+                    </span>
                     {project.public_visibility && (
-                        <Badge variant="default" className="bg-green-500/90 hover:bg-green-600/90 backdrop-blur-sm border-0 text-[10px] uppercase tracking-wider">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/90 text-white">
                             Public
-                        </Badge>
-                    )}
-                    <TransactionBadge transaction={re.transaction || 'sell'} />
-                    {project.is_draft && (
-                        <Badge variant="secondary" className="bg-orange-500/90 hover:bg-orange-600/90 backdrop-blur-sm border-0 text-[10px] uppercase tracking-wider text-white">
-                            Draft
-                        </Badge>
-                    )}
-                    {isArchived && (
-                        <Badge variant="secondary" className="bg-slate-700/90 backdrop-blur-sm border-0 text-[10px] uppercase tracking-wider text-white">
-                            Archived
-                        </Badge>
+                        </span>
                     )}
                 </div>
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-                    <h3 className="text-white font-medium text-lg leading-tight truncate">{project.name}</h3>
-                    <p className="text-white/80 text-xs flex items-center gap-1 truncate mt-0.5">
-                        <MapPin className="w-3 h-3" />
-                        {location.locality}, {location.city}
-                    </p>
+
+                {/* Bottom: name + location */}
+                <div className="absolute bottom-0 inset-x-0 p-4">
+                    <p className="text-white font-bold text-[15px] leading-tight truncate">{project.name}</p>
+                    {locationStr && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-white/60 shrink-0" />
+                            <p className="text-white/75 text-xs truncate">{locationStr}</p>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
-                    <div className="flex items-center gap-2">
-                        <div className="p-1 bg-background rounded-md shadow-sm">
-                            <PropertyCategoryIcon category={property.category} />
-                        </div>
-                        <span className="font-medium capitalize text-xs">{property.category}</span>
-                    </div>
-                    <div className="font-medium text-foreground text-xs">
-                        {getDetailsString()}
-                    </div>
-                </div>
+            {/* ── Body ──────────────────────────────────────────────────── */}
+            <div className="flex flex-col flex-1 p-4 gap-3">
 
-                {/* Unit Configurations */}
-                {project.unit_types && project.unit_types.length > 0 && (
+                {/* RERA + Price */}
+                {project.rera_number && (
+                    <p className="text-[10px] text-slate-400 font-medium truncate">
+                        RERA {project.rera_number}
+                    </p>
+                )}
+
+                {/* Price */}
+                {priceRange ? (
                     <div>
-                        <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Configurations</p>
-                        <div className="flex flex-wrap gap-1.5">
-                            {[...new Set(project.unit_types.map(ut => ut.configuration || ut.property_type))].map((config, idx) => (
-                                <Badge key={idx} variant="outline" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
-                                    {config}
-                                </Badge>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Price Range</p>
+                        <p className="text-sm font-bold text-slate-900 leading-tight">
+                            {formatCurrency(priceRange.min, currency, locale)}
+                            {priceRange.max && priceRange.max !== priceRange.min && (
+                                <span className="font-normal text-slate-400 text-xs">
+                                    {' '}–{' '}{formatCurrency(priceRange.max, currency, locale)}
+                                </span>
+                            )}
+                        </p>
+                    </div>
+                ) : (
+                    <p className="text-xs text-slate-400 italic">Pricing not configured</p>
+                )}
+
+                {/* Unit stats */}
+                {total > 0 && (
+                    <div className="space-y-2">
+                        <div className="grid grid-cols-3 gap-1.5">
+                            {[
+                                { label: 'Available', value: available, bg: 'bg-emerald-50', text: 'text-emerald-700', sub: 'text-emerald-500/70' },
+                                { label: 'Sold',      value: sold,      bg: 'bg-red-50',     text: 'text-red-600',    sub: 'text-red-400/80'    },
+                                { label: 'Reserved',  value: reserved,  bg: 'bg-amber-50',   text: 'text-amber-600',  sub: 'text-amber-500/70'  },
+                            ].map(({ label, value, bg, text, sub }) => (
+                                <div key={label} className={cn('rounded-xl py-2 text-center', bg)}>
+                                    <p className={cn('text-base font-black leading-none', text)}>{value}</p>
+                                    <p className={cn('text-[9px] font-bold uppercase tracking-wide mt-0.5', sub)}>{label}</p>
+                                </div>
                             ))}
                         </div>
+                        {/* Progress bar */}
+                        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full flex">
+                                <div className="bg-red-400 transition-all"   style={{ width: `${soldPct}%` }} />
+                                <div className="bg-amber-400 transition-all" style={{ width: `${reservedPct}%` }} />
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 text-right tabular-nums">
+                            {occupiedPct}% occupied · {total} total units
+                        </p>
                     </div>
                 )}
 
-                {/* Price Range - prioritize unit_types pricing over real_estate.pricing */}
-                {(() => {
-                    // Try to get price from unit_types first
-                    if (project.unit_types && project.unit_types.length > 0) {
-                        const prices = project.unit_types.map(ut => ut.price).filter(p => p > 0)
-                        if (prices.length > 0) {
-                            const minPrice = Math.min(...prices)
-                            const maxPrice = Math.max(...prices)
-                            return (
-                                <div className="flex items-baseline gap-1 text-foreground">
-                                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Range:</span>
-                                    <span className="text-base font-semibold">
-                                        {formatCurrency(minPrice, currency, locale)}
-                                    </span>
-                                    <span className="text-muted-foreground text-sm">-</span>
-                                    <span className="text-base font-semibold">
-                                        {formatCurrency(maxPrice, currency, locale)}
-                                    </span>
-                                </div>
-                            )
-                        }
-                    }
-                    // Fallback to real_estate.pricing
-                    if (pricing.min || pricing.max) {
-                        return (
-                            <div className="flex items-baseline gap-1 text-foreground">
-                                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Range:</span>
-                                <span className="text-base font-semibold">
-                                    {formatCurrency(pricing.min, currency, locale)}
-                                </span>
-                                <span className="text-muted-foreground text-sm">-</span>
-                                <span className="text-base font-semibold">
-                                    {formatCurrency(pricing.max, currency, locale)}
-                                </span>
-                            </div>
-                        )
-                    }
-                    return null
-                })()}
+                {/* Config chips */}
+                {configs.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                        {configs.slice(0, 5).map((cfg, i) => (
+                            <span key={i} className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                                {cfg}
+                            </span>
+                        ))}
+                        {configs.length > 5 && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                                +{configs.length - 5}
+                            </span>
+                        )}
+                    </div>
+                )}
 
-                <div className="grid grid-cols-2 gap-2 pt-1.5">
+                <div className="flex-1" />
+
+                {/* ── Actions ───────────────────────────────────────────── */}
+                <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
                     <Button
                         variant="outline"
-                        className="w-full h-8 text-xs border-border text-foreground hover:bg-muted"
                         size="sm"
+                        className="flex-1 h-8 text-xs gap-1.5"
                         onClick={() => onView(project)}
-                        disabled={isArchived}
                     >
-                        <Eye className="w-3.5 h-3.5 mr-1.5" />
+                        <Eye className="w-3.5 h-3.5" />
                         View
                     </Button>
                     <Button
-                        className="w-full h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                         size="sm"
+                        className="flex-1 h-8 text-xs gap-1.5"
                         onClick={() => onStartCampaign(project)}
-                        disabled={project.is_draft || project.project_status === 'draft' || isArchived}
+                        disabled={!!(project.is_draft || isArchived)}
                     >
-                        <Briefcase className="w-3.5 h-3.5 mr-1.5" />
+                        <Megaphone className="w-3.5 h-3.5" />
                         Campaign
                     </Button>
-                </div>
 
-                <div className="flex gap-2 pt-2 border-t border-border/50">
-                    <PermissionTooltip
-                        hasPermission={canEdit}
-                        message="You need 'Edit Projects' permission to edit projects."
-                    >
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="flex-1 h-7 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
-                            onClick={() => {
-                                if (!canEdit || isArchived) return
-                                onEdit(project)
-                            }}
-                            disabled={deleting || !canEdit || isArchived}
-                        >
-                            <Edit className="w-3.5 h-3.5 mr-1.5" />
-                            Edit
-                        </Button>
-                    </PermissionTooltip>
-
-                    <PermissionTooltip
-                        hasPermission={canEdit}
-                        message="You need 'Edit Projects' permission to change visibility."
-                    >
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`flex-1 h-7 text-xs ${project.public_visibility ? 'text-green-600 hover:text-green-700 hover:bg-green-50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
-                            onClick={() => {
-                                if (!canEdit || isArchived) return
-                                onToggleVisibility && onToggleVisibility(project)
-                            }}
-                            disabled={!canEdit || !onToggleVisibility || isArchived}
-                        >
-                            <Globe className="w-3.5 h-3.5 mr-1.5" />
-                            {project.public_visibility ? 'Public' : 'Hidden'}
-                        </Button>
-                    </PermissionTooltip>
-
-                    <PermissionTooltip
-                        hasPermission={canDelete}
-                        message={isArchived ? "Restore this project to active list" : "Move this project to archive"}
-                    >
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`flex-1 h-7 text-xs ${isArchived ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50/50' : 'text-orange-500 hover:text-orange-700 hover:bg-orange-50/50'}`}
-                            onClick={() => {
-                                if (isArchived) {
-                                    onRestore?.(project)
-                                } else {
-                                    if (!canDelete) return
-                                    onDelete?.(project)
+                    {/* ⋯ Overflow actions */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0 shrink-0">
+                                <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem
+                                disabled={!canEdit || !!isArchived}
+                                onClick={() => canEdit && !isArchived && onEdit(project)}
+                            >
+                                <Edit className="w-3.5 h-3.5 mr-2 text-slate-400" />
+                                Edit project
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                disabled={!canEdit || !!isArchived}
+                                onClick={() => canEdit && !isArchived && onToggleVisibility?.(project)}
+                            >
+                                {project.public_visibility
+                                    ? <><EyeOff className="w-3.5 h-3.5 mr-2 text-slate-400" />Set private</>
+                                    : <><Globe  className="w-3.5 h-3.5 mr-2 text-slate-400" />Make public</>
                                 }
-                            }}
-                            disabled={deleting || (isArchived ? !onRestore : (!onDelete || !canDelete))}
-                        >
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             {isArchived ? (
-                                <RefreshCw className={deleting ? "animate-spin w-3.5 h-3.5 mr-1.5" : "w-3.5 h-3.5 mr-1.5"} />
+                                <DropdownMenuItem onClick={() => onRestore?.(project)}>
+                                    <RefreshCw className={cn('w-3.5 h-3.5 mr-2 text-blue-500', deleting && 'animate-spin')} />
+                                    <span className="text-blue-600">Restore</span>
+                                </DropdownMenuItem>
                             ) : (
-                                <Archive className="w-3.5 h-3.5 mr-1.5" />
+                                <DropdownMenuItem
+                                    disabled={!canDelete}
+                                    onClick={() => canDelete && onDelete?.(project)}
+                                    className="text-orange-600 focus:text-orange-600 focus:bg-orange-50"
+                                >
+                                    <Archive className="w-3.5 h-3.5 mr-2" />
+                                    Archive
+                                </DropdownMenuItem>
                             )}
-                            {isArchived ? 'Restore' : 'Archive'}
-                        </Button>
-                    </PermissionTooltip>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
-            </CardContent>
-        </Card >
+            </div>
+        </div>
     )
 }

@@ -2,8 +2,8 @@ import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase/se
 import { corsJSON } from '@/lib/cors'
 
 /**
- * DELETE endpoint to clean up orphaned properties
- * (properties whose project_id doesn't exist in projects table)
+ * DELETE endpoint to clean up orphaned units
+ * (units whose project_id doesn't exist in projects table)
  */
 export async function DELETE(request) {
     try {
@@ -32,9 +32,9 @@ export async function DELETE(request) {
             return corsJSON({ error: 'Forbidden - Admin access required' }, { status: 403 })
         }
 
-        // Get all properties for this organization
-        const { data: properties, error: propsError } = await adminClient
-            .from('properties')
+        // Get all units for this organization
+        const { data: units, error: propsError } = await adminClient
+            .from('units')
             .select('id, project_id')
             .eq('organization_id', profile.organization_id)
 
@@ -50,20 +50,20 @@ export async function DELETE(request) {
 
         const validProjectIds = new Set(projects.map(p => p.id))
 
-        // Find orphaned properties
-        const orphanedProperties = properties.filter(prop => !validProjectIds.has(prop.project_id))
-        const orphanedIds = orphanedProperties.map(p => p.id)
+        // Find orphaned units
+        const orphanedUnits = units.filter(prop => !validProjectIds.has(prop.project_id))
+        const orphanedIds = orphanedUnits.map(p => p.id)
 
         if (orphanedIds.length === 0) {
             return corsJSON({
-                message: 'No orphaned properties found',
+                message: 'No orphaned units found',
                 deleted: 0
             })
         }
 
-        // Delete orphaned properties
+        // Delete orphaned units
         const { error: deleteError } = await adminClient
-            .from('properties')
+            .from('units')
             .delete()
             .in('id', orphanedIds)
             .eq('organization_id', profile.organization_id)
@@ -71,9 +71,9 @@ export async function DELETE(request) {
         if (deleteError) throw deleteError
 
         return corsJSON({
-            message: `Successfully deleted ${orphanedIds.length} orphaned properties`,
+            message: `Successfully deleted ${orphanedIds.length} orphaned units`,
             deleted: orphanedIds.length,
-            orphanedProjectIds: [...new Set(orphanedProperties.map(p => p.project_id))]
+            orphanedProjectIds: [...new Set(orphanedUnits.map(p => p.project_id))]
         })
     } catch (e) {
         console.error('cleanup-orphaned DELETE error:', e)

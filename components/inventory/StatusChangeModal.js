@@ -1,49 +1,72 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useState, useEffect } from 'react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
-    AlertCircle, CheckCircle2, Clock, Search, User,
-    Phone, Mail, XCircle, ShieldCheck, Loader2
+    CheckCircle2, Clock, Search, XCircle, ShieldCheck, Loader2, AlertCircle, Building2
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import { cn } from '@/lib/utils'
+import { Label } from '@/components/ui/label'
 
 const STATUS_OPTIONS = [
-    { value: 'available', label: 'Available', icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
-    { value: 'reserved', label: 'Reserved', icon: Clock, color: 'bg-amber-100 text-amber-700 border-amber-300' },
-    { value: 'sold', label: 'Sold', icon: CheckCircle2, color: 'bg-rose-100 text-rose-700 border-rose-300' }
+    { 
+        value: 'available', 
+        label: 'Available', 
+        icon: CheckCircle2, 
+        color: 'text-emerald-600', 
+        activeColor: 'text-emerald-700',
+        activeBg: 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-100',
+        activeIconBg: 'bg-emerald-100',
+        description: 'Unit is open for sale'
+    },
+    { 
+        value: 'reserved', 
+        label: 'Reserved', 
+        icon: Clock, 
+        color: 'text-amber-600', 
+        activeColor: 'text-amber-700',
+        activeBg: 'bg-amber-50 border-amber-200 ring-2 ring-amber-100',
+        activeIconBg: 'bg-amber-100',
+        description: 'Unit is on hold'
+    },
+    { 
+        value: 'sold', 
+        label: 'Sold', 
+        icon: ShieldCheck, 
+        color: 'text-rose-600', 
+        activeColor: 'text-rose-700',
+        activeBg: 'bg-rose-50 border-rose-200 ring-2 ring-rose-100',
+        activeIconBg: 'bg-rose-100',
+        description: 'Finalize sale record'
+    }
 ]
 
-export default function StatusChangeModal({ property, isOpen, onClose, onStatusChanged }) {
-    const [selectedStatus, setSelectedStatus] = useState(property?.status || 'available')
+export default function StatusChangeModal({ property: unit, isOpen, onClose, onStatusChanged }) {
+    const [selectedStatus, setSelectedStatus] = useState(unit?.status || 'available')
     const [loading, setLoading] = useState(false)
 
-    // Lead search state
     const [leadSearch, setLeadSearch] = useState('')
     const [leadResults, setLeadResults] = useState([])
     const [searchLoading, setSearchLoading] = useState(false)
     const [selectedLead, setSelectedLead] = useState(null)
-
-    // Sold confirmation state
     const [confirmStep, setConfirmStep] = useState(false)
 
-    // Pre-populate existing lead for current property
     useEffect(() => {
-        if (property?.leads?.length > 0) {
-            setSelectedLead(property.leads[0])
+        if (!isOpen) return
+        
+        if (unit?.lead_id) {
+            setSelectedLead(unit.leads || { id: unit.lead_id, name: 'Current Customer' })
         } else {
             setSelectedLead(null)
         }
-        setSelectedStatus(property?.status || 'available')
+        setSelectedStatus(unit?.status || 'available')
         setConfirmStep(false)
         setLeadSearch('')
-        setLeadResults([])
-    }, [property?.id, isOpen])
+    }, [unit, isOpen])
 
-    // Debounced lead search
     useEffect(() => {
         if (!leadSearch.trim() || leadSearch.length < 2) {
             setLeadResults([])
@@ -69,17 +92,13 @@ export default function StatusChangeModal({ property, isOpen, onClose, onStatusC
     const handleStatusSelect = (status) => {
         setSelectedStatus(status)
         setConfirmStep(false)
-        // Clear lead search when switching status modes
         if (status === 'available') {
             setSelectedLead(null)
-            setLeadSearch('')
-            setLeadResults([])
         }
     }
 
     const handleProceed = () => {
-        // If changing to sold, show confirm step first
-        if (selectedStatus === 'sold' && selectedStatus !== property?.status) {
+        if (selectedStatus === 'sold' && selectedStatus !== unit?.status) {
             setConfirmStep(true)
             return
         }
@@ -87,14 +106,14 @@ export default function StatusChangeModal({ property, isOpen, onClose, onStatusC
     }
 
     const handleSave = async () => {
-        if (!property || selectedStatus === property.status && !selectedLead) {
+        if (!unit) {
             onClose()
             return
         }
 
         setLoading(true)
         try {
-            const response = await fetch(`/api/inventory/properties/${property.id}/status`, {
+            const response = await fetch(`/api/inventory/units/${unit.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -109,243 +128,194 @@ export default function StatusChangeModal({ property, isOpen, onClose, onStatusC
                 throw new Error(data.error || 'Failed to update status')
             }
 
-            toast.success(`Unit ${property.unit_number || property.title} marked as ${selectedStatus}`)
+            toast.success(`Status updated for Unit ${unit.unit_number}`)
 
             if (onStatusChanged) {
-                onStatusChanged(data.property, data.projectMetrics)
+                onStatusChanged(data.unit, data.projectMetrics)
             }
             onClose()
         } catch (error) {
             console.error('Status update error:', error)
-            toast.error(error.message || 'Failed to update property status')
+            toast.error(error.message || 'Failed to update status')
         } finally {
             setLoading(false)
         }
     }
 
-    if (!property) return null
+    if (!unit) return null
 
-    const currentStatusConfig = STATUS_OPTIONS.find(s => s.value === property.status)
-    const isStatusChanged = selectedStatus !== property.status
+    const isStatusChanged = selectedStatus !== unit.status || (unit.lead_id !== (selectedLead?.id || null))
     const needsLead = selectedStatus === 'reserved' || selectedStatus === 'sold'
-    const existingLead = property?.leads?.[0]
+    const canSubmit = !loading && (isStatusChanged) && (!needsLead || selectedLead)
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        Change Unit Status
-                    </DialogTitle>
-                    <DialogDescription>
-                        <span className="font-semibold text-foreground">{property.title}</span>
-                        {property.configuration && <span className="text-muted-foreground"> · {property.configuration}</span>}
-                        {property.size_sqft && <span className="text-muted-foreground"> · {property.size_sqft} sqft</span>}
-                    </DialogDescription>
+            <DialogContent className="sm:max-w-[380px] bg-white rounded-[1.5rem] border-0 shadow-2xl p-0 overflow-hidden outline-none">
+                <DialogHeader className="p-6 pb-3 bg-slate-50/50">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
+                            <Building2 className="w-5 h-5 text-slate-900" />
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <DialogTitle className="text-base font-bold text-slate-900 leading-tight">Unit Status</DialogTitle>
+                            <DialogDescription className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                #{unit.unit_number} • {unit.tower?.name || 'MAIN'}
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
 
-                {/* Sold Confirmation Step */}
-                {confirmStep ? (
-                    <div className="space-y-4 py-2">
-                        <div className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-xl">
-                            <ShieldCheck className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
-                            <div>
-                                <p className="font-semibold text-rose-800">Confirm Sale</p>
-                                <p className="text-sm text-rose-700 mt-1">
-                                    You are marking <strong>{property.title}</strong> as <strong>Sold</strong>.
-                                    This action will update project metrics.
+                <div className="p-6 pt-4">
+                    {confirmStep ? (
+                        <div className="animate-in fade-in zoom-in-95 duration-300">
+                             <div className="flex flex-col items-center text-center p-6 bg-rose-50/50 rounded-2xl border border-rose-100 shadow-sm mb-5">
+                                <div className="w-12 h-12 bg-rose-600 rounded-xl flex items-center justify-center text-white shadow-lg mb-3 ring-2 ring-rose-100">
+                                    <AlertCircle className="w-6 h-6" />
+                                </div>
+                                <h4 className="text-lg font-bold text-rose-900 leading-none">Confirm Sale</h4>
+                                <p className="text-[10px] text-rose-600 font-bold uppercase tracking-wider mt-2 opacity-80">
+                                    Final transaction record
                                 </p>
                             </div>
-                        </div>
 
-                        {selectedLead && (
-                            <div className="p-4 bg-slate-50 rounded-xl border">
-                                <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Sold To</p>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
-                                        <User className="w-5 h-5 text-rose-600" />
+                            {selectedLead && (
+                                <div className="p-3.5 bg-white rounded-xl border border-slate-100 shadow-sm flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white text-base font-bold">
+                                        {selectedLead.name?.charAt(0)?.toUpperCase()}
                                     </div>
-                                    <div>
-                                        <p className="font-semibold text-foreground">{selectedLead.name}</p>
-                                        {selectedLead.phone && <p className="text-xs text-muted-foreground">{selectedLead.phone}</p>}
-                                        {selectedLead.email && <p className="text-xs text-muted-foreground">{selectedLead.email}</p>}
+                                    <div className="flex-1 overflow-hidden">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Confirmed Buyer</p>
+                                        <p className="text-sm font-bold text-slate-900 truncate">{selectedLead.name}</p>
                                     </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <DialogFooter className="flex gap-2">
-                            <Button variant="outline" onClick={() => setConfirmStep(false)} disabled={loading}>
-                                Back
-                            </Button>
-                            <Button
-                                onClick={handleSave}
-                                disabled={loading}
-                                className="bg-rose-600 hover:bg-rose-700 text-white"
-                            >
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                                Confirm Sale
-                            </Button>
-                        </DialogFooter>
-                    </div>
-                ) : (
-                    <div className="space-y-4 py-2">
-                        {/* Current Status */}
-                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                            <span className="text-sm text-muted-foreground">Current:</span>
-                            <Badge variant="outline" className={`${currentStatusConfig?.color} border font-semibold capitalize`}>
-                                {currentStatusConfig?.label}
-                            </Badge>
-                            {existingLead && property.status !== 'available' && (
-                                <div className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
-                                    <User className="w-3.5 h-3.5" />
-                                    <span className="font-medium text-foreground">{existingLead.name}</span>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Status Options */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground">Select New Status:</label>
-                            <div className="grid gap-2">
+                            <div className="flex gap-2.5">
+                                <Button variant="ghost" onClick={() => setConfirmStep(false)} disabled={loading} className="flex-1 h-9 rounded-xl font-bold text-slate-400 hover:text-slate-900 text-xs">Back</Button>
+                                <Button
+                                    onClick={handleSave}
+                                    disabled={loading}
+                                    className="flex-1 h-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-100 transition-all active:scale-95 text-xs"
+                                >
+                                    {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Confirm Sale"}
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-5">
+                            <div className="grid grid-cols-1 gap-2.5">
                                 {STATUS_OPTIONS.map(option => {
                                     const Icon = option.icon
+                                    const isActive = selectedStatus === option.value
                                     return (
                                         <button
                                             key={option.value}
                                             onClick={() => handleStatusSelect(option.value)}
-                                            className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${selectedStatus === option.value
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-border hover:border-blue-300 hover:bg-muted/50'
-                                                }`}
-                                        >
-                                            <Icon className={`w-5 h-5 ${selectedStatus === option.value ? 'text-blue-600' : 'text-muted-foreground'}`} />
-                                            <span className={`font-medium ${selectedStatus === option.value ? 'text-blue-900' : 'text-foreground'}`}>
-                                                {option.label}
-                                            </span>
-                                            {selectedStatus === option.value && (
-                                                <CheckCircle2 className="w-4 h-4 text-blue-600 ml-auto" />
+                                            className={cn(
+                                                "group flex items-center gap-3.5 p-3 rounded-xl border transition-all text-left relative",
+                                                isActive 
+                                                    ? option.activeBg
+                                                    : 'border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50'
                                             )}
+                                        >
+                                            <div className={cn(
+                                                "w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-sm border border-transparent",
+                                                isActive ? option.activeIconBg : 'bg-slate-50'
+                                            )}>
+                                                <Icon className={cn("w-4 h-4", isActive ? option.activeColor : 'text-slate-400')} />
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className={cn("text-[14px] font-bold leading-none mb-1", isActive ? option.activeColor : 'text-slate-900')}>
+                                                    {option.label}
+                                                </p>
+                                                <p className="text-[11px] font-semibold text-slate-400 leading-none">
+                                                    {option.description}
+                                                </p>
+                                            </div>
+                                            <div className={cn(
+                                                "w-4 h-4 rounded-full flex items-center justify-center transition-all",
+                                                isActive ? 'bg-slate-900 scale-100' : 'bg-slate-100 scale-0 opacity-0'
+                                            )}>
+                                                <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                                            </div>
                                         </button>
                                     )
                                 })}
                             </div>
-                        </div>
 
-                        {/* Lead Assignment — shown for reserved / sold */}
-                        {needsLead && (
-                            <div className="space-y-3 border-t pt-4">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-foreground">
-                                        {selectedStatus === 'sold' ? 'Buyer (Lead)' : 'Reserved By (Lead)'}
-                                        <span className="text-muted-foreground font-normal ml-1">(optional)</span>
-                                    </label>
-                                    {selectedLead && (
-                                        <button
-                                            onClick={() => { setSelectedLead(null); setLeadSearch('') }}
-                                            className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1"
-                                        >
-                                            <XCircle className="w-3.5 h-3.5" /> Clear
-                                        </button>
+                            {needsLead && (
+                                <div className="space-y-2.5 pt-1">
+                                    <div className="flex justify-between items-center px-1">
+                                        <Label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Customer</Label>
+                                        <span className="text-[8px] font-bold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md uppercase">Required</span>
+                                    </div>
+                                    
+                                    {selectedLead ? (
+                                        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-900 text-white shadow-xl shadow-slate-100 group relative">
+                                            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                                {selectedLead.name?.charAt(0)?.toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 overflow-hidden">
+                                                <p className="text-[13px] font-bold truncate leading-none mb-1">{selectedLead.name}</p>
+                                                <p className="text-[9px] text-white/50 font-bold truncate leading-none uppercase tracking-tighter">{selectedLead.phone || 'No Info'}</p>
+                                            </div>
+                                            <button onClick={() => setSelectedLead(null)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
+                                                <XCircle className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+                                            <Input
+                                                className="h-9 pl-10 rounded-xl bg-slate-50 border-slate-100 text-xs font-semibold focus:bg-white focus:ring-0 transition-all placeholder:text-slate-300"
+                                                placeholder="Search customer name..."
+                                                value={leadSearch}
+                                                onChange={e => setLeadSearch(e.target.value)}
+                                            />
+                                            {searchLoading && <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-slate-400" />}
+
+                                            {leadResults.length > 0 && (
+                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-100 shadow-2xl z-50 py-1.5 max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1">
+                                                    {leadResults.map(lead => (
+                                                        <button
+                                                            key={lead.id}
+                                                            onClick={() => { setSelectedLead(lead); setLeadResults([]); setLeadSearch('') }}
+                                                            className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-100 transition-colors text-left border-b border-slate-50 last:border-0"
+                                                        >
+                                                            <div className="w-7 h-7 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 text-[10px] font-bold">
+                                                                {lead.name?.charAt(0)}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-xs font-bold text-slate-900 truncate leading-none mb-1">{lead.name}</p>
+                                                                <p className="text-[9px] text-slate-400 truncate leading-none font-bold uppercase tracking-tight">{lead.phone || lead.email}</p>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
+                            )}
 
-                                {/* Selected Lead Card */}
-                                {selectedLead ? (
-                                    <div className={`flex items-center gap-3 p-3 rounded-xl border-2 ${selectedStatus === 'sold' ? 'border-rose-300 bg-rose-50' : 'border-amber-300 bg-amber-50'}`}>
-                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold ${selectedStatus === 'sold' ? 'bg-rose-500' : 'bg-amber-500'}`}>
-                                            {selectedLead.name?.charAt(0)?.toUpperCase()}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-sm text-foreground truncate">{selectedLead.name}</p>
-                                            <div className="flex items-center gap-3 mt-0.5">
-                                                {selectedLead.phone && (
-                                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                                        <Phone className="w-3 h-3" /> {selectedLead.phone}
-                                                    </span>
-                                                )}
-                                                {selectedLead.email && (
-                                                    <span className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                                                        <Mail className="w-3 h-3" /> {selectedLead.email}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <CheckCircle2 className={`w-5 h-5 shrink-0 ${selectedStatus === 'sold' ? 'text-rose-500' : 'text-amber-500'}`} />
-                                    </div>
-                                ) : (
-                                    /* Lead Search */
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                        <Input
-                                            className="pl-9"
-                                            placeholder="Search lead by name or phone..."
-                                            value={leadSearch}
-                                            onChange={e => setLeadSearch(e.target.value)}
-                                        />
-                                        {searchLoading && (
-                                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-                                        )}
-
-                                        {/* Dropdown results */}
-                                        {leadResults.length > 0 && (
-                                            <div className="absolute z-50 top-full mt-1 w-full bg-background border rounded-xl shadow-lg overflow-hidden">
-                                                {leadResults.map(lead => (
-                                                    <button
-                                                        key={lead.id}
-                                                        onClick={() => { setSelectedLead(lead); setLeadResults([]); setLeadSearch('') }}
-                                                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/60 transition-colors text-left"
-                                                    >
-                                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                                                            {lead.name?.charAt(0)?.toUpperCase()}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="font-medium text-sm text-foreground truncate">{lead.name}</p>
-                                                            <p className="text-xs text-muted-foreground">{lead.phone || lead.email}</p>
-                                                        </div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {leadSearch.length >= 2 && !searchLoading && leadResults.length === 0 && (
-                                            <div className="absolute z-50 top-full mt-1 w-full bg-background border rounded-xl shadow-lg py-4 text-center text-sm text-muted-foreground">
-                                                No leads found for &quot;{leadSearch}&quot;
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                            <div className="flex gap-2.5 pt-4 border-t border-slate-50">
+                                <Button variant="ghost" onClick={onClose} disabled={loading} className="flex-1 h-10 rounded-xl font-bold text-slate-400 hover:text-slate-900 text-xs">
+                                    Dismiss
+                                </Button>
+                                <Button
+                                    onClick={handleProceed}
+                                    disabled={!canSubmit}
+                                    className={cn(
+                                        "flex-1 h-10 rounded-xl transition-all font-bold text-white shadow-lg active:scale-95 text-xs",
+                                        selectedStatus === 'sold' ? "bg-rose-600 hover:bg-rose-700 shadow-rose-100" : "bg-slate-900 hover:bg-slate-800 shadow-slate-100"
+                                    )}
+                                >
+                                    {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Update Status"}
+                                </Button>
                             </div>
-                        )}
-
-                        {/* Info warning about metrics */}
-                        {isStatusChanged && property.project_id && (
-                            <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                                <p className="text-xs text-blue-800">
-                                    This will automatically update the project&apos;s unit counts.
-                                </p>
-                            </div>
-                        )}
-
-                        <DialogFooter>
-                            <Button variant="outline" onClick={onClose} disabled={loading}>
-                                Cancel
-                            </Button>
-                            <Button
-                                onClick={handleProceed}
-                                disabled={loading || !isStatusChanged}
-                                className={selectedStatus === 'sold' ? 'bg-rose-600 hover:bg-rose-700' : selectedStatus === 'reserved' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'}
-                            >
-                                {loading
-                                    ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                    : null
-                                }
-                                {selectedStatus === 'sold' ? 'Mark as Sold →' : selectedStatus === 'reserved' ? 'Reserve Unit' : 'Mark Available'}
-                            </Button>
-                        </DialogFooter>
-                    </div>
-                )}
+                        </div>
+                    )}
+                </div>
             </DialogContent>
         </Dialog>
     )

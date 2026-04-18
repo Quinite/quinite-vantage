@@ -31,6 +31,12 @@ export default function LiveCallMonitor() {
 
     // Fetch initial data
     useEffect(() => {
+        // Immediate log to check Env Var loading
+        console.log('📡 [Live Monitor] ENV LOAD CHECK:', {
+            ws_url: process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL,
+            site_url: process.env.NEXT_PUBLIC_SITE_URL
+        });
+
         const getUser = async () => {
             const { data: { user } } = await supabase.auth.getUser()
             setUser(user)
@@ -224,13 +230,20 @@ export default function LiveCallMonitor() {
                     >
                         <RefreshCw className="w-4 h-4" />
                     </button>
-                    <Badge variant="outline" className="px-3 py-1 gap-2 border-green-200 bg-green-50 text-green-700">
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                        </span>
-                        Live System
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                        <Badge variant="outline" className="px-3 py-1 gap-2 border-green-200 bg-green-50 text-green-700">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                            </span>
+                            Live System
+                        </Badge>
+                        {process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL && (
+                            <span className="text-[10px] text-muted-foreground font-mono opacity-50 hover:opacity-100 transition-opacity">
+                                WS: {process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL}
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
 

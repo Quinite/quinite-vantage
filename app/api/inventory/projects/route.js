@@ -39,9 +39,9 @@ export async function GET(request) {
 
         if (error) throw error
 
-        // Fetch all properties for these projects to calculate real stats
-        const { data: properties, error: propsError } = await adminClient
-            .from('properties')
+        // Fetch all units for these projects to calculate real stats
+        const { data: units, error: propsError } = await adminClient
+            .from('units')
             .select('id, project_id, status')
             .eq('organization_id', profile.organization_id)
 
@@ -49,13 +49,15 @@ export async function GET(request) {
 
         // Calculate real-time stats for each project
         const projectsWithStats = (projects || []).map(project => {
-            const projectProperties = (properties || []).filter(p => p.project_id === project.id)
-            const soldCount = projectProperties.filter(p => p.status === 'sold').length
-            const reservedCount = projectProperties.filter(p => p.status === 'reserved').length
-            const availableCount = projectProperties.filter(p => p.status === 'available').length
+            const projectUnits = (units || []).filter(p => p.project_id === project.id)
+            const totalCount = projectUnits.length
+            const soldCount = projectUnits.filter(p => p.status === 'sold').length
+            const reservedCount = projectUnits.filter(p => p.status === 'reserved').length
+            const availableCount = projectUnits.filter(p => p.status === 'available').length
 
             return {
                 ...project,
+                total_units: totalCount > 0 ? totalCount : (project.total_units || 0),
                 sold_units: soldCount,
                 reserved_units: reservedCount,
                 available_units: availableCount

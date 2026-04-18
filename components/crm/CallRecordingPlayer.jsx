@@ -247,20 +247,26 @@ export default function CallRecordingPlayer({ callLog }) {
                     </div>
                 </div>
 
-                {/* Call Insights */}
-                {callLog.conversation_insights && (
+                {/* Call Insights (Consolidated Schema) */}
+                {(callLog.sentiment_score !== null || callLog.ai_metadata) && (
                     <div className="border-t pt-6 space-y-4">
-                        <h4 className="font-semibold text-sm text-gray-700">Call Insights</h4>
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-semibold text-sm text-gray-700">AI Call Insights</h4>
+                            {callLog.summary && (
+                                <Badge variant="secondary" className="font-normal italic">
+                                    "{callLog.summary}"
+                                </Badge>
+                            )}
+                        </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             {/* Sentiment */}
                             <div className="space-y-1">
                                 <div className="text-xs text-gray-500">Sentiment</div>
-                                <Badge className={getSentimentColor(callLog.conversation_insights.sentiment_score)}>
-                                    <span className="flex items-center gap-1">
-                                        {getSentimentIcon(callLog.conversation_insights.sentiment_score)}
-                                        {callLog.conversation_insights.sentiment_score > 0 ? 'Positive' :
-                                            callLog.conversation_insights.sentiment_score < 0 ? 'Negative' : 'Neutral'}
+                                <Badge className={getSentimentColor(callLog.sentiment_score || 0)}>
+                                    <span className="flex items-center gap-1 text-[10px]">
+                                        {getSentimentIcon(callLog.sentiment_score || 0)}
+                                        {callLog.sentiment_label || 'Neutral'}
                                     </span>
                                 </Badge>
                             </div>
@@ -268,47 +274,48 @@ export default function CallRecordingPlayer({ callLog }) {
                             {/* Interest Level */}
                             <div className="space-y-1">
                                 <div className="text-xs text-gray-500">Interest Level</div>
-                                <Badge variant="outline">
-                                    {callLog.conversation_insights.interest_level || 'Unknown'}
-                                </Badge>
-                            </div>
-
-                            {/* Purchase Readiness */}
-                            <div className="space-y-1">
-                                <div className="text-xs text-gray-500">Purchase Readiness</div>
-                                <Badge variant="outline">
-                                    {callLog.conversation_insights.purchase_readiness || 'Unknown'}
+                                <Badge variant="outline" className="capitalize">
+                                    {callLog.interest_level || 'Unknown'}
                                 </Badge>
                             </div>
 
                             {/* Priority Score */}
                             <div className="space-y-1">
-                                <div className="text-xs text-gray-500">Priority Score</div>
+                                <div className="text-xs text-gray-500">Lead Priority</div>
                                 <div className="text-lg font-bold text-gray-900">
-                                    {callLog.conversation_insights.priority_score || 0}/100
+                                    {callLog.ai_metadata?.priority_score || 0}/100
+                                </div>
+                            </div>
+
+                            {/* Budget */}
+                            <div className="space-y-1">
+                                <div className="text-xs text-gray-500">Est. Budget</div>
+                                <div className="text-sm font-medium text-blue-600 truncate">
+                                    {callLog.ai_metadata?.budget_estimated || 'Not Mentioned'}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Key Points */}
-                        {callLog.conversation_insights.key_points && callLog.conversation_insights.key_points.length > 0 && (
+                        {/* Key Takeaways */}
+                        {callLog.ai_metadata?.key_takeaways && (
                             <div className="space-y-2">
-                                <div className="text-xs font-medium text-gray-700">Key Points</div>
-                                <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-                                    {callLog.conversation_insights.key_points.map((point, idx) => (
-                                        <li key={idx}>{point}</li>
-                                    ))}
-                                </ul>
+                                <div className="text-xs font-medium text-gray-700 flex items-center gap-2">
+                                    <Sparkles className="h-3 w-3 text-blue-500" />
+                                    Key Takeaways
+                                </div>
+                                <div className="text-sm text-gray-600 bg-slate-50 p-3 rounded-lg border border-slate-100 italic">
+                                    {callLog.ai_metadata.key_takeaways}
+                                </div>
                             </div>
                         )}
 
                         {/* Objections */}
-                        {callLog.conversation_insights.objections && callLog.conversation_insights.objections.length > 0 && (
+                        {callLog.ai_metadata?.objections && callLog.ai_metadata.objections.length > 0 && (
                             <div className="space-y-2">
                                 <div className="text-xs font-medium text-gray-700">Objections Raised</div>
                                 <div className="flex flex-wrap gap-2">
-                                    {callLog.conversation_insights.objections.map((objection, idx) => (
-                                        <Badge key={idx} variant="secondary">
+                                    {callLog.ai_metadata.objections.map((objection, idx) => (
+                                        <Badge key={idx} variant="secondary" className="bg-red-50 text-red-700 border-red-100 hover:bg-red-100 transition-colors">
                                             {objection}
                                         </Badge>
                                     ))}

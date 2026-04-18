@@ -5,7 +5,6 @@ import { toast } from 'react-hot-toast'
 const fetchProjects = async (filters = {}) => {
     const params = new URLSearchParams()
     if (filters.status) params.append('status', filters.status)
-    if (filters.type) params.append('project_type', filters.type)
     if (filters.page) params.append('page', filters.page)
     if (filters.limit) params.append('limit', filters.limit)
     if (filters.search) params.append('search', filters.search)

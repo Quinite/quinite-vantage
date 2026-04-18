@@ -15,7 +15,7 @@ import {
     Phone,
     TrendingUp,
     Clock,
-    Lock,
+    CheckSquare,
     LogOut
 } from 'lucide-react'
 import { cn } from "@/lib/utils"
@@ -52,27 +52,23 @@ export default function CrmSidebar() {
     // Grouped navigation structure with permissions
     const navigationSections = [
         {
-            title: 'Overview',
+            title: 'My Work',
             items: [
                 { label: 'Dashboard', href: '/dashboard/admin/crm/dashboard', icon: LayoutDashboard, permission: null },
+                { label: 'Tasks', href: '/dashboard/admin/crm/tasks', icon: CheckSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
             ]
         },
         {
-            title: 'Sales Management',
+            title: 'Sales',
             items: [
-                { label: 'Pipeline', href: '/dashboard/admin/crm?tab=pipeline', icon: KanbanSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
                 { label: 'Leads', href: '/dashboard/admin/crm/leads', icon: Users, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
+                { label: 'Pipeline', href: '/dashboard/admin/crm?tab=pipeline', icon: KanbanSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
                 { label: 'Projects', href: '/dashboard/admin/crm/projects', icon: FolderKanban, permission: 'view_projects' },
-            ]
-        },
-        {
-            title: 'Marketing',
-            items: [
                 { label: 'Campaigns', href: '/dashboard/admin/crm/campaigns', icon: Megaphone, permission: 'view_campaigns' },
             ]
         },
         {
-            title: 'Call Management',
+            title: 'Calls',
             items: [
                 { label: 'Live Calls', href: '/dashboard/admin/crm/calls/live', icon: Phone, permission: ['view_live_calls'] },
                 { label: 'Call History', href: '/dashboard/admin/crm/calls/history', icon: Clock, permission: ['view_call_history'] },
@@ -80,9 +76,14 @@ export default function CrmSidebar() {
             ]
         },
         {
-            title: 'Insights & Admin',
+            title: 'Reports',
             items: [
                 { label: 'Analytics', href: '/dashboard/admin/crm/analytics', icon: BarChart3, permission: ['view_own_analytics', 'view_team_analytics', 'view_org_analytics'] },
+            ]
+        },
+        {
+            title: 'Admin',
+            items: [
                 { label: 'Audit Log', href: '/dashboard/admin/crm/auditlog', icon: FileText, permission: 'view_audit_logs' },
                 { label: 'Settings', href: '/dashboard/admin/crm/settings', icon: Settings, permission: 'view_settings' },
             ]
@@ -99,89 +100,85 @@ export default function CrmSidebar() {
             >
                 <div className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
                     <nav className="space-y-4 px-2">
-                        {navigationSections.map((section, sectionIndex) => (
-                            <div key={section.title}>
-                                {/* Section Header */}
-                                {!isCollapsed && (
-                                    <div className="px-4 mb-2 animate-in fade-in duration-300">
-                                        <h3 className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">
-                                            {section.title}
-                                        </h3>
+                        {navigationSections.map((section, sectionIndex) => {
+                            // Pre-compute which items this user can actually access
+                            const visibleItems = section.items.filter(item => {
+                                if (!item.permission) return true
+                                if (Array.isArray(item.permission)) return hasAnyPermission(item.permission)
+                                return hasPermission(item.permission)
+                            })
+
+                            // Skip the entire section if nothing is accessible
+                            if (visibleItems.length === 0) return null
+
+                            return (
+                                <div key={section.title}>
+                                    {/* Section Header */}
+                                    {!isCollapsed && (
+                                        <div className="px-4 mb-2 animate-in fade-in duration-300">
+                                            <h3 className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">
+                                                {section.title}
+                                            </h3>
+                                        </div>
+                                    )}
+                                    {isCollapsed && sectionIndex > 0 && <div className="h-px bg-border my-2 mx-2" />}
+
+                                    {/* Section Items — only visible items */}
+                                    <div className="space-y-1">
+                                        {visibleItems.map((item) => {
+                                            const isActive =
+                                                pathname === item.href ||
+                                                (pathname.startsWith(item.href) && item.href !== '/dashboard/admin/crm' && !item.href.includes('?')) ||
+                                                (item.label === 'Pipeline' && pathname === '/dashboard/admin/crm')
+                                            const Icon = item.icon
+
+                                            const LinkContent = (
+                                                <Link
+                                                    href={item.href}
+                                                    className={cn(
+                                                        "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 group relative overflow-hidden",
+                                                        isActive
+                                                            ? "bg-blue-50 text-blue-700 shadow-sm"
+                                                            : "text-muted-foreground hover:bg-slate-50 hover:text-foreground",
+                                                        isCollapsed && "justify-center px-2 py-3"
+                                                    )}
+                                                >
+                                                    <Icon className={cn(
+                                                        "w-5 h-5 transition-colors",
+                                                        isActive ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600"
+                                                    )} />
+                                                    {!isCollapsed && (
+                                                        <span className="animate-in fade-in slide-in-from-left-2 duration-300 whitespace-nowrap flex-1">
+                                                            {item.label}
+                                                        </span>
+                                                    )}
+                                                    {isActive && !isCollapsed && (
+                                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-600 rounded-r-full" />
+                                                    )}
+                                                </Link>
+                                            )
+
+                                            return (
+                                                <div key={item.href}>
+                                                    {isCollapsed ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <div>{LinkContent}</div>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="right" className="font-medium bg-slate-900 text-white border-slate-800">
+                                                                {item.label}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        LinkContent
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
                                     </div>
-                                )}
-                                {isCollapsed && sectionIndex > 0 && <div className="h-px bg-border my-2 mx-2" />}
-
-                                {/* Section Items */}
-                                <div className="space-y-1">
-                                    {section.items.map((item) => {
-                                        const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/dashboard/admin/crm') || (item.label === 'Pipeline' && pathname === '/dashboard/admin/crm')
-                                        const Icon = item.icon
-
-                                        // Permission Logic
-                                        let isAllowed = true
-                                        if (item.permission) {
-                                            if (Array.isArray(item.permission)) isAllowed = hasAnyPermission(item.permission)
-                                            else isAllowed = hasPermission(item.permission)
-                                        }
-
-                                        const LinkContent = (
-                                            <Link
-                                                href={isAllowed ? item.href : '#'}
-                                                onClick={(e) => {
-                                                    if (!isAllowed) {
-                                                        e.preventDefault()
-                                                        toast.error(`You don't have permission to view ${item.label}`)
-                                                    }
-                                                }}
-                                                className={cn(
-                                                    "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 group relative overflow-hidden",
-                                                    isActive && isAllowed
-                                                        ? "bg-blue-50 text-blue-700 shadow-sm"
-                                                        : isAllowed
-                                                            ? "text-muted-foreground hover:bg-slate-50 hover:text-foreground"
-                                                            : "text-slate-400 cursor-not-allowed opacity-60 hover:bg-transparent",
-                                                    isCollapsed && "justify-center px-2 py-3"
-                                                )}
-                                            >
-                                                <Icon className={cn(
-                                                    "w-5 h-5 transition-colors",
-                                                    isActive && isAllowed ? "text-blue-600" : isAllowed ? "text-slate-400 group-hover:text-slate-600" : "text-slate-300"
-                                                )} />
-                                                {!isCollapsed && (
-                                                    <span className="animate-in fade-in slide-in-from-left-2 duration-300 whitespace-nowrap flex-1">
-                                                        {item.label}
-                                                    </span>
-                                                )}
-                                                {!isAllowed && !isCollapsed && <Lock className="w-3.5 h-3.5 text-slate-400" />}
-
-                                                {isActive && isAllowed && !isCollapsed && (
-                                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-600 rounded-r-full" />
-                                                )}
-                                            </Link>
-                                        )
-
-                                        return (
-                                            <div key={item.href}>
-                                                {isCollapsed ? (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <div className={!isAllowed ? "cursor-not-allowed" : ""}>
-                                                                {LinkContent}
-                                                            </div>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="right" className="font-medium bg-slate-900 text-white border-slate-800">
-                                                            {item.label} {!isAllowed && "(Locked)"}
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                ) : (
-                                                    LinkContent
-                                                )}
-                                            </div>
-                                        )
-                                    })}
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </nav>
                 </div>
 

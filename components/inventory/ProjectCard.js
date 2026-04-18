@@ -15,7 +15,7 @@ export default function ProjectCard({ project }) {
     const totalUnits = project.total_units || 0
     const soldUnits = project.sold_units || 0
     const reservedUnits = project.reserved_units || 0
-    const availableUnits = project.available_units || totalUnits - soldUnits - reservedUnits
+    const availableUnits = project.available_units || (totalUnits - soldUnits - reservedUnits)
 
     const occupancyRate = totalUnits > 0 ? ((soldUnits + reservedUnits) / totalUnits) * 100 : 0
 
@@ -37,14 +37,18 @@ export default function ProjectCard({ project }) {
         // Prefetch project details
         queryClient.prefetchQuery({
             queryKey: ['inventory-project', project.id],
-            queryFn: () => fetch(`/api/projects/${project.id}`).then(res => res.json()).then(d => d.project),
+            queryFn: () => fetch(`/api/projects/${project.id}`)
+                .then(res => res.ok ? res.json() : { project: null })
+                .then(d => d.project || null),
             staleTime: 5 * 60 * 1000
         })
 
-        // Prefetch properties for this project
+        // Prefetch units for this project
         queryClient.prefetchQuery({
-            queryKey: ['inventory-properties', project.id],
-            queryFn: () => fetch(`/api/inventory/properties?project_id=${project.id}`).then(res => res.json()).then(d => d.properties),
+            queryKey: ['inventory-units', project.id],
+            queryFn: () => fetch(`/api/inventory/units?project_id=${project.id}`)
+                .then(res => res.ok ? res.json() : { units: [] })
+                .then(d => d.units || []),
             staleTime: 2 * 60 * 1000
         })
     }
@@ -56,7 +60,7 @@ export default function ProjectCard({ project }) {
 
     return (
         <Card
-            className="border-border shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden"
+            className="border-border shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden bg-white"
             onMouseEnter={prefetchProjectData}
             onClick={handleClick}
         >
@@ -82,26 +86,15 @@ export default function ProjectCard({ project }) {
 
             <CardContent className="space-y-4">
                 {/* Unit Configurations & Category */}
-                <div className="space-y-2">
-                    {/* Property Category */}
-                    {project.real_estate?.property?.category && (
-                        <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="text-xs font-medium">
-                                {project.real_estate.property.category === 'residential' && '🏠 Residential'}
-                                {project.real_estate.property.category === 'commercial' && '🏢 Commercial'}
-                                {project.real_estate.property.category === 'land' && '🌳 Land'}
-                            </Badge>
-                        </div>
-                    )}
-
+                <div className="space-y-3">
                     {/* Unit Configurations */}
-                    {project.unit_types && project.unit_types.length > 0 && (
+                    {project.unit_configs && project.unit_configs.length > 0 && (
                         <div>
-                            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Configurations</p>
+                            <p className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider">Unit Configurations</p>
                             <div className="flex flex-wrap gap-1.5">
-                                {[...new Set(project.unit_types.map(ut => ut.configuration || ut.property_type))].map((config, idx) => (
-                                    <Badge key={idx} variant="outline" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
-                                        {config}
+                                {project.unit_configs.map((config, idx) => (
+                                    <Badge key={idx} variant="outline" className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200 font-bold uppercase">
+                                        {config.config_name}
                                     </Badge>
                                 ))}
                             </div>
@@ -109,8 +102,8 @@ export default function ProjectCard({ project }) {
                     )}
 
                     {/* Price Range */}
-                    {project.unit_types && project.unit_types.length > 0 && (() => {
-                        const prices = project.unit_types.map(ut => ut.price).filter(p => p > 0)
+                    {project.unit_configs && project.unit_configs.length > 0 && (() => {
+                        const prices = project.unit_configs.map(ut => ut.base_price).filter(p => p > 0)
                         if (prices.length > 0) {
                             const minPrice = Math.min(...prices)
                             const maxPrice = Math.max(...prices)
@@ -121,9 +114,9 @@ export default function ProjectCard({ project }) {
                             }
                             return (
                                 <div>
-                                    <p className="text-[10px] font-medium text-muted-foreground mb-1">Price Range</p>
-                                    <p className="text-sm font-bold text-green-600">
-                                        {minPrice === maxPrice ? formatPrice(minPrice) : `${formatPrice(minPrice)} - ${formatPrice(maxPrice)}`}
+                                    <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-wider">Starting From</p>
+                                    <p className="text-base font-black text-blue-600 tracking-tight">
+                                        {formatPrice(minPrice)}
                                     </p>
                                 </div>
                             )
@@ -134,52 +127,44 @@ export default function ProjectCard({ project }) {
 
                 {/* Quick Stats */}
                 <div className="grid grid-cols-3 gap-2.5">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-lg border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                            <Building2 className="w-4 h-4 text-blue-600" />
-                            <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide">Total</p>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Total</p>
                         </div>
-                        <p className="text-xl font-bold text-blue-900">{totalUnits}</p>
+                        <p className="text-lg font-black text-slate-900 leading-none">{totalUnits}</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-3 rounded-lg border border-emerald-200 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                            <Home className="w-4 h-4 text-emerald-600" />
-                            <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Available</p>
+                    <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <Home className="w-3.5 h-3.5 text-emerald-500" />
+                            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Available</p>
                         </div>
-                        <p className="text-xl font-bold text-emerald-900">{availableUnits}</p>
+                        <p className="text-lg font-black text-emerald-900 leading-none">{availableUnits}</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-3 rounded-lg border border-purple-200 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                            <CheckCircle2 className="w-4 h-4 text-purple-600" />
-                            <p className="text-[10px] font-semibold text-purple-700 uppercase tracking-wide">Sold</p>
+                    <div className="bg-blue-50 p-2.5 rounded-xl border border-blue-100">
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
+                            <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">Sold</p>
                         </div>
-                        <p className="text-xl font-bold text-purple-900">{soldUnits}</p>
+                        <p className="text-lg font-black text-blue-900 leading-none">{soldUnits}</p>
                     </div>
                 </div>
 
-                {/* Occupancy Bar */}
+                {/* Progress Bar */}
                 {totalUnits > 0 && (
-                    <div>
+                    <div className="pt-2">
                         <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
-                                <TrendingUp className="w-3 h-3" />
-                                Occupancy
-                            </span>
-                            <span className="text-xs font-bold text-blue-600">{occupancyRate.toFixed(1)}%</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sales Progress</span>
+                            <span className="text-[10px] font-black text-blue-600">{occupancyRate.toFixed(0)}%</span>
                         </div>
-                        <Progress value={occupancyRate} className="h-1.5 bg-blue-100" indicatorClassName="bg-blue-600" />
-                    </div>
-                )}
-
-                {/* Price Range */}
-                {project.price_range && (project.price_range.min > 0 || project.price_range.max > 0) && (
-                    <div className="pt-3 border-t border-border">
-                        <p className="text-[10px] font-medium text-muted-foreground mb-1">Price Range</p>
-                        <p className="text-sm font-bold text-foreground">
-                            ₹{project.price_range.min?.toLocaleString('en-IN')} - ₹{project.price_range.max?.toLocaleString('en-IN')}
-                        </p>
+                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-blue-500 transition-all duration-500" 
+                                style={{ width: `${occupancyRate}%` }}
+                            />
+                        </div>
                     </div>
                 )}
             </CardContent>

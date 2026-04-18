@@ -10,18 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'react-hot-toast'
 import { X } from 'lucide-react'
 
-export default function EditLeadProfileDialog({ open, onOpenChange, lead, profile, onSave }) {
+export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave }) {
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState({
-        // Lead basic info
         email: '',
         phone: '',
         mobile: '',
-        title: '',
-        department: '',
-        // Profile info
         company: '',
         job_title: '',
+        department: '',
         mailing_street: '',
         mailing_city: '',
         mailing_state: '',
@@ -30,23 +27,22 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, profil
     })
 
     useEffect(() => {
-        if (lead && profile) {
+        if (lead) {
             setFormData({
                 email: lead.email || '',
                 phone: lead.phone || '',
                 mobile: lead.mobile || '',
-                title: lead.title || '',
+                company: lead.company || '',
+                job_title: lead.job_title || '',
                 department: lead.department || '',
-                company: profile.company || '',
-                job_title: profile.job_title || '',
-                mailing_street: profile.mailing_street || '',
-                mailing_city: profile.mailing_city || '',
-                mailing_state: profile.mailing_state || '',
-                mailing_zip: profile.mailing_zip || '',
-                mailing_country: profile.mailing_country || ''
+                mailing_street: lead.mailing_street || '',
+                mailing_city: lead.mailing_city || '',
+                mailing_state: lead.mailing_state || '',
+                mailing_zip: lead.mailing_zip || '',
+                mailing_country: lead.mailing_country || ''
             })
         }
-    }, [lead, profile, open])
+    }, [lead, open])
 
     const handleChange = (e) => {
         const { name, value } = e.target
@@ -64,41 +60,18 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, profil
         setLoading(true)
 
         try {
-            // Update Lead Basic Info
-            const leadRes = await fetch(`/api/leads/${lead.id}`, {
+            // All fields now live on leads — single request
+            const res = await fetch(`/api/leads/${lead.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: formData.email,
-                    phone: formData.phone,
-                    mobile: formData.mobile,
-                    title: formData.title,
-                    department: formData.department
-                })
+                body: JSON.stringify(formData)
             })
 
-            if (!leadRes.ok) {
-                const errorData = await leadRes.json()
+            if (!res.ok) {
+                const errorData = await res.json()
                 console.error('Lead update failed:', errorData)
-                throw new Error(errorData.error || 'Failed to update lead basic info')
+                throw new Error(errorData.error || 'Failed to update profile')
             }
-
-            // Update Profile Info
-            const profileRes = await fetch(`/api/leads/${lead.id}/profile`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    company: formData.company,
-                    job_title: formData.job_title, // redundant with title but storing both for now
-                    mailing_street: formData.mailing_street,
-                    mailing_city: formData.mailing_city,
-                    mailing_state: formData.mailing_state,
-                    mailing_zip: formData.mailing_zip,
-                    mailing_country: formData.mailing_country
-                })
-            })
-
-            if (!profileRes.ok) throw new Error('Failed to update address info')
 
             toast.success('Profile updated successfully')
             onSave() // Trigger refresh
@@ -150,8 +123,8 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, profil
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="title">Job Title</Label>
-                                    <Input id="title" name="title" value={formData.title} onChange={handleChange} />
+                                    <Label htmlFor="job_title">Job Title</Label>
+                                    <Input id="job_title" name="job_title" value={formData.job_title} onChange={handleChange} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="department">Department</Label>

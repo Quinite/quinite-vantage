@@ -9,14 +9,14 @@ import { Search, Building, CheckCircle2, DollarSign, Calendar, Loader2 } from 'l
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 
-export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defaultProperty, defaultProject }) {
-    const [step, setStep] = useState(1) // 1: Select Property, 2: Deal Details
-    const [activeTab, setActiveTab] = useState('property') // 'property' or 'project'
+export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defaultUnit, defaultProject }) {
+    const [step, setStep] = useState(1) // 1: Select Unit, 2: Deal Details
+    const [activeTab, setActiveTab] = useState('unit') // 'unit' or 'project'
     const [search, setSearch] = useState('')
-    const [properties, setProperties] = useState([])
+    const [units, setUnits] = useState([])
     const [projects, setProjects] = useState([])
     const [loading, setLoading] = useState(false)
-    const [selectedProperty, setSelectedProperty] = useState(null)
+    const [selectedUnit, setSelectedUnit] = useState(null)
     const [selectedProject, setSelectedProject] = useState(null)
 
     const [dealDetails, setDealDetails] = useState({
@@ -32,37 +32,37 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
             setDealDetails({ amount: '', status: 'active', close_date: '' })
 
             // Pre-fill logic
-            if (defaultProperty) {
-                setSelectedProperty(defaultProperty)
+            if (defaultUnit) {
+                setSelectedUnit(defaultUnit)
                 setSelectedProject(null)
-                setActiveTab('property')
+                setActiveTab('unit')
                 setStep(2) // Jump to details if specific unit is known
             } else if (defaultProject) {
                 setSelectedProject(defaultProject)
-                setSelectedProperty(null)
+                setSelectedUnit(null)
                 setActiveTab('project')
                 setStep(1) // Stay on selection to allow unit picking or confirmation
             } else {
-                setSelectedProperty(null)
+                setSelectedUnit(null)
                 setSelectedProject(null)
                 setStep(1)
             }
 
-            fetchProperties()
+            fetchUnits()
             fetchProjects()
         }
-    }, [isOpen, defaultProperty, defaultProject])
+    }, [isOpen, defaultUnit, defaultProject])
 
-    const fetchProperties = async () => {
+    const fetchUnits = async () => {
         setLoading(true)
         try {
-            // Fetch available properties
-            const res = await fetch('/api/inventory/properties?status=available')
+            // Fetch available units
+            const res = await fetch('/api/inventory/units?status=available')
             const data = await res.json()
-            setProperties(data.properties || [])
+            setUnits(data.units || [])
         } catch (error) {
-            console.error('Failed to load properites:', error)
-            toast.error('Failed to load properties')
+            console.error('Failed to load units:', error)
+            toast.error('Failed to load units')
         } finally {
             setLoading(false)
         }
@@ -78,8 +78,9 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
         }
     }
 
-    const filteredProperties = properties.filter(p =>
-        p.title.toLowerCase().includes(search.toLowerCase()) ||
+    const filteredUnits = units.filter(p =>
+        (p.unit_number || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.title || '').toLowerCase().includes(search.toLowerCase()) ||
         p.project_name?.toLowerCase().includes(search.toLowerCase()) ||
         p.address?.toLowerCase().includes(search.toLowerCase())
     )
@@ -94,9 +95,9 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
         try {
             const payload = {
                 lead_id: leadId,
-                property_id: selectedProperty?.id,
+                unit_id: selectedUnit?.id,
                 project_id: selectedProject?.id,
-                name: selectedProperty ? `Deal for ${selectedProperty.title}` : (selectedProject ? `Deal for ${selectedProject.name}` : 'New Deal'),
+                name: selectedUnit ? `Deal for ${selectedUnit.unit_number}` : (selectedProject ? `Deal for ${selectedProject.name}` : 'New Deal'),
                 amount: dealDetails.amount,
                 status: dealDetails.status,
                 close_date: dealDetails.close_date || null
@@ -125,7 +126,7 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{step === 1 ? 'Select Property or Project' : 'Deal Details'}</DialogTitle>
+                    <DialogTitle>{step === 1 ? 'Select Unit or Project' : 'Deal Details'}</DialogTitle>
                     <DialogDescription>
                         {step === 1 ? 'Link a specific unit or a general project to this deal' : 'Enter the deal value and status'}
                     </DialogDescription>
@@ -135,8 +136,8 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
                     <div className="py-2 space-y-4">
                         <div className="flex p-1 bg-muted rounded-lg">
                             <button
-                                className={`flex-1 text-sm font-medium py-1.5 rounded-md transition-all ${activeTab === 'property' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                                onClick={() => setActiveTab('property')}
+                                className={`flex-1 text-sm font-medium py-1.5 rounded-md transition-all ${activeTab === 'unit' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                onClick={() => setActiveTab('unit')}
                             >
                                 Specific Unit
                             </button>
@@ -151,7 +152,7 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
-                                placeholder={activeTab === 'property' ? "Search units..." : "Search projects..."}
+                                placeholder={activeTab === 'unit' ? "Search units..." : "Search projects..."}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="pl-9"
@@ -164,19 +165,19 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                     Loading...
                                 </div>
-                            ) : activeTab === 'property' ? (
-                                filteredProperties.length === 0 ? (
+                            ) : activeTab === 'unit' ? (
+                                filteredUnits.length === 0 ? (
                                     <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-4 text-center">
-                                        No available properties found.
+                                        No available units found.
                                     </div>
                                 ) : (
-                                    filteredProperties.map(property => (
+                                    filteredUnits.map(unit => (
                                         <div
-                                            key={property.id}
-                                            onClick={() => { setSelectedProperty(property); setSelectedProject(null); }}
+                                            key={unit.id}
+                                            onClick={() => { setSelectedUnit(unit); setSelectedProject(null); }}
                                             className={`
                                                 group flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all
-                                                ${selectedProperty?.id === property.id
+                                                ${selectedUnit?.id === unit.id
                                                     ? 'border-primary bg-primary/5 ring-1 ring-primary'
                                                     : 'border-transparent bg-card hover:bg-accent/50 hover:border-border'
                                                 }
@@ -187,22 +188,24 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex justify-between items-start">
-                                                    <h4 className="font-medium text-sm text-foreground truncate">{property.title}</h4>
-                                                    {selectedProperty?.id === property.id && (
+                                                    <h4 className="font-medium text-sm text-foreground truncate">
+                                                        {unit.unit_number} {unit.title ? `- ${unit.title}` : ''}
+                                                    </h4>
+                                                    {selectedUnit?.id === unit.id && (
                                                         <CheckCircle2 className="w-4 h-4 text-primary" />
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-background">
-                                                        {property.type}
+                                                        {unit.config?.property_type || unit.type || 'Unit'}
                                                     </Badge>
                                                     <span className="text-xs font-semibold text-foreground">
-                                                        ₹{parseInt(property.price).toLocaleString('en-IN')}
+                                                        ₹{parseInt(unit.total_price || unit.base_price || unit.price || 0).toLocaleString('en-IN')}
                                                     </span>
                                                 </div>
-                                                {property.project_name && (
+                                                {unit.project_name && (
                                                     <p className="text-xs text-muted-foreground mt-1 truncate">
-                                                        {property.project_name}
+                                                        {unit.project_name}
                                                     </p>
                                                 )}
                                             </div>
@@ -249,7 +252,7 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
 
                         <div className="flex justify-center">
                             <Button variant="link" size="sm" className="text-xs text-muted-foreground" onClick={() => {
-                                setSelectedProperty(null)
+                                setSelectedUnit(null)
                                 setSelectedProject(null)
                                 setStep(2)
                             }}>
@@ -261,15 +264,15 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
 
                 {step === 2 && (
                     <div className="py-4 space-y-6">
-                        {(selectedProperty || selectedProject) ? (
+                        {(selectedUnit || selectedProject) ? (
                             <div className="p-3 bg-muted/30 rounded-lg border flex items-center gap-3">
                                 <Building className="w-5 h-5 text-muted-foreground" />
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium text-sm truncate">
-                                        {selectedProperty ? selectedProperty.title : selectedProject.name}
+                                        {selectedUnit ? selectedUnit.unit_number : selectedProject.name}
                                     </p>
                                     <p className="text-xs text-muted-foreground">
-                                        {selectedProperty ? selectedProperty.project_name : 'Project Deal'}
+                                        {selectedUnit ? selectedUnit.project_name : 'Project Deal'}
                                     </p>
                                 </div>
                                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setStep(1)}>Change</Button>
@@ -281,7 +284,7 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
                                 </div>
                                 <div className="flex-1">
                                     <p className="font-medium text-sm">General Deal</p>
-                                    <p className="text-xs text-muted-foreground">No specific property or project linked</p>
+                                    <p className="text-xs text-muted-foreground">No specific unit or project linked</p>
                                 </div>
                                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setStep(1)}>Link</Button>
                             </div>
@@ -336,10 +339,10 @@ export default function AddDealDialog({ leadId, isOpen, onClose, onSuccess, defa
                 )}
 
                 <DialogFooter>
-                    {step === 1 ? (
+                        {step === 1 ? (
                         <>
                             <Button variant="ghost" onClick={onClose}>Cancel</Button>
-                            <Button onClick={() => setStep(2)} disabled={!selectedProperty && !selectedProject}>Next</Button>
+                            <Button onClick={() => setStep(2)} disabled={!selectedUnit && !selectedProject}>Next</Button>
                         </>
                     ) : (
                         <>
