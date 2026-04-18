@@ -56,6 +56,12 @@ export async function PATCH(request, { params }) {
             if (body[field] !== undefined) allowedUpdates[field] = body[field]
         })
 
+        // Sanitize: empty strings → null for date/nullable columns (Postgres rejects '' for date type)
+        const dateFields = ['possession_date', 'completion_date']
+        dateFields.forEach(f => {
+            if (allowedUpdates[f] === '' || allowedUpdates[f] === null) allowedUpdates[f] = null
+        })
+
         // amenities: null = inherit from config, [] = no features, array = override
         if (body.amenities !== undefined) allowedUpdates.amenities = body.amenities
 
