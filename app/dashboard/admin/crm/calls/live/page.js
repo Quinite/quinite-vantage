@@ -29,14 +29,10 @@ export default function LiveCallMonitor() {
     // Permissions
     const hasAccess = usePermission('view_live_calls')
 
-    // Fetch initial data
-    useEffect(() => {
-        // Immediate log to check Env Var loading
-        console.log('📡 [Live Monitor] ENV LOAD CHECK:', {
-            ws_url: process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL,
-            site_url: process.env.NEXT_PUBLIC_SITE_URL
-        });
+    // Real-time elapsed seconds per active call
+    const [elapsed, setElapsed] = useState({})
 
+    useEffect(() => {
         const getUser = async () => {
             const { data: { user } } = await supabase.auth.getUser()
             setUser(user)
@@ -126,7 +122,7 @@ export default function LiveCallMonitor() {
             .from('call_logs')
             .select(`
                 *,
-                lead:leads(id, name, phone, email),
+                lead:leads(id, name, phone, email, mailing_city),
                 campaign:campaigns(id, name)
             `)
             .in('call_status', ['in_progress', 'ringing'])
@@ -177,7 +173,30 @@ export default function LiveCallMonitor() {
         }
     }
 
-    const getCallDuration = (startTime) => {
+    // Live duration counter — ticks every second for all active calls
+    useEffect(() => {
+        if (!activeCalls.length) return
+        const timer = setInterval(() => {
+            const now = Date.now()
+            const updated = {}
+            activeCalls.forEach(c => {
+                const start = new Date(c.created_at).getTime()
+                updated[c.id] = Math.floor((now - start) / 1000)
+            })
+            setElapsed(updated)
+        }, 1000)
+        return () => clearInterval(timer)
+    }, [activeCalls])
+
+    const formatElapsed = (secs) => {
+        if (!secs) return '0s'
+        const m = Math.floor(secs / 60)
+        const s = secs % 60
+        return m > 0 ? `${m}m ${s}s` : `${s}s`
+    }
+
+    const getCallDuration = (callId, startTime) => {
+        if (elapsed[callId] != null) return formatElapsed(elapsed[callId])
         if (!startTime) return '0s'
         return formatDistanceToNow(new Date(startTime), { addSuffix: false })
     }
@@ -358,7 +377,10 @@ export default function LiveCallMonitor() {
                                                 <CardTitle className="text-base font-semibold text-foreground">
                                                     {call.lead?.name || 'Unknown Lead'}
                                                 </CardTitle>
-                                                <p className="text-sm text-muted-foreground">{call.lead?.phone || call.callee_number}</p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {call.lead?.phone || call.callee_number}
+                                                    {call.lead?.mailing_city && <span className="ml-1 text-xs text-muted-foreground/70">· {call.lead.mailing_city}</span>}
+                                                </p>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Badge
@@ -383,7 +405,7 @@ export default function LiveCallMonitor() {
                                         <div className="flex items-center gap-2 text-sm">
                                             <Clock className="w-4 h-4 text-muted-foreground" />
                                             <span className="text-muted-foreground">Duration:</span>
-                                            <span className="font-medium text-foreground">{getCallDuration(call.started_at)}</span>
+                                            <span className="font-medium text-foreground font-mono">{getCallDuration(call.id, call.created_at)}</span>
                                         </div>
 
                                         {/* Campaign */}

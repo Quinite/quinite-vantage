@@ -596,6 +596,7 @@ export default function CampaignsPage() {
   const [page, setPage] = useState(1)
   const [selectedProjectId, setSelectedProjectId] = useState(() => searchParams.get('project_id') || 'all')
   const [projects, setProjects] = useState([])
+  const [creditBalance, setCreditBalance] = useState(null)
 
   // Campaign Data
   const { data: campaignsResponse, isLoading: loading, isPlaceholderData } = useCampaigns({
@@ -632,7 +633,7 @@ export default function CampaignsPage() {
   const [editAiScript, setEditAiScript] = useState('')
   const [editCallSettings, setEditCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
 
-  useEffect(() => { fetchProjectsOnly() }, [])
+  useEffect(() => { fetchProjectsOnly(); fetchCreditBalance() }, [])
 
   // Sync filter when URL query param changes (e.g. navigating from project page)
   useEffect(() => {
@@ -640,6 +641,16 @@ export default function CampaignsPage() {
     setSelectedProjectId(pid || 'all')
     setPage(1)
   }, [searchParams])
+
+  async function fetchCreditBalance() {
+    try {
+      const res = await fetch('/api/crm/credits')
+      if (res.ok) {
+        const data = await res.json()
+        setCreditBalance(data.balance ?? null)
+      }
+    } catch (_) {}
+  }
 
   async function fetchProjectsOnly() {
     try {
@@ -819,7 +830,15 @@ export default function CampaignsPage() {
       {/* Header */}
       <div className="p-6 border-b border-border bg-background">
         <div className="flex items-center justify-between gap-4 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">All Campaigns</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">All Campaigns</h1>
+            {creditBalance != null && (
+              <Badge variant={creditBalance < 5 ? 'destructive' : 'secondary'} className="text-xs px-2 py-1">
+                {creditBalance < 5 && '⚠ '}
+                {creditBalance.toFixed(1)} credits
+              </Badge>
+            )}
+          </div>
           <PermissionTooltip hasPermission={canCreate} message="You need 'Create Campaigns' permission.">
             <Button
               onClick={() => { if (!canCreate) return; setShowCreateDialog(true) }}
