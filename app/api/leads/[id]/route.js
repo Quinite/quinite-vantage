@@ -22,7 +22,7 @@ export const GET = withAuth(async (request, { params, user, profile }) => {
                 stage:pipeline_stages(id, name, color, pipeline_id),
                 deals(id, name, amount, status, created_at, unit:units(id, unit_number, floor_number, carpet_area, built_up_area, base_price, total_price, status, bedrooms, facing, transaction_type), project:projects(id, name)),
                 unit:units!properties_lead_id_fkey(id, unit_number, base_price, total_price),
-                call_logs!call_logs_lead_id_fkey(id, duration, created_at, direction, notes, call_status, summary, recording_url, conversation_transcript, sentiment_score, interest_level, disconnect_reason),
+                call_logs!call_logs_lead_id_fkey(id, duration, created_at, ended_at, direction, notes, call_status, summary, recording_url, conversation_transcript, sentiment_score, interest_level, disconnect_reason, transferred, call_cost, ai_metadata),
                 assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name, avatar_url)
             `)
             .eq('id', id)

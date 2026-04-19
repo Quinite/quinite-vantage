@@ -69,7 +69,7 @@ export default function CallHistory() {
                 conversation_transcript, sentiment_score,
                 interest_level, summary, ai_metadata, transferred,
                 disconnect_reason, callee_number,
-                lead:leads(id, name, phone, email, assigned_to),
+                lead:leads!call_logs_lead_id_fkey(id, name, phone, email, assigned_to),
                 campaign:campaigns(id, name)
             `)
             .eq('organization_id', organizationId)
@@ -328,7 +328,7 @@ function CallRow({ call, getStatusColor, getSentimentColor, formatDuration, isSe
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <User className="h-4 w-4 text-gray-400" />
-                                    <span>Interest: <span className="font-medium capitalize">{call.interest_level}</span></span>
+                                    <span>Interest: <span className="font-medium capitalize">{call.interest_level || call.ai_metadata?.interest_level || '—'}</span></span>
                                 </div>
                                 {call.ai_metadata?.priority_score && (
                                     <div className="flex items-center gap-1">

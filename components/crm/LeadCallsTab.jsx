@@ -26,6 +26,8 @@ const STATUS_CONFIG = {
     busy:        { cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', label: 'Busy' },
     failed:      { cls: 'bg-red-100 text-red-700 border-red-200',       label: 'Failed' },
     in_progress: { cls: 'bg-blue-100 text-blue-700 border-blue-200 animate-pulse', label: 'In Progress' },
+    completed:   { cls: 'bg-green-100 text-green-700 border-green-200', label: 'Completed' },
+    disconnected:{ cls: 'bg-slate-100 text-slate-700 border-slate-200', label: 'Disconnected' },
 }
 
 function getStatusConfig(status) {
@@ -55,7 +57,8 @@ function CallCard({ call }) {
 
     const statusCfg = getStatusConfig(call.call_status)
     const sentimentCfg = getSentimentLabel(call.sentiment_score)
-    const interestCfg = getInterestLabel(call.interest_level)
+    const interestLevel = call.interest_level || call.ai_metadata?.interest_level
+    const interestCfg = getInterestLabel(interestLevel)
     const isOutbound = (call.direction || 'outbound').toLowerCase() === 'outbound'
 
     return (
