@@ -84,6 +84,14 @@ export class LeadRepository extends BaseRepository<Lead> {
             query = query.eq('assigned_to', filters.assignedTo)
         }
 
+        // Archive Filtering
+        if (filters.viewMode === 'archived') {
+            query = query.not('archived_at', 'is', null)
+        } else {
+            // Default: show only active leads
+            query = query.is('archived_at', null)
+        }
+
         return query
     }
 }

@@ -47,6 +47,7 @@ export const GET = withAuth(async (request, context) => {
             assignedTo: searchParams.get('assigned_to'),
             search: searchParams.get('search'),
             status: searchParams.get('status'),
+            viewMode: searchParams.get('view_mode') || 'active',
             page: searchParams.get('page') || 1,
             limit: searchParams.get('limit') || 20,
             sortBy: searchParams.get('sortBy'),

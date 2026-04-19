@@ -10,6 +10,7 @@ export interface FilterOptions {
     assignedTo?: string
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
+    viewMode?: 'active' | 'archived'
 }
 
 export interface PermissionOptions {
@@ -37,10 +38,18 @@ export class LeadService {
         const query = repo.findLeadsWithRelations(organizationId, filters)
 
         // Get total count
-        const { count, error: countError } = await repo.client
+        const countQuery = repo.client
             .from('leads')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
+
+        if (filters.viewMode === 'archived') {
+            countQuery.not('archived_at', 'is', null)
+        } else {
+            countQuery.is('archived_at', null)
+        }
+
+        const { count, error: countError } = await countQuery
 
         if (countError) console.error('Error counting leads:', countError)
 
@@ -83,10 +92,23 @@ export class LeadService {
         const from = (page - 1) * limit
         const to = from + limit - 1
 
-        const { count, error: countError } = await repo.client
+        const countQuery = repo.client
             .from('leads')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
+
+        if (filters.viewMode === 'archived') {
+            countQuery.not('archived_at', 'is', null)
+        } else {
+            countQuery.is('archived_at', null)
+        }
+
+        // Apply permission scoping to count if applicable
+        if (!canViewAll && !canViewTeam && canViewOwn) {
+            countQuery.eq('assigned_to', userId)
+        }
+
+        const { count, error: countError } = await countQuery
 
         const { data: scopedLeads, error: scopedError } = await query.range(from, to)
 

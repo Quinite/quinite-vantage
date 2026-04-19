@@ -255,6 +255,16 @@ export async function DELETE(request, { params }) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
+        // Platform Admin Hard-Delete Guard Check
+        const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+        
+        if (userProfile?.role !== 'platform_admin') {
+            return NextResponse.json({
+                success: false,
+                message: 'Permanent deletion is locked. Only Platform Admins can hard delete leads. Please use the Archive function instead.'
+            }, { status: 403 })
+        }
+
         const canDelete = await hasDashboardPermission(user.id, 'delete_leads')
         if (!canDelete) {
             return NextResponse.json({

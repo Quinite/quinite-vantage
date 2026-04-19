@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Edit, Trash2, Phone, Mail, User, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Edit, Trash2, Phone, Mail, User, ArrowUpDown, ArrowUp, ArrowDown, Archive, RefreshCcw } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getDefaultAvatar } from '@/lib/avatar-utils'
 import Link from 'next/link'
@@ -49,7 +49,13 @@ export function LeadTable({
     onSort,
     limit = 20,
     onLimitChange,
-    totalLeads = 0
+    totalLeads = 0,
+    onArchive,
+    onBulkArchive,
+    onRestore,
+    onBulkRestore,
+    isPlatformAdmin = false,
+    viewMode = 'active'
 }) {
 
     const toggleSelectAll = () => {
@@ -175,15 +181,35 @@ export function LeadTable({
                                     )}
                                 </div>
                                 <div className="flex gap-1">
-                                    {canEditLead(lead) && (
-                                        <Button variant="ghost" size="sm" onClick={() => onEdit(lead)} className="h-8 w-8 p-0">
-                                            <Edit className="h-4 w-4" />
+                                    {viewMode === 'archived' && (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            onClick={() => onRestore?.(lead)} 
+                                            className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                            title="Restore Lead"
+                                        >
+                                            <RefreshCcw className="h-4 w-4" />
                                         </Button>
                                     )}
-                                    {canDelete && (
-                                        <Button variant="ghost" size="sm" onClick={() => onDelete(lead)} className="h-8 w-8 p-0 text-destructive hover:text-destructive">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                    {viewMode !== 'archived' && (
+                                        <>
+                                            {canEditLead(lead) && (
+                                                <>
+                                                    <Button variant="ghost" size="sm" onClick={() => onEdit(lead)} className="h-8 w-8 p-0">
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="sm" onClick={() => onArchive?.(lead)} className="h-8 w-8 p-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50">
+                                                        <Archive className="h-4 w-4" />
+                                                    </Button>
+                                                </>
+                                            )}
+                                            {canDelete && isPlatformAdmin && (
+                                                <Button variant="ghost" size="sm" onClick={() => onDelete(lead)} className="h-8 w-8 p-0 text-destructive hover:text-destructive">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -313,7 +339,7 @@ export function LeadTable({
                                                     <Select
                                                         value={lead.stage_id || "none"}
                                                         onValueChange={(val) => onStatusUpdate(lead.id, val)}
-                                                        disabled={updatingStatus}
+                                                        disabled={updatingStatus || viewMode === 'archived'}
                                                     >
                                                         <SelectTrigger className="h-9 w-full bg-background border-slate-200 hover:bg-slate-50 transition-colors">
                                                             <SelectValue placeholder="Set Stage">
@@ -390,15 +416,35 @@ export function LeadTable({
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
-                                            {canEditLead(lead) && (
-                                                <Button variant="ghost" size="icon" onClick={() => onEdit(lead)}>
-                                                    <Edit className="h-4 w-4" />
+                                            {viewMode === 'archived' && (
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    onClick={() => onRestore?.(lead)} 
+                                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                    title="Restore Lead"
+                                                >
+                                                    <RefreshCcw className="h-4 w-4" />
                                                 </Button>
                                             )}
-                                            {canDelete && (
-                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(lead)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                            {viewMode !== 'archived' && (
+                                                <>
+                                                    {canEditLead(lead) && (
+                                                        <>
+                                                            <Button variant="ghost" size="icon" onClick={() => onEdit(lead)}>
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => onArchive?.(lead)} title="Archive Lead">
+                                                                <Archive className="h-4 w-4" />
+                                                            </Button>
+                                                        </>
+                                                    )}
+                                                    {canDelete && isPlatformAdmin && (
+                                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(lead)} title="Permanently Delete">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </TableCell>
@@ -480,8 +526,34 @@ export function LeadTable({
                         </Select>
                     )}
 
+                    {/* Bulk Archive */}
+                    {onBulkArchive && viewMode === 'active' && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-full px-4 text-amber-600 border-amber-200 hover:bg-amber-50"
+                            onClick={onBulkArchive}
+                        >
+                            <Archive className="w-4 h-4 mr-2" />
+                            Archive
+                        </Button>
+                    )}
+
+                    {/* Bulk Restore */}
+                    {onBulkRestore && viewMode === 'archived' && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-full px-4 text-blue-600 border-blue-200 hover:bg-blue-50"
+                            onClick={onBulkRestore}
+                        >
+                            <RefreshCcw className="w-4 h-4 mr-2" />
+                            Restore
+                        </Button>
+                    )}
+
                     {/* Bulk Delete */}
-                    {onBulkDelete && (canDelete || true) && (
+                    {onBulkDelete && viewMode !== 'archived' && (canDelete || true) && (
                         <Button
                             variant="destructive"
                             size="sm"

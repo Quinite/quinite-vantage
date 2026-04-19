@@ -2,12 +2,24 @@
 
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Plus, Archive, AlertCircle, ShieldAlert, Loader2 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'react-hot-toast'
 
 // Hooks
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useBulkDeleteLeads, useBulkUpdateLeads } from '@/hooks/useLeads'
+import { 
+  useLeads, 
+  useCreateLead, 
+  useUpdateLead, 
+  useDeleteLead, 
+  useBulkDeleteLeads, 
+  useBulkUpdateLeads,
+  useArchiveLead,
+  useBulkArchiveLeads,
+  useRestoreLead,
+  useBulkRestoreLeads
+} from '@/hooks/useLeads'
 import { useProjects } from '@/hooks/useProjects'
 import { useQuery } from '@tanstack/react-query'
 
@@ -37,6 +49,7 @@ export default function LeadsPage() {
   const [limit, setLimit] = useState(20)
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
+  const [viewMode, setViewMode] = useState('active') // 'active' or 'archived'
 
   // Dialog States
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -46,12 +59,20 @@ export default function LeadsPage() {
   const [leadToDelete, setLeadToDelete] = useState(null)
   const [isRefreshingLeads, setIsRefreshingLeads] = useState(false)
 
-  // Permissions
+  // Archive States
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false)
+  const [leadToArchive, setLeadToArchive] = useState(null)
+  const [archiveImpact, setArchiveImpact] = useState(null)
+  const [isCalculatingImpact, setIsCalculatingImpact] = useState(false)
+
+  // Permissions & Auth
+  const { profile } = useAuth()
   const canCreate = usePermission('create_leads')
   const canEditAll = usePermission('edit_all_leads')
   const canEditTeam = usePermission('edit_team_leads')
   const canEditOwn = usePermission('edit_own_leads')
   const canDelete = usePermission('delete_leads')
+  const isPlatformAdmin = profile?.role === 'platform_admin'
 
   // Helper: Can Edit
   const canEditLead = (lead) => {
@@ -69,7 +90,8 @@ export default function LeadsPage() {
     page: page,
     limit: limit,
     sortBy: sortBy,
-    sortOrder: sortOrder
+    sortOrder: sortOrder,
+    viewMode: viewMode
   })
 
   const leads = leadsResponse?.leads || []
@@ -83,6 +105,7 @@ export default function LeadsPage() {
       setIsRefreshingLeads(false)
     }
   }
+
 
 
 
@@ -105,9 +128,13 @@ export default function LeadsPage() {
   const deleteLeadMutation = useDeleteLead()
   const bulkDeleteMutation = useBulkDeleteLeads()
   const bulkUpdateMutation = useBulkUpdateLeads()
+  const archiveLeadMutation = useArchiveLead()
+  const bulkArchiveMutation = useBulkArchiveLeads()
+  const restoreLeadMutation = useRestoreLead()
+  const bulkRestoreMutation = useBulkRestoreLeads()
 
   // Derived Loading State
-  const leadsListLoading = leadsLoading || isRefreshingLeads || deleteLeadMutation.isPending || bulkDeleteMutation.isPending
+  const leadsListLoading = leadsLoading || isRefreshingLeads || deleteLeadMutation.isPending || bulkDeleteMutation.isPending || bulkArchiveMutation.isPending || restoreLeadMutation.isPending || bulkRestoreMutation.isPending
 
   // Handlers
   const handleCreateEditSubmit = async (data) => {
@@ -162,6 +189,52 @@ export default function LeadsPage() {
     }
   }
 
+  const handleArchiveClick = async (lead) => {
+    setLeadToArchive(lead)
+    setArchiveDialogOpen(true)
+    setIsCalculatingImpact(true)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/archive-preview`)
+      const data = await res.json()
+      setArchiveImpact(data.impact)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsCalculatingImpact(false)
+    }
+  }
+
+  const handleRestore = async (lead) => {
+    setIsRefreshingLeads(true)
+    try {
+      await restoreLeadMutation.mutateAsync(lead.id)
+      await refetchLeads()
+      toast.success('Lead restored to pipeline')
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to restore lead')
+    } finally {
+      setIsRefreshingLeads(false)
+    }
+  }
+
+  const confirmArchive = async () => {
+    if (!leadToArchive) return
+    setIsRefreshingLeads(true)
+    try {
+      await archiveLeadMutation.mutateAsync(leadToArchive.id)
+      setArchiveDialogOpen(false)
+      setLeadToArchive(null)
+      await refetchLeads()
+      toast.success('Lead archived safely')
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to archive lead')
+    } finally {
+      setIsRefreshingLeads(false)
+    }
+  }
+
   const handleBulkDelete = async () => {
     if (selectedLeads.size === 0) return
     if (!confirm(`Are you sure you want to delete ${selectedLeads.size} selected leads?`)) return
@@ -175,6 +248,42 @@ export default function LeadsPage() {
     } catch (error) {
       console.error(error)
       toast.error('Failed to delete leads')
+    } finally {
+      setIsRefreshingLeads(false)
+    }
+  }
+
+  const handleBulkArchive = async () => {
+    if (selectedLeads.size === 0) return
+    if (!confirm(`Archive ${selectedLeads.size} leads? This will freeze their active campaigns and cancel pending tasks.`)) return
+
+    setIsRefreshingLeads(true)
+    try {
+      await bulkArchiveMutation.mutateAsync(Array.from(selectedLeads))
+      setSelectedLeads(new Set())
+      await refetchLeads()
+      toast.success(`${selectedLeads.size} leads archived`)
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to archive leads')
+    } finally {
+      setIsRefreshingLeads(false)
+    }
+  }
+
+  const handleBulkRestore = async () => {
+    if (selectedLeads.size === 0) return
+    if (!confirm(`Restore ${selectedLeads.size} leads back to the active pipeline?`)) return
+
+    setIsRefreshingLeads(true)
+    try {
+      await bulkRestoreMutation.mutateAsync(Array.from(selectedLeads))
+      setSelectedLeads(new Set())
+      await refetchLeads()
+      toast.success(`${selectedLeads.size} leads restored`)
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to restore leads')
     } finally {
       setIsRefreshingLeads(false)
     }
@@ -250,20 +359,31 @@ export default function LeadsPage() {
         users={users}
         onRefresh={handleRefreshLeads}
         loading={leadsListLoading}
+        viewMode={viewMode}
+        setViewMode={(val) => {
+          setViewMode(val)
+          setPage(1)
+        }}
       />
 
       <LeadTable
         leads={leads}
         loading={leadsListLoading}
+        viewMode={viewMode}
         selectedLeads={selectedLeads}
         setSelectedLeads={setSelectedLeads}
         onEdit={handleEditClick}
         onDelete={handleDeleteClick}
+        onArchive={handleArchiveClick}
+        onRestore={handleRestore}
+        onBulkRestore={handleBulkRestore}
         canEditLead={canEditLead}
         canDelete={canDelete}
+        isPlatformAdmin={isPlatformAdmin}
         onStatusUpdate={handleStatusUpdate}
         stages={allStages}
         onBulkDelete={handleBulkDelete}
+        onBulkArchive={handleBulkArchive}
         onBulkAssign={handleBulkAssign}
         users={users}
 
@@ -316,19 +436,95 @@ export default function LeadsPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-destructive" />
+              Permanent Deletion?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the lead.
+              This is a <span className="font-bold text-destructive underline">Hard Delete</span>. All call logs, conversation insights, and deals for this lead will be permanently scrubbed from the database. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              Permanently Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Archive Dialog */}
+      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Archive className="w-5 h-5 text-amber-600" />
+              Safe Lead Archive?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Archiving removes the lead from active pipelines but preserves all history and performance metrics for reporting.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {isCalculatingImpact ? (
+            <div className="py-6 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Calculating archive impact...</p>
+            </div>
+          ) : archiveImpact && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-1 gap-2">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-orange-50 border border-orange-100">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-orange-600" />
+                    <span className="text-sm font-medium text-orange-900">Active Campaigns</span>
+                  </div>
+                  <span className="text-sm font-bold text-orange-600">{archiveImpact.active_campaigns} will be frozen</span>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <span className="text-sm font-medium">Pending Tasks</span>
+                  </div>
+                  <span className="text-sm font-bold text-slate-600 font-mono">{archiveImpact.pending_tasks} cancelled</span>
+                </div>
+
+                {archiveImpact.open_deals > 0 && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <span className="text-sm font-medium">Open Deals</span>
+                    </div>
+                    <span className="text-sm font-bold text-slate-600">{archiveImpact.open_deals} marked as Lost</span>
+                  </div>
+                )}
+                
+                {archiveImpact.has_linked_unit && (
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                    <p className="text-xs text-blue-700">
+                      <strong>Note:</strong> Associated unit will stay marked as <strong>{archiveImpact.linked_unit_sold ? 'Sold' : 'Reserved'}</strong>. This does not release the inventory back to the market.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground italic">
+                All call recordings and conversation transcripts will be safely preserved.
+              </p>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiveLeadMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmArchive}
+              disabled={isCalculatingImpact || archiveLeadMutation.isPending}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {archiveLeadMutation.isPending ? 'Archiving...' : 'Confirm Archive'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   )
 }

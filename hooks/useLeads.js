@@ -16,6 +16,7 @@ export function useLeads(filters = {}) {
             if (filters.stageId) params.append('stage_id', filters.stageId)
             if (filters.search) params.append('search', filters.search)
             if (filters.status) params.append('status', filters.status)
+            if (filters.viewMode) params.append('view_mode', filters.viewMode)
             if (filters.assignedTo) params.append('assigned_to', filters.assignedTo)
             if (filters.page) params.append('page', filters.page)
             if (filters.limit) params.append('limit', filters.limit)
@@ -184,6 +185,117 @@ export function useBulkUpdateLeads() {
         },
         onSuccess: (data, { leadIds }) => {
             // Remove all updated leads from cache to force refresh
+            leadIds.forEach(id => {
+                queryClient.removeQueries({ queryKey: ['lead', id] })
+            })
+            // Invalidate leads list
+            queryClient.invalidateQueries({ queryKey: ['leads'] })
+        }
+    })
+}
+
+/**
+ * Custom hook for archiving a lead
+ */
+export function useArchiveLead() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (leadId) => {
+            const response = await fetch(`/api/leads/${leadId}/archive`, {
+                method: 'POST'
+            })
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to archive lead')
+            }
+            return response.json()
+        },
+        onSuccess: (data, leadId) => {
+            // Remove from cache
+            queryClient.removeQueries({ queryKey: ['lead', leadId] })
+            // Invalidate leads list
+            queryClient.invalidateQueries({ queryKey: ['leads'] })
+        }
+    })
+}
+/**
+ * Custom hook for bulk archiving leads
+ */
+export function useBulkArchiveLeads() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (leadIds) => {
+            const response = await fetch('/api/leads/bulk-archive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadIds })
+            })
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to archive leads')
+            }
+            return response.json()
+        },
+        onSuccess: (data, leadIds) => {
+            // Remove all archived leads from cache
+            leadIds.forEach(id => {
+                queryClient.removeQueries({ queryKey: ['lead', id] })
+            })
+            // Invalidate leads list
+            queryClient.invalidateQueries({ queryKey: ['leads'] })
+        }
+    })
+}
+
+/**
+ * Custom hook for restoring an archived lead
+ */
+export function useRestoreLead() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (leadId) => {
+            const response = await fetch(`/api/leads/${leadId}/restore`, {
+                method: 'POST'
+            })
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to restore lead')
+            }
+            return response.json()
+        },
+        onSuccess: (data, leadId) => {
+            // Update the specific lead in cache
+            queryClient.invalidateQueries({ queryKey: ['lead', leadId] })
+            // Invalidate leads list to refetch
+            queryClient.invalidateQueries({ queryKey: ['leads'] })
+        }
+    })
+}
+
+/**
+ * Custom hook for bulk restoring leads
+ */
+export function useBulkRestoreLeads() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (leadIds) => {
+            const response = await fetch('/api/leads/bulk-restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadIds })
+            })
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to restore leads')
+            }
+            return response.json()
+        },
+        onSuccess: (data, leadIds) => {
+            // Remove all restored leads from cache to force fresh fetch
             leadIds.forEach(id => {
                 queryClient.removeQueries({ queryKey: ['lead', id] })
             })

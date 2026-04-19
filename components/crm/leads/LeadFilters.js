@@ -23,6 +23,8 @@ export function LeadFilters({
     users = [],
     assignedTo,
     setAssignedTo,
+    viewMode,
+    setViewMode,
     onRefresh,
     loading
 }) {
@@ -108,6 +110,16 @@ export function LeadFilters({
                                         {user.full_name || user.email}
                                     </SelectItem>
                                 ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={viewMode} onValueChange={setViewMode}>
+                            <SelectTrigger className="w-full sm:w-[130px]">
+                                <SelectValue placeholder="View Mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="archived">Archived</SelectItem>
                             </SelectContent>
                         </Select>
 
