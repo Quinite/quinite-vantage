@@ -61,9 +61,19 @@ export const GET = withAuth(async (request, context) => {
             filters
         )
 
-        console.log('✅ [Leads GET] Fetched', leads?.length || 0, 'leads (Page', filters.page, ')')
+        // Compute fields that were removed from the leads table schema
+        const enrichedLeads = (leads || []).map(lead => {
+            const callLogs = lead.call_logs || []
+            const totalCalls = callLogs.length
+            const endedLogs = callLogs.filter(c => c.ended_at).sort((a, b) => new Date(b.ended_at) - new Date(a.ended_at))
+            const lastContactedAt = endedLogs[0]?.ended_at || null
+            const lastSentimentScore = endedLogs[0]?.sentiment_score ?? null
+            return { ...lead, call_logs: undefined, total_calls: totalCalls, last_contacted_at: lastContactedAt, last_sentiment_score: lastSentimentScore }
+        })
 
-        return corsJSON({ leads: leads || [], metadata })
+        console.log('✅ [Leads GET] Fetched', enrichedLeads.length, 'leads (Page', filters.page, ')')
+
+        return corsJSON({ leads: enrichedLeads, metadata })
     } catch (e) {
         console.error('leads GET error:', e)
         return corsJSON({ error: e.message }, { status: 500 })

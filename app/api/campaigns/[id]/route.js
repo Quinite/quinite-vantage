@@ -13,6 +13,15 @@ function handleCORS(response) {
     return response
 }
 
+// Fields that cannot be changed once a campaign is running/paused
+const IMMUTABLE_WHEN_RUNNING = new Set(['project_id', 'start_date', 'end_date'])
+
+// Fields that are allowed to change while running/paused
+const ALLOWED_WHEN_RUNNING = new Set([
+    'name', 'description', 'time_start', 'time_end',
+    'credit_cap', 'ai_script', 'call_settings', 'dnd_compliance'
+])
+
 export async function GET(request, { params }) {
     try {
         const supabase = await createServerSupabaseClient()
@@ -21,85 +30,88 @@ export async function GET(request, { params }) {
 
         const canView = await hasDashboardPermission(user.id, 'view_campaigns')
         if (!canView) {
-            return handleCORS(NextResponse.json({
-                success: false,
-                message: 'You don\'t have permission to view campaigns'
-            }, { status: 200 }))
+            return handleCORS(NextResponse.json({ success: false, message: "You don't have permission to view campaigns" }, { status: 200 }))
         }
 
         const admin = createAdminClient()
         const { data: profile } = await admin.from('profiles').select('organization_id').eq('id', user.id).single()
-
-        if (!profile) {
-            return handleCORS(NextResponse.json({ error: 'Profile not found' }, { status: 404 }))
-        }
+        if (!profile) return handleCORS(NextResponse.json({ error: 'Profile not found' }, { status: 404 }))
 
         const { id } = await params
 
-        const { data, error } = await supabase
+        const { data, error } = await admin
             .from('campaigns')
-            .select('*')
+            .select('*, project:projects(id, name)')
             .eq('id', id)
             .eq('organization_id', profile.organization_id)
             .single()
 
-        if (error) throw error
-        if (!data) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
+        if (error || !data) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
 
         return handleCORS(NextResponse.json({ campaign: data }))
     } catch (e) {
-        console.error('campaigns GET by ID error:', e)
+        console.error('[GET /campaigns/[id]]', e)
         return handleCORS(NextResponse.json({ error: e.message }, { status: 500 }))
     }
 }
 
-/**
- * PUT /api/campaigns/[id]
- * Update a campaign
- */
 export const PUT = withAuth(async (request, context) => {
     try {
         const { user, profile } = context
-        const body = await request.json()
         const params = await context.params
         const campaignId = params.id
 
-        // Check permission
         const canEdit = await hasDashboardPermission(user.id, 'edit_campaigns')
         if (!canEdit) {
-            return handleCORS(NextResponse.json({
-                success: false,
-                message: 'You don\'t have permission to edit campaigns'
-            }, { status: 200 }))
+            return handleCORS(NextResponse.json({ success: false, message: "You don't have permission to edit campaigns" }, { status: 200 }))
         }
 
-        if (!profile?.organization_id) {
-            return handleCORS(NextResponse.json({ error: 'Organization not found' }, { status: 400 }))
+        if (!profile?.organization_id) return handleCORS(NextResponse.json({ error: 'Organization not found' }, { status: 400 }))
+        if (!campaignId) return handleCORS(NextResponse.json({ error: 'Campaign ID required' }, { status: 400 }))
+
+        const admin = createAdminClient()
+        const { data: existing } = await admin.from('campaigns').select('*').eq('id', campaignId).eq('organization_id', profile.organization_id).single()
+        if (!existing) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
+
+        let body = await request.json()
+
+        // ── State-based edit guards ───────────────────────────────────────────
+        if (['completed', 'cancelled', 'archived'].includes(existing.status)) {
+            return handleCORS(NextResponse.json({ error: 'CAMPAIGN_IMMUTABLE', message: `Cannot edit a ${existing.status} campaign` }, { status: 400 }))
         }
 
-        if (!campaignId) {
-            return handleCORS(NextResponse.json({ error: 'Campaign ID required' }, { status: 400 }))
+        if (['running', 'paused'].includes(existing.status)) {
+            // Block immutable fields
+            const blockedFields = Object.keys(body).filter(k => IMMUTABLE_WHEN_RUNNING.has(k))
+            if (blockedFields.length > 0) {
+                return handleCORS(NextResponse.json({ error: 'FIELD_LOCKED', message: `Cannot change ${blockedFields.join(', ')} on a running/paused campaign`, blocked_fields: blockedFields }, { status: 400 }))
+            }
+
+            // Filter to only allowed fields
+            const filteredBody = {}
+            for (const k of ALLOWED_WHEN_RUNNING) {
+                if (body[k] !== undefined) filteredBody[k] = body[k]
+            }
+
+            // Audit sensitive mid-run changes
+            const sensitiveChanged = ['ai_script', 'call_settings'].filter(k => filteredBody[k] !== undefined)
+            if (sensitiveChanged.length > 0) {
+                await logAudit(admin, user.id, profile.full_name, 'campaign.settings_changed_while_running', 'campaign', campaignId, {
+                    changed: sensitiveChanged,
+                    note: 'Changes take effect on next call'
+                })
+            }
+
+            body = filteredBody
         }
 
-        // Update campaign using service
         const campaign = await CampaignService.updateCampaign(campaignId, body, profile.organization_id)
 
-        // Log audit
-        try {
-            await logAudit({
-                action: 'update',
-                resource: 'campaign',
-                resource_id: campaignId,
-                user_id: user.id,
-                details: { updated_fields: Object.keys(body) }
-            })
-        } catch (e) {
-            console.error('Audit log error:', e)
-        }
+        await logAudit(admin, user.id, profile.full_name, 'campaign.updated', 'campaign', campaignId, { updated_fields: Object.keys(body) })
 
         return handleCORS(NextResponse.json({ campaign }))
     } catch (e) {
-        console.error('campaigns PUT error:', e)
+        console.error('[PUT /campaigns/[id]]', e)
         return handleCORS(NextResponse.json({ error: e.message }, { status: 500 }))
     }
 })
@@ -110,73 +122,48 @@ export async function DELETE(request, { params }) {
         const { data: { user }, error: authError } = await supabase.auth.getUser()
         if (authError || !user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
 
-        // Check permission
         const canDelete = await hasDashboardPermission(user.id, 'delete_campaigns')
         if (!canDelete) {
-            // Return success with message instead of 403 to avoid error toasts
-            return handleCORS(NextResponse.json({
-                success: false,
-                message: 'You don\'t have permission to delete campaigns'
-            }, { status: 200 }))
+            return handleCORS(NextResponse.json({ success: false, message: "You don't have permission to delete campaigns" }, { status: 200 }))
         }
 
         const admin = createAdminClient()
         const { data: profile } = await admin.from('profiles').select('organization_id, full_name').eq('id', user.id).single()
-
-        if (!profile) {
-            return handleCORS(NextResponse.json({ error: 'Profile not found' }, { status: 404 }))
-        }
+        if (!profile) return handleCORS(NextResponse.json({ error: 'Profile not found' }, { status: 404 }))
 
         const { id } = await params
 
-        // Verify campaign belongs to user's org
-        const { data: existing } = await supabase
-            .from('campaigns')
-            .select('id')
-            .eq('id', id)
-            .eq('organization_id', profile.organization_id)
-            .single()
+        const { data: existing } = await admin.from('campaigns').select('id, status').eq('id', id).eq('organization_id', profile.organization_id).single()
+        if (!existing) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
 
-        if (!existing) {
-            return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
+        // Block deletion of active campaigns
+        if (['running', 'paused'].includes(existing.status)) {
+            return handleCORS(NextResponse.json({ error: 'CAMPAIGN_ACTIVE', message: 'Cancel the campaign before deleting' }, { status: 400 }))
         }
 
-        // 1. Delete related call_logs first (Manual Cascade)
-        const { error: logsError } = await admin
-            .from('call_logs')
-            .delete()
-            .eq('campaign_id', id)
+        // Check if any campaign_leads history exists
+        const { count: enrolledCount } = await admin.from('campaign_leads').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
 
-        if (logsError) {
-            console.error('❌ [Campaign DELETE] Failed to cleanup call_logs:', logsError)
-        } else {
-            console.log('✅ [Campaign DELETE] Cleaned up related call_logs')
+        if (['completed', 'cancelled'].includes(existing.status) || enrolledCount > 0) {
+            // Soft-delete: preserve history
+            await admin.from('campaigns').update({ status: 'archived', archived_at: new Date().toISOString(), archived_by: user.id, updated_at: new Date().toISOString() }).eq('id', id)
+            await logAudit(admin, user.id, profile.full_name, 'campaign.archived_via_delete', 'campaign', id, { previous_status: existing.status })
+            return handleCORS(NextResponse.json({ success: true, archived: true, message: 'Campaign archived (data preserved)' }))
         }
 
-        // 2. Delete Campaign
-        const { error } = await admin
-            .from('campaigns')
-            .delete()
-            .eq('id', id)
+        // Hard delete only for draft/scheduled with no history
+        await admin.from('call_logs').delete().eq('campaign_id', id)
+        await admin.from('campaigns').delete().eq('id', id)
 
-        if (error) {
-            console.error('❌ [Campaign DELETE] Delete error:', error)
-            throw error
-        }
+        await logAudit(admin, user.id, profile.full_name, 'campaign.deleted', 'campaign', id, {})
 
-        try {
-            await logAudit(supabase, user.id, profile.full_name || user.email, 'campaign.delete', 'campaign', id, {})
-        } catch (e) {
-            console.error('Audit log error:', e)
-        }
-
-        return handleCORS(NextResponse.json({ success: true }))
+        return handleCORS(NextResponse.json({ success: true, deleted: true }))
     } catch (e) {
-        console.error('campaigns DELETE error:', e)
+        console.error('[DELETE /campaigns/[id]]', e)
         return handleCORS(NextResponse.json({ error: e.message }, { status: 500 }))
     }
 }
 
-export async function OPTIONS(request) {
+export async function OPTIONS() {
     return handleCORS(new NextResponse(null, { status: 200 }))
 }

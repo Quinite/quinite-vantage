@@ -36,7 +36,6 @@ import {
     ArrowLeft,
     AlertTriangle,
     Zap,
-    Hand,
     RefreshCw,
     Lock
 } from 'lucide-react'
@@ -92,11 +91,10 @@ function CampaignCard({
     onOpenPipeline
 }) {
     const withinWindow = isWithinCampaignWindow(campaign)
-    const isManual = campaign.manual_start === true
     const s = campaign.status || 'scheduled'
 
-    // Start/Resume: show for manual campaigns not running/completed/cancelled
-    const showStartBtn = isManual && s !== 'completed' && s !== 'cancelled' && s !== 'running'
+    // Start/Resume: show for scheduled/paused campaigns
+    const showStartBtn = (s === 'scheduled' || s === 'paused') && s !== 'completed' && s !== 'cancelled' && s !== 'running'
     const isResume = s === 'paused'
     const canClickStart = isResume || withinWindow
 
@@ -160,15 +158,6 @@ function CampaignCard({
                 {/* Status + Mode Badge */}
                 <div className="pt-1 flex items-center gap-2 flex-wrap">
                     <StatusBadge status={campaign.status || 'scheduled'} />
-                    {isManual ? (
-                        <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 bg-orange-500/10 text-orange-600 border-orange-200 flex items-center gap-1">
-                            <Hand className="w-3 h-3" /> MANUAL
-                        </Badge>
-                    ) : (
-                        <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 bg-sky-500/10 text-sky-600 border-sky-200 flex items-center gap-1">
-                            <Zap className="w-3 h-3" /> AUTO
-                        </Badge>
-                    )}
                 </div>
 
                 {/* Campaign Schedule */}
@@ -288,7 +277,6 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
     const [endDate, setEndDate] = useState('')
     const [timeStart, setTimeStart] = useState('')
     const [timeEnd, setTimeEnd] = useState('')
-    const [manualStart, setManualStart] = useState(false)
     const [creating, setCreating] = useState(false)
     const [touched, setTouched] = useState(false)
 
@@ -318,7 +306,7 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
         if (!isValid) return
         setCreating(true)
         try {
-            await onCreate({ name, description, startDate, endDate, timeStart, timeEnd, manualStart })
+            await onCreate({ name, description, startDate, endDate, timeStart, timeEnd })
             handleClose()
         } finally {
             setCreating(false)
@@ -424,37 +412,6 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
                         </div>
                     </div>
 
-                    {/* Start Mode */}
-                    <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
-                        <h4 className="font-medium text-foreground flex items-center gap-2 text-sm mb-3">
-                            <Zap className="w-3.5 h-3.5 text-primary" /> Campaign Start Mode
-                        </h4>
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setManualStart(false)}
-                                className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${!manualStart ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border bg-background text-muted-foreground hover:border-primary/50'}`}
-                            >
-                                <Zap className="w-4 h-4" />
-                                <div className="text-left">
-                                    <div className="font-medium">Auto Start</div>
-                                    <div className="text-xs opacity-70">Starts automatically on schedule</div>
-                                </div>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setManualStart(true)}
-                                className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${manualStart ? 'border-orange-400 bg-orange-500/10 text-orange-700 font-medium' : 'border-border bg-background text-muted-foreground hover:border-orange-300'}`}
-                            >
-                                <Hand className="w-4 h-4" />
-                                <div className="text-left">
-                                    <div className="font-medium">Manual Start</div>
-                                    <div className="text-xs opacity-70">You manually trigger the start</div>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-
                     {/* Validation banner */}
                     {touched && !isValid && (
                         <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
@@ -542,8 +499,6 @@ export default function ProjectCampaignsPage() {
     const [editTimeStart, setEditTimeStart] = useState('')
     const [editTimeEnd, setEditTimeEnd] = useState('')
     const [editStatus, setEditStatus] = useState('scheduled')
-    const [editManualStart, setEditManualStart] = useState(false)
-
     useEffect(() => { if (projectId) fetchData() }, [projectId])
 
     async function fetchData() {
@@ -566,7 +521,7 @@ export default function ProjectCampaignsPage() {
         }
     }
 
-    async function handleCreate({ name, description, startDate, endDate, timeStart, timeEnd, manualStart }) {
+    async function handleCreate({ name, description, startDate, endDate, timeStart, timeEnd }) {
         const res = await fetch('/api/campaigns', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -574,7 +529,6 @@ export default function ProjectCampaignsPage() {
                 project_id: projectId, name, description,
                 start_date: startDate, end_date: endDate,
                 time_start: timeStart, time_end: timeEnd,
-                manual_start: manualStart
             })
         })
         if (!res.ok) {
@@ -616,7 +570,6 @@ export default function ProjectCampaignsPage() {
         setEditTimeStart(campaign.time_start || '')
         setEditTimeEnd(campaign.time_end || '')
         setEditStatus(campaign.status || 'scheduled')
-        setEditManualStart(campaign.manual_start === true)
         setEditModalOpen(true)
     }
 
@@ -631,7 +584,7 @@ export default function ProjectCampaignsPage() {
                     name: editName, description: editDescription,
                     start_date: editStartDate, end_date: editEndDate,
                     time_start: editTimeStart, time_end: editTimeEnd,
-                    status: editStatus, manual_start: editManualStart
+                    status: editStatus
                 })
             })
             if (!res.ok) throw new Error('Update failed')
@@ -863,26 +816,6 @@ export default function ProjectCampaignsPage() {
                             <div>
                                 <Label className="text-sm font-medium mb-1.5 block">End Time *</Label>
                                 <Input type="time" value={editTimeEnd} onChange={e => setEditTimeEnd(e.target.value)} />
-                            </div>
-                        </div>
-                        {/* Start Mode */}
-                        <div>
-                            <Label className="text-sm font-medium mb-2 block">Start Mode</Label>
-                            <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setEditManualStart(false)}
-                                    className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${!editManualStart ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border bg-background text-muted-foreground hover:border-primary/50'}`}
-                                >
-                                    <Zap className="w-4 h-4" /><span>Auto Start</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setEditManualStart(true)}
-                                    className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${editManualStart ? 'border-orange-400 bg-orange-500/10 text-orange-700 font-medium' : 'border-border bg-background text-muted-foreground hover:border-orange-300'}`}
-                                >
-                                    <Hand className="w-4 h-4" /><span>Manual Start</span>
-                                </button>
                             </div>
                         </div>
                     </div>

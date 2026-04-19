@@ -4,219 +4,143 @@ import { checkSubscriptionStatus } from '@/lib/middleware/subscription'
 
 /**
  * GET /api/billing/subscription
- * Get organization's current subscription
  */
-export async function GET(request) {
+export async function GET() {
     try {
         const supabase = await createServerSupabaseClient()
-
-        // Get current user
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        // Get user's organization
         const { data: profile } = await supabase
-            .from('users')
+            .from('profiles')
             .select('organization_id')
             .eq('id', user.id)
             .single()
 
-        if (!profile || !profile.organization_id) {
-            return NextResponse.json(
-                { error: 'No organization found' },
-                { status: 404 }
-            )
-        }
+        if (!profile?.organization_id) return NextResponse.json({ error: 'No organization found' }, { status: 404 })
 
-        // Get subscription with plan details
         const { data: subscription, error } = await supabase
-            .from('organization_subscriptions')
-            .select(`
-        *,
-        plan:billing_plans(*)
-      `)
+            .from('subscriptions')
+            .select('*, plan:subscription_plans(*)')
             .eq('organization_id', profile.organization_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
             .single()
 
-        if (error) {
-            return NextResponse.json(
-                { error: 'Failed to fetch subscription' },
-                { status: 500 }
-            )
+        if (error && error.code !== 'PGRST116') {
+            return NextResponse.json({ error: 'Failed to fetch subscription' }, { status: 500 })
         }
 
-        // Check subscription status
         const status = await checkSubscriptionStatus(profile.organization_id)
-
-        return NextResponse.json({
-            subscription,
-            status
-        })
-    } catch (error) {
-        console.error('Error in GET /api/billing/subscription:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+        return NextResponse.json({ subscription: subscription || null, status })
+    } catch (err) {
+        console.error('GET /api/billing/subscription:', err)
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }
 
 /**
- * POST /api/billing/subscription
- * Create or update organization subscription (Super Admin only)
+ * POST /api/billing/subscription — Create or update subscription (Super Admin only)
  */
 export async function POST(request) {
     try {
-        const supabase = createClient()
-
-        // Get current user
+        const supabase = await createServerSupabaseClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        // Check if user is super admin
         const { data: profile } = await supabase
-            .from('users')
+            .from('profiles')
             .select('organization_id, role')
             .eq('id', user.id)
             .single()
 
-        if (!profile || profile.role !== 'super_admin') {
+        if (!profile || !['owner', 'admin'].includes(profile.role)) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
         const body = await request.json()
-        const {
-            plan_id,
-            billing_cycle,
-            user_count,
-            modules_enabled
-        } = body
+        const { plan_id, billing_cycle } = body
 
-        // Validate required fields
-        if (!plan_id || !user_count) {
-            return NextResponse.json(
-                { error: 'Missing required fields' },
-                { status: 400 }
-            )
-        }
+        if (!plan_id) return NextResponse.json({ error: 'plan_id is required' }, { status: 400 })
 
-        // Calculate next billing date
-        const nextBillingDate = new Date()
-        if (billing_cycle === 'annual') {
-            nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1)
+        const now = new Date()
+        const periodEnd = new Date(now)
+        if (billing_cycle === 'yearly') {
+            periodEnd.setFullYear(periodEnd.getFullYear() + 1)
         } else {
-            nextBillingDate.setMonth(nextBillingDate.getMonth() + 1)
+            periodEnd.setMonth(periodEnd.getMonth() + 1)
         }
 
-        // Upsert subscription
         const { data: subscription, error } = await supabase
-            .from('organization_subscriptions')
+            .from('subscriptions')
             .upsert({
                 organization_id: profile.organization_id,
                 plan_id,
                 status: 'active',
                 billing_cycle: billing_cycle || 'monthly',
-                user_count,
-                modules_enabled: modules_enabled || ['crm'],
-                started_at: new Date().toISOString(),
-                next_billing_date: nextBillingDate.toISOString(),
-                auto_renew: true
-            }, {
-                onConflict: 'organization_id'
-            })
-            .select()
+                current_period_start: now.toISOString(),
+                current_period_end: periodEnd.toISOString(),
+                cancel_at_period_end: false,
+                updated_at: now.toISOString()
+            }, { onConflict: 'organization_id' })
+            .select('*, plan:subscription_plans(*)')
             .single()
 
-        if (error) {
-            return NextResponse.json(
-                { error: 'Failed to create/update subscription' },
-                { status: 500 }
-            )
-        }
+        if (error) return NextResponse.json({ error: 'Failed to create/update subscription' }, { status: 500 })
 
-        // Initialize call credits if not exists
-        await supabase
-            .from('call_credits')
-            .upsert({
-                organization_id: profile.organization_id,
-                balance: 0,
-                total_purchased: 0,
-                total_consumed: 0
-            }, {
-                onConflict: 'organization_id'
-            })
+        // Ensure call_credits row exists
+        await supabase.from('call_credits').upsert({
+            organization_id: profile.organization_id,
+            balance: 0,
+            total_purchased: 0,
+            total_consumed: 0
+        }, { onConflict: 'organization_id' })
 
         return NextResponse.json({ subscription }, { status: 201 })
-    } catch (error) {
-        console.error('Error in POST /api/billing/subscription:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+    } catch (err) {
+        console.error('POST /api/billing/subscription:', err)
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }
 
 /**
- * PATCH /api/billing/subscription
- * Update subscription details (Super Admin only)
+ * PATCH /api/billing/subscription — Update plan or billing cycle (Super Admin only)
  */
 export async function PATCH(request) {
     try {
-        const supabase = createClient()
-
-        // Get current user
+        const supabase = await createServerSupabaseClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        // Check if user is super admin
         const { data: profile } = await supabase
-            .from('users')
+            .from('profiles')
             .select('organization_id, role')
             .eq('id', user.id)
             .single()
 
-        if (!profile || profile.role !== 'super_admin') {
+        if (!profile || !['owner', 'admin'].includes(profile.role)) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
         const body = await request.json()
-        const {
-            user_count,
-            modules_enabled,
-            auto_renew
-        } = body
-
         const updateData = {}
-        if (user_count !== undefined) updateData.user_count = user_count
-        if (modules_enabled !== undefined) updateData.modules_enabled = modules_enabled
-        if (auto_renew !== undefined) updateData.auto_renew = auto_renew
+        if (body.plan_id !== undefined) updateData.plan_id = body.plan_id
+        if (body.billing_cycle !== undefined) updateData.billing_cycle = body.billing_cycle
+        if (body.cancel_at_period_end !== undefined) updateData.cancel_at_period_end = body.cancel_at_period_end
+        updateData.updated_at = new Date().toISOString()
 
         const { data: subscription, error } = await supabase
-            .from('organization_subscriptions')
+            .from('subscriptions')
             .update(updateData)
             .eq('organization_id', profile.organization_id)
-            .select()
+            .select('*, plan:subscription_plans(*)')
             .single()
 
-        if (error) {
-            return NextResponse.json(
-                { error: 'Failed to update subscription' },
-                { status: 500 }
-            )
-        }
+        if (error) return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
 
         return NextResponse.json({ subscription })
-    } catch (error) {
-        console.error('Error in PATCH /api/billing/subscription:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+    } catch (err) {
+        console.error('PATCH /api/billing/subscription:', err)
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

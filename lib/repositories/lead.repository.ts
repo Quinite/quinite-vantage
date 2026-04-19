@@ -53,7 +53,8 @@ export class LeadRepository extends BaseRepository<Lead> {
         project:projects(id, name),
         stage:pipeline_stages(id, name, color, pipeline_id),
         deals(id, amount, status),
-        assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name, avatar_url)
+        assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name, avatar_url),
+        call_logs!call_logs_lead_id_fkey(id, ended_at, sentiment_score, call_status, created_at)
       `)
             .eq('organization_id', organizationId)
  

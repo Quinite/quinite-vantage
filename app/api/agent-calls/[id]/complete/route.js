@@ -31,23 +31,20 @@ export async function POST(request, { params }) {
         return Response.json({ error: error.message }, { status: 500 });
     }
 
-    // Auto-create follow-up task if needed
+    // Auto-create follow-up task in lead_tasks if outcome warrants it
     if (outcome === 'interested' || outcome === 'callback') {
         const dueDate = new Date();
         dueDate.setHours(dueDate.getHours() + (interest_level === 'high' ? 2 : 24));
 
-        await supabase.from('follow_up_tasks').insert({
+        await supabase.from('lead_tasks').insert({
             organization_id: data.organization_id,
             lead_id: data.lead_id,
-            campaign_id: data.campaign_id,
             assigned_to: user.id,
-            task_type: 'call',
-            title: `Follow up with lead`,
-            priority: interest_level === 'high' ? 'urgent' : 'high',
+            title: `Follow up: ${outcome === 'callback' ? 'Callback requested' : 'Interested lead'}`,
+            description: notes || `Agent call outcome: ${outcome}`,
+            priority: interest_level === 'high' ? 'high' : 'medium',
             due_date: dueDate.toISOString(),
-            context: `Agent call outcome: ${outcome}`,
-            ai_suggestion: notes,
-            source: 'ai_auto'
+            status: 'pending'
         });
     }
 

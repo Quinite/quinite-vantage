@@ -87,15 +87,13 @@ export async function POST(request, { params }) {
                 }
             }
 
-            // Update lead
-            // Update lead
-            await adminClient
-                .from('leads')
-                .update({
-                    transferred_to_human: selectedOutcome.transferred,
-                    last_contacted_at: new Date().toISOString()
-                })
-                .eq('id', lead.id)
+            // Update lead interest level from simulated outcome
+            if (selectedOutcome.transferred) {
+                await adminClient
+                    .from('leads')
+                    .update({ interest_level: 'high' })
+                    .eq('id', lead.id)
+            }
 
             // Insert call log (Required for analytics)
             await adminClient

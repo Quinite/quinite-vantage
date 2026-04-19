@@ -1,26 +1,49 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'react-hot-toast'
+'use client'
 
-// Fetch campaign list
-const fetchCampaigns = async (filters = {}) => {
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+
+// ─── Fetchers ──────────────────────────────────────────────────────────────────
+
+async function fetchCampaigns(filters = {}) {
     const params = new URLSearchParams()
     if (filters.status) params.append('status', filters.status)
     if (filters.projectId) params.append('project_id', filters.projectId)
     if (filters.page) params.append('page', filters.page)
     if (filters.limit) params.append('limit', filters.limit)
-
     const res = await fetch(`/api/campaigns?${params.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch campaigns')
     return res.json()
 }
 
-// ... (fetchCampaign, createCampaign, etc. remain the same)
+async function fetchCampaign(id) {
+    const res = await fetch(`/api/campaigns/${id}`)
+    if (!res.ok) throw new Error('Failed to fetch campaign')
+    return res.json()
+}
+
+async function fetchCampaignLeads(campaignId, { status, page = 1, limit = 50, search } = {}) {
+    const params = new URLSearchParams({ page, limit })
+    if (status && status !== 'all') params.append('status', status)
+    if (search) params.append('search', search)
+    const res = await fetch(`/api/campaigns/${campaignId}/leads?${params}`)
+    if (!res.ok) throw new Error('Failed to fetch campaign leads')
+    return res.json()
+}
+
+async function fetchCampaignProgress(campaignId) {
+    const res = await fetch(`/api/campaigns/${campaignId}/progress`)
+    if (!res.ok) throw new Error('Failed to fetch progress')
+    return res.json()
+}
+
+// ─── Queries ───────────────────────────────────────────────────────────────────
 
 export function useCampaigns(filters = {}) {
     return useQuery({
         queryKey: ['campaigns', filters],
         queryFn: () => fetchCampaigns(filters),
-        keepPreviousData: true
+        staleTime: 30_000
     })
 }
 
@@ -28,49 +51,243 @@ export function useCampaign(id) {
     return useQuery({
         queryKey: ['campaign', id],
         queryFn: () => fetchCampaign(id),
-        enabled: !!id
+        enabled: !!id,
+        staleTime: 30_000
     })
+}
+
+export function useCampaignLeads(campaignId, filters = {}) {
+    return useQuery({
+        queryKey: ['campaign-leads', campaignId, filters],
+        queryFn: () => fetchCampaignLeads(campaignId, filters),
+        enabled: !!campaignId,
+        staleTime: 15_000
+    })
+}
+
+export function useCampaignProgress(campaignId, isRunning = false) {
+    return useQuery({
+        queryKey: ['campaign-progress', campaignId],
+        queryFn: () => fetchCampaignProgress(campaignId),
+        enabled: !!campaignId,
+        refetchInterval: isRunning ? 4000 : false,
+        staleTime: 0
+    })
+}
+
+// ─── Mutations ─────────────────────────────────────────────────────────────────
+
+function invalidateCampaign(qc, id) {
+    qc.invalidateQueries({ queryKey: ['campaigns'] })
+    if (id) qc.invalidateQueries({ queryKey: ['campaign', id] })
 }
 
 export function useCreateCampaign() {
-    const queryClient = useQueryClient()
+    const qc = useQueryClient()
     return useMutation({
-        mutationFn: createCampaign,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-            toast.success('Campaign created successfully')
+        mutationFn: async (body) => {
+            const res = await fetch('/api/campaigns', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to create campaign')
+            return data
         },
-        onError: (error) => {
-            toast.error(error.message)
-        }
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign created') },
+        onError: (e) => toast.error(e.message)
     })
 }
 
-export function useUpdateCampaign() {
-    const queryClient = useQueryClient()
+export function useUpdateCampaign(id) {
+    const qc = useQueryClient()
     return useMutation({
-        mutationFn: updateCampaign,
-        onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-            queryClient.invalidateQueries({ queryKey: ['campaign', data.id] })
-            toast.success('Campaign updated successfully')
+        mutationFn: async (body) => {
+            const res = await fetch(`/api/campaigns/${id}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || data.error || 'Update failed')
+            return data
         },
-        onError: (error) => {
-            toast.error(error.message)
-        }
+        onSuccess: () => { invalidateCampaign(qc, id); toast.success('Campaign updated') },
+        onError: (e) => toast.error(e.message)
     })
 }
 
 export function useDeleteCampaign() {
-    const queryClient = useQueryClient()
+    const qc = useQueryClient()
     return useMutation({
-        mutationFn: deleteCampaign,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-            toast.success('Campaign deleted successfully')
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Delete failed')
+            return data
         },
-        onError: (error) => {
-            toast.error(error.message)
-        }
+        onSuccess: (data) => {
+            qc.invalidateQueries({ queryKey: ['campaigns'] })
+            toast.success(data.archived ? 'Campaign archived (data preserved)' : 'Campaign deleted')
+        },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useStartCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}/start`, { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || data.error || 'Failed to start')
+            return data
+        },
+        onSuccess: (data, id) => { invalidateCampaign(qc, id); toast.success(`Campaign started — ${data.summary?.queued || 0} calls queued`) },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function usePauseCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}/pause`, { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to pause')
+            return data
+        },
+        onSuccess: (_, id) => { invalidateCampaign(qc, id); toast.success('Campaign paused') },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useResumeCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}/resume`, { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || data.error || 'Failed to resume')
+            return data
+        },
+        onSuccess: (_, id) => { invalidateCampaign(qc, id); toast.success('Campaign resumed') },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useCancelCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}/cancel`, { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to cancel')
+            return data
+        },
+        onSuccess: (_, id) => { invalidateCampaign(qc, id); toast.success('Campaign cancelled') },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useCompleteCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async ({ id, force = false }) => {
+            const res = await fetch(`/api/campaigns/${id}/complete`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ force })
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || data.error || 'Failed to complete')
+            return data
+        },
+        onSuccess: (_, { id }) => { invalidateCampaign(qc, id); toast.success('Campaign marked as completed') },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useArchiveCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}/archive`, { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to archive')
+            return data
+        },
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign archived') },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useRestoreCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}/restore`, { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to restore')
+            return data
+        },
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign restored to draft') },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useEnrollLeads(campaignId) {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (body) => {
+            const res = await fetch(`/api/campaigns/${campaignId}/leads`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Enrollment failed')
+            return data
+        },
+        onSuccess: (data) => {
+            qc.invalidateQueries({ queryKey: ['campaign-leads', campaignId] })
+            qc.invalidateQueries({ queryKey: ['campaign', campaignId] })
+            toast.success(`Enrolled ${data.enrolled} lead${data.enrolled !== 1 ? 's' : ''}${data.skipped > 0 ? ` (${data.skipped} skipped)` : ''}`)
+        },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useRemoveLeadFromCampaign(campaignId) {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (leadId) => {
+            const res = await fetch(`/api/campaigns/${campaignId}/leads/${leadId}`, { method: 'DELETE' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Remove failed')
+            return data
+        },
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['campaign-leads', campaignId] })
+            toast.success('Lead removed from campaign')
+        },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useOptOutLead(campaignId) {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async ({ leadId, reason, globalDnc = false }) => {
+            const res = await fetch(`/api/campaigns/${campaignId}/leads/${leadId}/opt-out`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason, global_dnc: globalDnc })
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Opt-out failed')
+            return data
+        },
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['campaign-leads', campaignId] })
+            toast.success('Lead opted out')
+        },
+        onError: (e) => toast.error(e.message)
     })
 }

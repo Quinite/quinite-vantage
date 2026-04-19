@@ -46,13 +46,10 @@ export async function POST(request) {
 
         console.log('✅ SMS sent:', response);
 
-        // Update lead
+        // Update lead notes (last_contacted_at removed — computed from call_logs)
         await supabase
             .from('leads')
-            .update({
-                last_contacted_at: new Date().toISOString(),
-                notes: `SMS sent: ${smsMessage.substring(0, 50)}...`
-            })
+            .update({ notes: `SMS sent: ${smsMessage.substring(0, 50)}...` })
             .eq('id', leadId);
 
         return Response.json({

@@ -84,13 +84,11 @@ export async function POST(request, { params }) {
 
         if (updateError) throw updateError;
 
-        // 4. SYNC LEAD BEHAVIORAL DATA
+        // 4. SYNC LEAD BEHAVIORAL DATA (last_sentiment_score and last_contacted_at removed — computed on read)
         if (callLog.lead_id) {
             await adminClient.from('leads').update({
                 interest_level: analysis.interest_level,
                 score: Math.round(analysis.priority),
-                last_sentiment_score: analysis.sentiment_score,
-                last_contacted_at: new Date().toISOString()
             }).eq('id', callLog.lead_id);
         }
 

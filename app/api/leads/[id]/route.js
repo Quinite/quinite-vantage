@@ -43,6 +43,15 @@ export const GET = withAuth(async (request, { params, user, profile }) => {
             lead.unit = lead.unit[0] ?? null
         }
 
+        // Compute fields that were removed from the leads table (now derived from call_logs)
+        const callLogs = lead.call_logs || []
+        const endedLogs = callLogs.filter(c => c.ended_at).sort((a, b) => new Date(b.ended_at) - new Date(a.ended_at))
+        lead.total_calls = callLogs.length
+        lead.last_contacted_at = endedLogs[0]?.ended_at || null
+        lead.last_sentiment_score = endedLogs[0]?.sentiment_score ?? null
+        // transferred: check if any call_log has transferred=true
+        lead.transferred_to_human = callLogs.some(c => c.transferred === true)
+
         return NextResponse.json({ lead })
     } catch (error) {
         console.error('Error fetching lead:', error)
@@ -252,6 +261,26 @@ export async function DELETE(request, { params }) {
                 success: false,
                 message: 'You don\'t have permission to delete leads'
             }, { status: 200 })
+        }
+
+        const adminClient = createAdminClient()
+        const now = new Date().toISOString()
+
+        // Clean up campaign enrollment: remove from call_queue and mark campaign_leads archived
+        const { data: activeCampaignLeads } = await adminClient
+            .from('campaign_leads')
+            .select('id, campaign_id')
+            .eq('lead_id', id)
+            .in('status', ['enrolled', 'queued'])
+
+        if (activeCampaignLeads?.length > 0) {
+            const campaignIds = [...new Set(activeCampaignLeads.map(cl => cl.campaign_id))]
+            await Promise.all([
+                adminClient.from('call_queue').delete().eq('lead_id', id).in('campaign_id', campaignIds).eq('status', 'queued'),
+                adminClient.from('campaign_leads')
+                    .update({ status: 'archived', skip_reason: 'lead_archived', updated_at: now })
+                    .in('id', activeCampaignLeads.map(cl => cl.id))
+            ])
         }
 
         // Delete dependent records manually (Cascade)

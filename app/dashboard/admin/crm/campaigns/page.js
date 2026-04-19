@@ -45,7 +45,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Zap,
-  Hand
+  Settings,
+  Users
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
@@ -56,12 +57,15 @@ import { useCampaigns } from '@/hooks/useCampaigns'
 // ─── Status Badge ───────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const statusConfig = {
-    scheduled:  { color: 'bg-blue-500/10 text-blue-600 border-blue-200',    icon: <Clock className="w-3 h-3" /> },
+    draft:      { color: 'bg-zinc-500/10 text-zinc-600 border-zinc-200',     icon: <Clock className="w-3 h-3" /> },
+    scheduled:  { color: 'bg-blue-500/10 text-blue-600 border-blue-200',     icon: <Clock className="w-3 h-3" /> },
     active:     { color: 'bg-green-500/10 text-green-600 border-green-200',  icon: <PlayCircle className="w-3 h-3" /> },
     running:    { color: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', icon: <Loader2 className="w-3 h-3 animate-spin" /> },
     paused:     { color: 'bg-yellow-500/10 text-yellow-600 border-yellow-200', icon: <PauseCircle className="w-3 h-3" /> },
     completed:  { color: 'bg-purple-500/10 text-purple-600 border-purple-200', icon: <CheckCircle2 className="w-3 h-3" /> },
-    cancelled:  { color: 'bg-red-500/10 text-red-600 border-red-200',        icon: <XCircle className="w-3 h-3" /> }
+    cancelled:  { color: 'bg-red-500/10 text-red-600 border-red-200',        icon: <XCircle className="w-3 h-3" /> },
+    archived:   { color: 'bg-gray-400/10 text-gray-500 border-gray-200',     icon: <XCircle className="w-3 h-3" /> },
+    failed:     { color: 'bg-rose-500/10 text-rose-600 border-rose-200',     icon: <AlertTriangle className="w-3 h-3" /> },
   }
   const config = statusConfig[status] || statusConfig.scheduled
   return (
@@ -111,11 +115,10 @@ function CampaignCard({
   onOpenPipeline
 }) {
   const withinWindow = isWithinCampaignWindow(campaign)
-  const isManual = campaign.manual_start === true
   const s = campaign.status || 'scheduled'
 
-  // Start/Resume button: show for manual campaigns not yet running/completed/cancelled
-  const showStartBtn = isManual && s !== 'completed' && s !== 'cancelled' && s !== 'running'
+  // Start/Resume button: show for scheduled/paused campaigns
+  const showStartBtn = (s === 'scheduled' || s === 'paused') && s !== 'completed' && s !== 'cancelled' && s !== 'running'
   // Can actually click start: need permission + window (or resuming paused)
   const isResume = s === 'paused'
   const canClickStart = canRun && (isResume || withinWindow) && s !== 'completed'
@@ -187,18 +190,9 @@ function CampaignCard({
           <p className="text-sm text-muted-foreground line-clamp-2">{campaign.description}</p>
         )}
 
-        {/* Status + Manual Badge */}
+        {/* Status Badge */}
         <div className="pt-1 flex items-center gap-2 flex-wrap">
           <StatusBadge status={campaign.status || 'scheduled'} />
-          {isManual ? (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 bg-orange-500/10 text-orange-600 border-orange-200 flex items-center gap-1">
-              <Hand className="w-3 h-3" /> MANUAL
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 bg-sky-500/10 text-sky-600 border-sky-200 flex items-center gap-1">
-              <Zap className="w-3 h-3" /> AUTO
-            </Badge>
-          )}
         </div>
 
         {/* Campaign Schedule */}
@@ -341,10 +335,51 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
   const [endDate, setEndDate] = useState('')
   const [timeStart, setTimeStart] = useState('')
   const [timeEnd, setTimeEnd] = useState('')
-  const [manualStart, setManualStart] = useState(false)
+  const [creditCap, setCreditCap] = useState('')
+  const [aiScript, setAiScript] = useState('')
+  const [callSettings, setCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
+  const [enrollMode, setEnrollMode] = useState('auto') // 'auto', 'manual', 'none'
+  const [selectedLeads, setSelectedLeads] = useState(new Set())
+  const [leadSearch, setLeadSearch] = useState('')
+  const [projectLeads, setProjectLeads] = useState([])
+  const [loadingLeads, setLoadingLeads] = useState(false)
   const [creating, setCreating] = useState(false)
   const [touched, setTouched] = useState(false)
   const [errors, setErrors] = useState({})
+
+  useEffect(() => {
+    if (projectId && enrollMode === 'manual') {
+      fetchProjectLeads(leadSearch)
+    }
+  }, [projectId, enrollMode])
+
+  async function fetchProjectLeads(search = '') {
+    if (!projectId) return
+    setLoadingLeads(true)
+    try {
+      const res = await fetch(`/api/leads?project_id=${projectId}&search=${encodeURIComponent(search)}&limit=100`)
+      const data = await res.json()
+      setProjectLeads(data.leads || [])
+    } catch(e) {} finally {
+      setLoadingLeads(false)
+    }
+  }
+
+  function toggleLead(id) {
+    setSelectedLeads(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllLeads() {
+    if (selectedLeads.size === projectLeads.length && projectLeads.length > 0) {
+      setSelectedLeads(new Set())
+    } else {
+      setSelectedLeads(new Set(projectLeads.map(l => l.id)))
+    }
+  }
 
   function validate() {
     const e = {}
@@ -366,6 +401,8 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
     if (creating) return
     setProjectId(''); setName(''); setDescription(''); setStartDate(''); setEndDate('')
     setTimeStart(''); setTimeEnd(''); setManualStart(false); setTouched(false)
+    setCreditCap(''); setAiScript(''); setEnrollMode('auto'); setSelectedLeads(new Set()); setLeadSearch('');
+    setCallSettings({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
     onOpenChange(false)
   }
 
@@ -374,7 +411,12 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
     if (!isValid) return
     setCreating(true)
     try {
-      await onCreate({ projectId, name, description, startDate, endDate, timeStart, timeEnd, manualStart })
+      await onCreate({
+        projectId, name, description, startDate, endDate, timeStart, timeEnd,
+        creditCap, aiScript, callSettings,
+        autoEnroll: enrollMode === 'auto',
+        leadIds: enrollMode === 'manual' ? [...selectedLeads] : []
+      })
       handleClose()
     } finally {
       setCreating(false)
@@ -496,35 +538,130 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
             </div>
           </div>
 
-          {/* Start Mode */}
+          {/* AI Settings & Credit Cap */}
+          <div className="p-4 bg-muted/30 rounded-lg border border-border/50 space-y-4">
+            <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
+              <Settings className="w-3.5 h-3.5 text-primary" /> AI Settings & Budget
+            </h4>
+            
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Credit Cap (₹) — Leave blank for unlimited</Label>
+              <Input type="number" min={0} step={0.5} placeholder="e.g. 100" value={creditCap} onChange={e => setCreditCap(e.target.value)} />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground mb-1 block">Language</Label>
+                <select
+                  value={callSettings.language || 'hinglish'}
+                  onChange={e => setCallSettings(s => ({ ...s, language: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="hinglish">Hinglish</option>
+                  <option value="hindi">Hindi</option>
+                  <option value="english">English</option>
+                  <option value="gujarati">Gujarati</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground mb-1 block">AI Voice</Label>
+                <select
+                  value={callSettings.voice_id || 'shimmer'}
+                  onChange={e => setCallSettings(s => ({ ...s, voice_id: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="shimmer">Shimmer (Female)</option>
+                  <option value="alloy">Alloy (Neutral)</option>
+                  <option value="echo">Echo (Male)</option>
+                  <option value="nova">Nova (Female)</option>
+                  <option value="onyx">Onyx (Male)</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="space-y-1.5 block">
+              <Label className="text-xs text-muted-foreground block">AI Script / Custom Instructions</Label>
+              <Textarea
+                value={aiScript}
+                onChange={e => setAiScript(e.target.value)}
+                rows={3}
+                placeholder="Custom instructions for this campaign..."
+                className="text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Lead Enrollment */}
           <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
             <h4 className="font-medium text-foreground flex items-center gap-2 text-sm mb-3">
-              <Zap className="w-3.5 h-3.5 text-primary" /> Campaign Start Mode
+              <Users className="w-3.5 h-3.5 text-primary" /> Lead Enrollment
             </h4>
-            <div className="flex gap-3">
+            
+            <div className="flex gap-2 bg-background p-1 rounded-md border border-border mb-3">
               <button
                 type="button"
-                onClick={() => setManualStart(false)}
-                className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${!manualStart ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border bg-background text-muted-foreground hover:border-primary/50'}`}
+                onClick={() => setEnrollMode('auto')}
+                className={`flex-1 text-xs py-1.5 rounded disabled:opacity-50 transition-colors ${enrollMode === 'auto' ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground'}`}
+                disabled={!projectId}
               >
-                <Zap className="w-4 h-4" />
-                <div className="text-left">
-                  <div className="font-medium">Auto Start</div>
-                  <div className="text-xs opacity-70">Starts automatically on schedule</div>
-                </div>
+                Auto Enroll All Eligible
               </button>
               <button
                 type="button"
-                onClick={() => setManualStart(true)}
-                className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${manualStart ? 'border-orange-400 bg-orange-500/10 text-orange-700 font-medium' : 'border-border bg-background text-muted-foreground hover:border-orange-300'}`}
+                onClick={() => setEnrollMode('manual')}
+                className={`flex-1 text-xs py-1.5 rounded disabled:opacity-50 transition-colors ${enrollMode === 'manual' ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground'}`}
+                disabled={!projectId}
               >
-                <Hand className="w-4 h-4" />
-                <div className="text-left">
-                  <div className="font-medium">Manual Start</div>
-                  <div className="text-xs opacity-70">You manually trigger the start</div>
-                </div>
+                Select Leads Manually
+              </button>
+              <button
+                type="button"
+                onClick={() => setEnrollMode('none')}
+                className={`flex-1 text-xs py-1.5 rounded disabled:opacity-50 transition-colors ${enrollMode === 'none' ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground'}`}
+              >
+                Do Not Enroll Yet
               </button>
             </div>
+            
+            {!projectId && <p className="text-xs text-muted-foreground">Select a project first to enroll leads.</p>}
+
+            {projectId && enrollMode === 'auto' && (
+              <p className="text-xs text-muted-foreground">All eligible (valid phone, not opted out, not archived) leads from the selected project will be automatically added to the queue.</p>
+            )}
+
+            {projectId && enrollMode === 'manual' && (
+              <div className="space-y-3 mt-2 border border-border rounded-lg bg-background p-2 max-h-[220px] overflow-y-auto">
+                <div className="flex gap-2 sticky top-0 bg-background/95 pb-2 pt-1 z-10 px-1">
+                  <Input 
+                    placeholder="Search leads..." 
+                    className="h-8 text-xs" 
+                    value={leadSearch} 
+                    onChange={e => { setLeadSearch(e.target.value); fetchProjectLeads(e.target.value) }} 
+                  />
+                  <Button type="button" size="sm" variant="outline" className="h-8 text-xs px-2" onClick={toggleAllLeads}>
+                    {selectedLeads.size === projectLeads.length && projectLeads.length > 0 ? 'Deselect All' : 'Select All'}
+                  </Button>
+                </div>
+                {loadingLeads ? (
+                   <div className="py-4 text-center"><Loader2 className="w-4 h-4 animate-spin mx-auto text-muted-foreground" /></div>
+                ) : projectLeads.length === 0 ? (
+                   <div className="py-4 text-center text-xs text-muted-foreground">No leads found in this project.</div>
+                ) : (
+                  <div className="space-y-1">
+                    {projectLeads.map(lead => (
+                      <label key={lead.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer">
+                        <input type="checkbox" checked={selectedLeads.has(lead.id)} onChange={() => toggleLead(lead.id)} className="rounded text-primary" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm truncate font-medium">{lead.name}</div>
+                          <div className="text-xs text-muted-foreground">{lead.phone || 'No phone'}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {selectedLeads.size > 0 && <div className="text-xs text-primary font-medium px-1.5 pt-1 border-t">{selectedLeads.size} selected</div>}
+              </div>
+            )}
           </div>
 
           {/* Validation banner */}
@@ -594,13 +731,22 @@ export default function CampaignsPage() {
   const canRun = usePermission('run_campaigns')
 
   const [page, setPage] = useState(1)
+  const [statusTab, setStatusTab] = useState('active')
   const [selectedProjectId, setSelectedProjectId] = useState(() => searchParams.get('project_id') || 'all')
   const [projects, setProjects] = useState([])
   const [creditBalance, setCreditBalance] = useState(null)
 
+  // Map tab to status filter(s)
+  const statusFilter = statusTab === 'active'
+    ? 'draft,scheduled,running,paused'
+    : statusTab === 'completed'
+    ? 'completed,cancelled'
+    : 'archived'
+
   // Campaign Data
   const { data: campaignsResponse, isLoading: loading, isPlaceholderData } = useCampaigns({
     projectId: selectedProjectId === 'all' ? undefined : selectedProjectId,
+    status: statusFilter,
     page,
     limit: 20
   })
@@ -629,7 +775,6 @@ export default function CampaignsPage() {
   const [editTimeStart, setEditTimeStart] = useState('')
   const [editTimeEnd, setEditTimeEnd] = useState('')
   const [editStatus, setEditStatus] = useState('scheduled')
-  const [editManualStart, setEditManualStart] = useState(false)
   const [editAiScript, setEditAiScript] = useState('')
   const [editCallSettings, setEditCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
 
@@ -663,7 +808,7 @@ export default function CampaignsPage() {
     }
   }
 
-  async function handleCreate({ projectId, name, description, startDate, endDate, timeStart, timeEnd, manualStart }) {
+  async function handleCreate({ projectId, name, description, startDate, endDate, timeStart, timeEnd, creditCap, aiScript, callSettings, autoEnroll, leadIds }) {
     if (!canCreate) { toast.error("You do not have permission to create campaigns"); return }
     const res = await fetch('/api/campaigns', {
       method: 'POST',
@@ -672,15 +817,25 @@ export default function CampaignsPage() {
         project_id: projectId, name, description,
         start_date: startDate, end_date: endDate,
         time_start: timeStart, time_end: timeEnd,
-        manual_start: manualStart
+        credit_cap: creditCap,
+        ai_script: aiScript,
+        call_settings: callSettings,
+        auto_enroll: autoEnroll,
+        lead_ids: leadIds
       })
     })
     if (!res.ok) {
       const payload = await res.json()
       throw new Error(payload?.error || 'Failed to create campaign')
     }
+    const payload = await res.json()
     queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-    toast.success("Campaign created successfully!")
+    
+    if (payload.enrollment) {
+      toast.success(`Campaign created & enrolled ${payload.enrollment.enrolled} leads!`)
+    } else {
+      toast.success("Campaign created successfully!")
+    }
   }
 
   function getProjectName(projectId) {
@@ -720,7 +875,6 @@ export default function CampaignsPage() {
     setEditTimeStart(campaign.time_start || '')
     setEditTimeEnd(campaign.time_end || '')
     setEditStatus(campaign.status || 'scheduled')
-    setEditManualStart(campaign.manual_start === true)
     setEditAiScript(campaign.ai_script || '')
     setEditCallSettings(campaign.call_settings || { language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
     setEditModalOpen(true)
@@ -737,7 +891,7 @@ export default function CampaignsPage() {
           project_id: editProjectId, name: editName, description: editDescription,
           start_date: editStartDate, end_date: editEndDate,
           time_start: editTimeStart, time_end: editTimeEnd,
-          status: editStatus, manual_start: editManualStart,
+          status: editStatus,
           ai_script: editAiScript || null,
           call_settings: editCallSettings
         })
@@ -797,11 +951,7 @@ export default function CampaignsPage() {
     if (!canRun) { toast.error("You do not have permission to pause campaigns"); return }
     setPausingCampaignId(campaign.id)
     try {
-      const res = await fetch(`/api/campaigns/${campaign.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'paused' })
-      })
+      const res = await fetch(`/api/campaigns/${campaign.id}/pause`, { method: 'POST' })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed to pause') }
       queryClient.invalidateQueries({ queryKey: ['campaigns'] })
       toast.success("Campaign paused!")
@@ -829,62 +979,89 @@ export default function CampaignsPage() {
   return (
     <div className="min-h-screen bg-muted/5">
       {/* Header */}
-      <div className="p-6 border-b border-border bg-background">
-        <div className="flex items-center justify-between gap-4 mb-6">
+      {/* Header Toolbar */}
+      <div className="p-6 border-b border-border bg-background space-y-4">
+        {/* Title row */}
+        <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">All Campaigns</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Campaigns</h1>
             {creditBalance != null && (
-              <Badge variant={creditBalance < 5 ? 'destructive' : 'secondary'} className="text-xs px-2 py-1">
-                {creditBalance < 5 && '⚠ '}
-                {creditBalance.toFixed(1)} credits
+              <Badge variant={creditBalance < 5 ? 'destructive' : 'secondary'} className="text-xs px-2.5 py-0.5 rounded-full font-medium">
+                {creditBalance < 5 && <AlertTriangle className="w-3 h-3 mr-1" />}
+                {creditBalance.toFixed(1)} Credits
               </Badge>
             )}
           </div>
-          <PermissionTooltip hasPermission={canCreate} message="You need 'Create Campaigns' permission.">
-            <Button
-              onClick={() => { if (!canCreate) return; setShowCreateDialog(true) }}
-              disabled={!canCreate}
-            >
-              {!canCreate ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-              <span className="hidden sm:inline">New Campaign</span>
-              <span className="sm:hidden">New</span>
-            </Button>
-          </PermissionTooltip>
         </div>
 
-        {/* Filters */}
-        <Card className="bg-card">
-          <CardContent className="p-4">
-            <div className="flex gap-2">
-              <Select
-                value={selectedProjectId}
-                onValueChange={(v) => {
-                  setSelectedProjectId(v)
-                  setPage(1)
-                  const url = v === 'all'
-                    ? '/dashboard/admin/crm/campaigns'
-                    : `/dashboard/admin/crm/campaigns?project_id=${v}`
-                  router.replace(url, { scroll: false })
-                }}
+        {/* Toolbar row */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          {/* Status Tabs */}
+          <div className="p-1 bg-muted rounded-lg flex items-center w-full sm:w-auto overflow-x-auto shrink-0 shadow-inner">
+            {[
+              { key: 'active', label: 'Active' },
+              { key: 'completed', label: 'Completed' },
+              { key: 'archived', label: 'Archived' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => { setStatusTab(tab.key); setPage(1) }}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusTab === tab.key
+                  ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
+                  : 'text-muted-foreground hover:text-foreground'}`}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="All Projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            {/* Project Filter */}
+            <div className="flex items-center gap-2 flex-1 sm:flex-none">
+              <div className="w-[180px] sm:w-[220px]">
+                <Select
+                  value={selectedProjectId}
+                  onValueChange={(v) => {
+                    setSelectedProjectId(v)
+                    setPage(1)
+                    const url = v === 'all'
+                      ? '/dashboard/admin/crm/campaigns'
+                      : `/dashboard/admin/crm/campaigns?project_id=${v}`
+                    router.replace(url, { scroll: false })
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-background shadow-sm h-9">
+                    <SelectValue placeholder="All Projects" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Projects</SelectItem>
+                    {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 variant="outline" size="icon"
                 onClick={() => queryClient.invalidateQueries({ queryKey: ['campaigns'] })}
-                disabled={loading} className="shrink-0"
+                disabled={loading} className="shrink-0 h-9 w-9 bg-background shadow-sm text-muted-foreground"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* New Campaign Action */}
+            <PermissionTooltip hasPermission={canCreate} message="You need 'Create Campaigns' permission.">
+              <Button
+                onClick={() => { if (!canCreate) return; setShowCreateDialog(true) }}
+                disabled={!canCreate}
+                className="h-9 shadow-sm shrink-0"
+              >
+                {!canCreate ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                <span className="hidden sm:inline">New Campaign</span>
+                <span className="sm:hidden">New</span>
+              </Button>
+            </PermissionTooltip>
+          </div>
+        </div>
       </div>
 
       <div className="p-6 space-y-6">
@@ -943,7 +1120,7 @@ export default function CampaignsPage() {
                 onStart={handleStartCampaign}
                 onPause={handlePauseCampaign}
                 onCancel={handleCancelCampaign}
-                onOpenPipeline={(c) => router.push(`/dashboard/admin/crm/campaigns/${c.id}/pipeline`)}
+                onOpenPipeline={(c) => router.push(`/dashboard/admin/crm/campaigns/${c.id}`)}
               />
             ))}
           </div>
@@ -1052,29 +1229,6 @@ export default function CampaignsPage() {
               <div>
                 <Label className="text-sm font-medium mb-1.5 block">End Time *</Label>
                 <Input type="time" value={editTimeEnd} onChange={e => setEditTimeEnd(e.target.value)} />
-              </div>
-            </div>
-
-            {/* Start Mode */}
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Start Mode</Label>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditManualStart(false)}
-                  className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${!editManualStart ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border bg-background text-muted-foreground hover:border-primary/50'}`}
-                >
-                  <Zap className="w-4 h-4" />
-                  <span>Auto Start</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditManualStart(true)}
-                  className={`flex-1 flex items-center gap-2 p-3 rounded-lg border text-sm transition-all ${editManualStart ? 'border-orange-400 bg-orange-500/10 text-orange-700 font-medium' : 'border-border bg-background text-muted-foreground hover:border-orange-300'}`}
-                >
-                  <Hand className="w-4 h-4" />
-                  <span>Manual Start</span>
-                </button>
               </div>
             </div>
 

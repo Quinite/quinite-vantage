@@ -6,7 +6,7 @@ const PROFILE_SELECT = [
     'mailing_street', 'mailing_city', 'mailing_state', 'mailing_zip', 'mailing_country',
     'preferred_category', 'preferred_property_type', 'preferred_configuration', 'preferred_transaction_type',
     'preferred_location', 'preferred_timeline', 'min_budget', 'max_budget',
-    'pain_points', 'competitor_mentions', 'preferred_contact_method', 'best_contact_time',
+    'pain_points', 'preferred_contact_method', 'best_contact_time',
     'custom_fields',
 ].join(', ')
 
@@ -15,7 +15,7 @@ const PROFILE_FIELDS = [
     'mailing_street', 'mailing_city', 'mailing_state', 'mailing_zip', 'mailing_country',
     'preferred_category', 'preferred_property_type', 'preferred_configuration', 'preferred_transaction_type',
     'preferred_location', 'preferred_timeline', 'min_budget', 'max_budget',
-    'pain_points', 'competitor_mentions', 'preferred_contact_method', 'best_contact_time',
+    'pain_points', 'preferred_contact_method', 'best_contact_time',
     'custom_fields',
 ]
 

@@ -45,7 +45,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       return corsJSON({ error: 'Organization not found' }, { status: 400 })
     }
 
-    const { project_id, name, description, start_date, end_date, time_start, time_end, metadata, manual_start, ai_script, call_settings } = body
+    const { project_id, name, description, start_date, end_date, time_start, time_end, metadata, ai_script, call_settings, credit_cap, auto_enroll, lead_ids } = body
 
     if (!project_id || !start_date || !end_date || !time_start || !time_end) {
       return corsJSON({
@@ -63,10 +63,10 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       time_start,
       time_end,
       status: 'scheduled',
-      manual_start: manual_start === true,
       metadata: metadata || null,
       ai_script: ai_script || null,
       call_settings: call_settings || { language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 },
+      credit_cap: credit_cap != null && credit_cap !== '' ? parseFloat(credit_cap) : null,
       created_by: user.id
     }
 
@@ -78,6 +78,23 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       .single()
 
     if (error) throw error
+
+    let enrollmentSummary = null
+    if (auto_enroll) {
+      enrollmentSummary = await CampaignService.enrollLeads(
+          campaign.id,
+          profile.organization_id,
+          user.id,
+          { filters: { project_id } }
+      )
+    } else if (lead_ids && lead_ids.length > 0) {
+      enrollmentSummary = await CampaignService.enrollLeads(
+          campaign.id,
+          profile.organization_id,
+          user.id,
+          { lead_ids }
+      )
+    }
 
     try {
       await logAudit(
@@ -93,7 +110,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       console.warn('Audit log failed:', e.message)
     }
 
-    return corsJSON({ campaign })
+    return corsJSON({ campaign, enrollment: enrollmentSummary })
   } catch (e) {
     console.error('campaigns POST error:', e)
     return corsJSON({ error: e.message }, { status: 500 })

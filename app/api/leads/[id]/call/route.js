@@ -166,10 +166,7 @@ async function simulateCall(lead, id, user, profile, adminClient, supabase) {
     await adminClient
         .from('leads')
         .update({
-            call_status: selectedOutcome.status,
-            transferred_to_human: selectedOutcome.transferred,
-            call_date: new Date().toISOString(),
-            status: selectedOutcome.transferred ? 'qualified' : lead.status
+            stage_id: selectedOutcome.transferred ? lead.stage_id : lead.stage_id
         })
         .eq('id', id)
 

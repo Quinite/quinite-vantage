@@ -211,82 +211,90 @@ export async function DELETE(request, { params }) {
         const isOwner = project.created_by === user.id
         const canDelete = await hasDashboardPermission(user.id, 'delete_projects')
 
-        // 4️⃣ Check for running campaigns (Archive Safety Check)
-        const { data: runningCampaigns } = await adminClient
+        // 4️⃣ Handle active campaigns — auto-pause instead of blocking
+        const { data: activeCampaigns } = await adminClient
             .from('campaigns')
             .select('id, name')
             .eq('project_id', id)
             .eq('organization_id', profile.organization_id)
-            .eq('status', 'running')
-        
-        if (runningCampaigns?.length > 0) {
-            return handleCORS(
-                NextResponse.json({ 
-                    error: `Action Blocked: Campaigns are currently running for this project. Please pause or complete them before archiving.`,
-                    running_campaigns: runningCampaigns
-                }, { status: 400 })
-            )
+            .in('status', ['running', 'paused'])
+
+        const pausedCampaignNames = []
+        if (activeCampaigns?.length > 0) {
+            const campaignIds = activeCampaigns.map(c => c.id)
+            const now2 = new Date().toISOString()
+            await Promise.all([
+                adminClient.from('campaigns')
+                    .update({ status: 'paused', paused_at: now2, updated_at: now2 })
+                    .in('id', campaignIds),
+                adminClient.from('call_queue')
+                    .update({ status: 'failed', last_error: 'project_archived', updated_at: now2 })
+                    .in('campaign_id', campaignIds)
+                    .eq('status', 'queued'),
+                adminClient.from('campaign_leads')
+                    .update({ status: 'skipped', skip_reason: 'project_archived', updated_at: now2 })
+                    .in('campaign_id', campaignIds)
+                    .in('status', ['enrolled', 'queued'])
+            ])
+            pausedCampaignNames.push(...activeCampaigns.map(c => c.name))
         }
 
         // 5️⃣ Perform cascading archival
         const now = new Date().toISOString()
-        
-        // Use Promise.all for speed since we don't have built-in cross-table transactions easily accessible here
-        // (For production scale, a Postgres RPC or function would be better)
-        const [
-          projectUpdate,
-          campaignUpdate,
-          leadsUpdate,
-          propertyUpdate
-        ] = await Promise.all([
-          adminClient
-            .from('projects')
-            .update({ 
-                archived_at: now, 
-                archived_by: user.id,
-                public_visibility: false
-            })
-            .eq('id', id)
-            .eq('organization_id', profile.organization_id),
-          adminClient
-            .from('campaigns')
-            .update({ archived_at: now, archived_by: user.id })
-            .eq('project_id', id)
-            .eq('organization_id', profile.organization_id),
-          adminClient
-            .from('leads')
-            .update({ archived_at: now, archived_by: user.id })
-            .eq('project_id', id)
-            .eq('organization_id', profile.organization_id),
-          adminClient
-            .from('units')
-            .update({ archived_at: now, archived_by: user.id })
-            .eq('project_id', id)
-            .eq('organization_id', profile.organization_id)
+
+        const [projectUpdate, , leadsUpdate] = await Promise.all([
+            adminClient.from('projects')
+                .update({ archived_at: now, archived_by: user.id, public_visibility: false })
+                .eq('id', id)
+                .eq('organization_id', profile.organization_id),
+            adminClient.from('campaigns')
+                .update({ archived_at: now, archived_by: user.id })
+                .eq('project_id', id)
+                .eq('organization_id', profile.organization_id),
+            adminClient.from('leads')
+                .update({ archived_at: now, archived_by: user.id })
+                .eq('project_id', id)
+                .eq('organization_id', profile.organization_id),
+            adminClient.from('units')
+                .update({ archived_at: now, archived_by: user.id })
+                .eq('project_id', id)
+                .eq('organization_id', profile.organization_id)
         ])
 
         if (projectUpdate.error) throw projectUpdate.error
 
-        // 8️⃣ Audit with enriched metadata
+        // Clean up campaign_leads for leads that just got archived
+        if (leadsUpdate && !leadsUpdate.error) {
+            const { data: archivedLeads } = await adminClient
+                .from('leads')
+                .select('id')
+                .eq('project_id', id)
+                .eq('organization_id', profile.organization_id)
+                .not('archived_at', 'is', null)
+
+            if (archivedLeads?.length > 0) {
+                const leadIds = archivedLeads.map(l => l.id)
+                await adminClient.from('campaign_leads')
+                    .update({ status: 'archived', skip_reason: 'lead_archived', updated_at: now })
+                    .in('lead_id', leadIds)
+                    .in('status', ['enrolled', 'queued'])
+            }
+        }
+
         try {
-            await logAudit(
-                supabase,
-                user.id,
-                profile.full_name || user.email,
-                'project.archive',
-                'project',
-                id,
-                { 
-                    name: project.name,
-                    cascade_archived: true,
-                    archived_at: now
-                }
-            )
+            await logAudit(supabase, user.id, profile.full_name || user.email, 'project.archive', 'project', id, {
+                name: project.name,
+                cascade_archived: true,
+                campaigns_auto_paused: pausedCampaignNames
+            })
         } catch { }
 
-        return handleCORS(
-            NextResponse.json({ message: 'Project and all associated data archived successfully.' })
-        )
+        return handleCORS(NextResponse.json({
+            message: 'Project and all associated data archived successfully.',
+            warnings: pausedCampaignNames.length > 0
+                ? [`${pausedCampaignNames.length} campaign(s) auto-paused: ${pausedCampaignNames.join(', ')}`]
+                : []
+        }))
     } catch (e) {
         console.error('projects/:id DELETE error:', e)
         return handleCORS(

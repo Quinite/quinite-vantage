@@ -1,59 +1,78 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { corsJSON } from '@/lib/cors'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * GET /api/campaigns/[id]/progress
- * Returns real-time progress of a campaign
- */
+function handleCORS(response) {
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    return response
+}
+
 export async function GET(request, { params }) {
     try {
         const supabase = await createServerSupabaseClient()
         const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
 
-        if (authError || !user) {
-            return corsJSON({ error: 'Unauthorized' }, { status: 401 })
-        }
+        const admin = createAdminClient()
+        const { data: profile } = await admin.from('profiles').select('organization_id').eq('id', user.id).single()
+        if (!profile?.organization_id) return handleCORS(NextResponse.json({ error: 'No organization' }, { status: 403 }))
 
-        const { id } = await params
-        const adminClient = createAdminClient()
+        const { id: campaignId } = await params
 
-        // 1. Get Campaign Info (Status & Project ID)
-        const { data: campaign, error: campError } = await adminClient
+        const { data: campaign } = await admin
             .from('campaigns')
-            .select('status, project_id, organization_id')
-            .eq('id', id)
+            .select('id, status, credit_spent, credit_cap, organization_id')
+            .eq('id', campaignId)
+            .eq('organization_id', profile.organization_id)
             .single()
 
-        if (campError || !campaign) {
-            return corsJSON({ error: 'Campaign not found' }, { status: 404 })
+        if (!campaign) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
+
+        // Fetch all campaign_leads statuses in one query
+        const { data: statusRows } = await admin
+            .from('campaign_leads')
+            .select('status')
+            .eq('campaign_id', campaignId)
+            .eq('organization_id', profile.organization_id)
+
+        const counts = { total: 0, enrolled: 0, queued: 0, calling: 0, called: 0, failed: 0, skipped: 0, opted_out: 0, archived: 0 }
+        for (const row of statusRows || []) {
+            counts.total++
+            if (counts[row.status] !== undefined) counts[row.status]++
         }
 
-        // 2. Count Total Leads in Project
-        const { count: totalLeads } = await adminClient
-            .from('leads')
-            .select('*', { count: 'exact', head: true })
-            .eq('organization_id', campaign.organization_id)
-            .eq('project_id', campaign.project_id)
+        const processed = counts.called + counts.failed + counts.skipped + counts.opted_out + counts.archived
+        const percentage = counts.total > 0 ? Math.round((processed / counts.total) * 100) : 0
+        const creditRemaining = campaign.credit_cap != null
+            ? Math.max(0, campaign.credit_cap - (campaign.credit_spent || 0))
+            : null
 
-        // 3. Count Processed Leads (Call Logs for this campaign)
-        const { count: processedLeads } = await adminClient
-            .from('call_logs')
-            .select('*', { count: 'exact', head: true })
-            .eq('campaign_id', id)
-
-        return corsJSON({
+        return handleCORS(NextResponse.json({
             status: campaign.status,
-            total: totalLeads || 0,
-            processed: processedLeads || 0,
-            percentage: totalLeads > 0 ? Math.round((processedLeads / totalLeads) * 100) : 0
-        })
-
-    } catch (e) {
-        console.error('campaign progress error:', e)
-        return corsJSON({ error: e.message }, { status: 500 })
+            total: counts.total,
+            processed,
+            enrolled_pending: counts.enrolled,
+            queued: counts.queued,
+            calling: counts.calling,
+            called: counts.called,
+            failed: counts.failed,
+            skipped: counts.skipped,
+            opted_out: counts.opted_out,
+            percentage,
+            credit_spent: campaign.credit_spent || 0,
+            credit_cap: campaign.credit_cap,
+            credit_remaining: creditRemaining,
+        }))
+    } catch (err) {
+        console.error('[GET /campaigns/[id]/progress]', err)
+        return handleCORS(NextResponse.json({ error: err.message }, { status: 500 }))
     }
+}
+
+export async function OPTIONS() {
+    return handleCORS(new NextResponse(null, { status: 204 }))
 }
