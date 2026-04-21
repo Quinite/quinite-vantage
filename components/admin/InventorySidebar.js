@@ -52,7 +52,7 @@ export default function InventorySidebar() {
         <TooltipProvider delayDuration={0}>
             <aside
                 className={cn(
-                    "bg-background border-r border-border h-full hidden md:flex flex-col transition-all duration-300 relative",
+                    "bg-white border-r border-border h-full hidden md:flex flex-col transition-all duration-300 relative",
                     isCollapsed ? "w-20" : "w-64"
                 )}
             >

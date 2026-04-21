@@ -22,6 +22,7 @@ export function useLeads(filters = {}) {
             if (filters.limit) params.append('limit', filters.limit)
             if (filters.sortBy) params.append('sortBy', filters.sortBy)
             if (filters.sortOrder) params.append('sortOrder', filters.sortOrder)
+            if (filters.campaign_id) params.append('campaign_id', filters.campaign_id)
 
             const response = await fetch(`/api/leads?${params.toString()}`)
             if (!response.ok) throw new Error('Failed to fetch leads')
@@ -302,5 +303,37 @@ export function useBulkRestoreLeads() {
             // Invalidate leads list
             queryClient.invalidateQueries({ queryKey: ['leads'] })
         }
+    })
+}
+
+/**
+ * Custom hook for fetching tasks for a lead
+ */
+export function useLeadTasks(leadId) {
+    return useQuery({
+        queryKey: ['lead', leadId, 'tasks'],
+        queryFn: async () => {
+            const response = await fetch(`/api/leads/${leadId}/tasks`)
+            if (!response.ok) throw new Error('Failed to fetch tasks')
+            const data = await response.json()
+            return data.tasks || []
+        },
+        enabled: !!leadId,
+    })
+}
+
+/**
+ * Custom hook for fetching interactions for a lead
+ */
+export function useLeadInteractions(leadId) {
+    return useQuery({
+        queryKey: ['lead', leadId, 'interactions'],
+        queryFn: async () => {
+            const response = await fetch(`/api/leads/${leadId}/interactions`)
+            if (!response.ok) throw new Error('Failed to fetch interactions')
+            const data = await response.json()
+            return data.interactions || []
+        },
+        enabled: !!leadId,
     })
 }

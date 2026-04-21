@@ -52,6 +52,7 @@ import {
     ExternalLink,
     Plus,
     AlertTriangle,
+    AlertCircle,
     Clock,
     CalendarClock,
     User,
@@ -59,6 +60,9 @@ import {
     Check,
     X,
     FileText,
+    ChevronDown,
+    Search,
+    ListChecks,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import {
@@ -76,9 +80,9 @@ import TaskFormFields, { taskToFormData, formDataToPayload, EMPTY_FORM } from '@
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = {
-    high:   { label: 'High',   dot: 'bg-red-500',    text: 'text-red-600',   badge: 'bg-red-50 text-red-700 border-red-200' },
-    medium: { label: 'Medium', dot: 'bg-amber-400',  text: 'text-amber-600', badge: 'bg-amber-50 text-amber-700 border-amber-200' },
-    low:    { label: 'Low',    dot: 'bg-blue-400',   text: 'text-blue-600',  badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    high:   { label: 'High',   color: 'red',   icon: AlertCircle, bg: 'bg-red-50',     text: 'text-red-700', border: 'border-red-200' },
+    medium: { label: 'Medium', color: 'amber', icon: Clock,       bg: 'bg-amber-50',   text: 'text-amber-700', border: 'border-amber-200' },
+    low:    { label: 'Low',    color: 'blue',  icon: Calendar,    bg: 'bg-blue-50',    text: 'text-blue-700', border: 'border-blue-200' },
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -192,24 +196,125 @@ function DueDateBadge({ task }) {
     )
 }
 
-function AssigneeAvatar({ assignee, size = 'sm' }) {
+function AssigneeBadge({ assignee }) {
     if (!assignee) return null
     const initials = (assignee.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    const cls = size === 'sm' ? 'w-5 h-5 text-[9px]' : 'w-8 h-8 text-xs'
+    
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <div className={`${cls} rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-white cursor-default`}>
-                    {assignee.avatar_url
-                        ? <img src={assignee.avatar_url} alt={assignee.full_name} className="w-full h-full object-cover" />
-                        : initials
-                    }
+        <div className="flex items-center gap-2 px-1.5 py-0.5 rounded-full border border-slate-100 bg-slate-50/50 group/assignee max-w-full overflow-hidden">
+            <div className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0 overflow-hidden text-[8px]">
+                {assignee.avatar_url
+                    ? <img src={assignee.avatar_url} alt={assignee.full_name} className="w-full h-full object-cover" />
+                    : initials
+                }
+            </div>
+            <span className="text-[11px] font-medium text-slate-600 truncate tracking-tight">{assignee.full_name}</span>
+        </div>
+    )
+}
+
+// ─── Refined Task Row ─────────────────────────────────────────────────────────
+
+function TaskRow({ task, onToggle, onEditClick }) {
+    const isOverdue   = getIsOverdue(task)
+    const isCompleted = task.status === 'completed'
+    const pCfg        = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+    const stageColor  = task.lead?.stage?.color || '#94a3b8'
+    const leadInitial = task.lead?.name?.[0]?.toUpperCase() || '?'
+
+    return (
+        <div 
+            onClick={() => onEditClick(task)}
+            className={cn(
+                "group relative bg-white rounded-xl shadow-sm ring-1 ring-slate-100/80 hover:ring-indigo-200 hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden",
+                isCompleted && "opacity-60 shadow-none ring-slate-50"
+            )}
+        >
+            {/* Priority Full-Height Accent Bar */}
+            {!isCompleted && (
+                <div className={cn("absolute left-0 top-0 bottom-0 w-1", 
+                    task.priority === 'high' ? 'bg-red-500' : 
+                    task.priority === 'medium' ? 'bg-amber-400' : 'bg-blue-400'
+                )} />
+            )}
+
+            <div className="flex items-center px-4 py-3 gap-4">
+                {/* 1. Checkbox & Title */}
+                <div className="flex items-center gap-3 flex-[2] min-w-0">
+                    <div onClick={e => e.stopPropagation()}>
+                        <button
+                            onClick={() => onToggle(task)}
+                            className={cn(
+                                "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
+                                isCompleted
+                                    ? "bg-indigo-600 border-indigo-600"
+                                    : "border-slate-200 hover:border-indigo-500 text-transparent hover:text-indigo-500"
+                            )}
+                        >
+                            <CheckCircle2 className={cn("w-3 h-3", isCompleted ? "text-white" : "opacity-0 hover:opacity-100")} />
+                        </button>
+                    </div>
+                    <div className="min-w-0">
+                        <p className={cn(
+                            "text-sm font-semibold truncate leading-tight transition-colors",
+                            isCompleted ? "line-through text-slate-400" : "text-slate-900 group-hover:text-indigo-600"
+                        )}>
+                            {task.title}
+                        </p>
+                        {task.description && (
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">{task.description}</p>
+                        )}
+                    </div>
                 </div>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-                {assignee.full_name || 'Assigned'}
-            </TooltipContent>
-        </Tooltip>
+
+                {/* 2. Lead Badge (Specifically for global view) */}
+                <div className="flex-[1] hidden lg:block" onClick={e => e.stopPropagation()}>
+                    {task.lead && (
+                        <LeadHoverCard lead={task.lead} leadId={task.lead_id}>
+                            <Link 
+                                href={`/dashboard/admin/crm/leads/${task.lead_id}`}
+                                className="inline-flex items-center gap-1.5 max-w-full px-2 py-0.5 rounded-full border border-slate-100 bg-slate-50 hover:bg-white hover:border-indigo-200 hover:text-indigo-600 transition-all group/lead"
+                            >
+                                <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black text-white shrink-0"
+                                     style={{ background: stageColor }}>
+                                    {leadInitial}
+                                </div>
+                                <span className="text-[11px] font-bold truncate tracking-tight">{task.lead.name}</span>
+                            </Link>
+                        </LeadHoverCard>
+                    )}
+                </div>
+
+                {/* 3. Priority */}
+                <div className="w-24 hidden md:block">
+                    {!isCompleted && (
+                        <Badge variant="outline" className={cn(
+                            "text-[10px] h-5 px-2 font-bold uppercase tracking-wider border-none",
+                            pCfg.bg, pCfg.text
+                        )}>
+                            {pCfg.label}
+                        </Badge>
+                    )}
+                </div>
+
+                {/* 4. Due Date */}
+                <div className="w-32">
+                    <DueDateBadge task={task} />
+                </div>
+
+                {/* 5. Assignee */}
+                <div className="w-40 hidden sm:flex">
+                    <AssigneeBadge assignee={task.assignee} />
+                </div>
+
+                {/* 6. Action Visual */}
+                <div className="w-8 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-8 h-8 rounded-full hover:bg-slate-50 flex items-center justify-center text-slate-400">
+                        <Pencil className="w-3.5 h-3.5" />
+                    </div>
+                </div>
+            </div>
+        </div>
     )
 }
 
@@ -439,8 +544,13 @@ function TaskDetailSheet({ task, open, onClose, onToggle, onUpdated, teamMembers
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Assigned To</p>
                                 {task.assignee ? (
                                     <div className="flex items-center gap-2">
-                                        <AssigneeAvatar assignee={task.assignee} />
-                                        <span className="text-sm">{task.assignee.full_name}</span>
+                                        <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[10px] shrink-0 overflow-hidden ring-1 ring-white">
+                                            {task.assignee.avatar_url
+                                                ? <img src={task.assignee.avatar_url} alt={task.assignee.full_name} className="w-full h-full object-cover" />
+                                                : (task.assignee.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+                                            }
+                                        </div>
+                                        <span className="text-sm font-medium">{task.assignee.full_name}</span>
                                     </div>
                                 ) : (
                                     <span className="text-sm text-muted-foreground">Unassigned</span>
@@ -499,10 +609,12 @@ export default function TasksPageView() {
 
     const [tasks, setTasks]             = useState([])
     const [loading, setLoading]         = useState(true)
-    const [filter, setFilter]           = useState('all')
     const [createOpen, setCreateOpen]   = useState(false)
     const [detailTask, setDetailTask]   = useState(null)
     const [submitting, setSubmitting]   = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [filterPriority, setFilterPriority] = useState('all')
+    const [collapsedGroups, setCollapsedGroups] = useState(new Set(['done']))
     const [leadSearch, setLeadSearch]   = useState('')
     const [leadResults, setLeadResults] = useState([])
     const [selectedLead, setSelectedLead] = useState(null)
@@ -523,7 +635,7 @@ export default function TasksPageView() {
 
     useEffect(() => {
         if (canViewLeads) fetchTasks()
-    }, [canViewLeads, filter])
+    }, [canViewLeads])
 
     useEffect(() => {
         if (createOpen && canAssignOthers && teamMembers.length === 0) {
@@ -550,10 +662,7 @@ export default function TasksPageView() {
     const fetchTasks = async () => {
         try {
             setLoading(true)
-            const params = new URLSearchParams()
-            if (filter === 'completed') params.set('status', 'completed')
-            else if (filter !== 'all') params.set('status', 'pending')
-            const res = await fetch(`/api/tasks?${params}`)
+            const res = await fetch(`/api/tasks`) // Fetch all to allow smart client-side grouping
             if (!res.ok) throw new Error()
             const data = await res.json()
             setTasks(data.tasks || [])
@@ -564,21 +673,49 @@ export default function TasksPageView() {
         }
     }
 
-    const getFiltered = () =>
-        tasks.filter(t => {
-            if (filter === 'overdue')
-                return t.status === 'pending' && t.due_date &&
-                    isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date))
-            if (filter === 'today')
-                return t.status === 'pending' && t.due_date && isToday(parseISO(t.due_date))
-            if (filter === 'upcoming')
-                return t.status === 'pending' && t.due_date &&
-                    isFuture(parseISO(t.due_date)) && !isToday(parseISO(t.due_date))
-            if (filter === 'no_date')
-                return t.status === 'pending' && !t.due_date
-            if (filter === 'completed') return t.status === 'completed'
-            return true
+    // Smart Sorting Engine
+    const sortedTasks = [...tasks].sort((a, b) => {
+        if (a.status !== b.status) return a.status === 'completed' ? 1 : -1
+        const aOver = getIsOverdue(a) && a.status !== 'completed'
+        const bOver = getIsOverdue(b) && b.status !== 'completed'
+        if (aOver !== bOver) return aOver ? -1 : 1
+        if (a.due_date && b.due_date) {
+            const dateDiff = parseISO(a.due_date).getTime() - parseISO(b.due_date).getTime()
+            if (dateDiff !== 0) return dateDiff
+        } else if (a.due_date || b.due_date) {
+            return a.due_date ? -1 : 1
+        }
+        const pOrder = { high: 0, medium: 1, low: 2 }
+        if (a.priority !== b.priority) return pOrder[a.priority] - pOrder[b.priority]
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+
+    const filteredTasks = sortedTasks.filter(t => {
+        const matchesPriority = filterPriority === 'all' ? true : t.priority === filterPriority
+        const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                             t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                             t.lead?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+                             
+        return matchesPriority && matchesSearch
+    })
+
+    const toggleGroup = (groupId) => {
+        setCollapsedGroups(prev => {
+            const next = new Set(prev)
+            if (next.has(groupId)) next.delete(groupId)
+            else next.add(groupId)
+            return next
         })
+    }
+
+    // Grouping Categorization
+    const groups = [
+        { id: 'overdue',  label: 'Overdue',      icon: AlertCircle, color: 'text-red-600',   bg: 'bg-red-50',     tasks: filteredTasks.filter(t => t.status !== 'completed' && getIsOverdue(t)) },
+        { id: 'today',    label: 'Due Today',    icon: Clock,       color: 'text-indigo-600',bg: 'bg-indigo-50',  tasks: filteredTasks.filter(t => t.status !== 'completed' && !getIsOverdue(t) && t.due_date && isToday(parseISO(t.due_date))) },
+        { id: 'upcoming', label: 'Upcoming',     icon: Calendar,    color: 'text-slate-600', bg: 'bg-slate-50',   tasks: filteredTasks.filter(t => t.status !== 'completed' && !getIsOverdue(t) && t.due_date && !isToday(parseISO(t.due_date))) },
+        { id: 'later',    label: 'No Due Date',  icon: ListChecks,  color: 'text-slate-400', bg: 'bg-slate-100/50',tasks: filteredTasks.filter(t => t.status !== 'completed' && !t.due_date) },
+        { id: 'done',     label: 'Completed',    icon: CheckCircle2,color: 'text-emerald-600',bg: 'bg-emerald-50', tasks: filteredTasks.filter(t => t.status === 'completed') }
+    ]
 
     const handleToggle = async (task) => {
         const newStatus = task.status === 'completed' ? 'pending' : 'completed'
@@ -627,226 +764,150 @@ export default function TasksPageView() {
         setFormData(EMPTY_FORM)
     }
 
-    const overdueCount = tasks.filter(t =>
-        t.status === 'pending' && t.due_date &&
-        isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date))
-    ).length
-
-    const todayCount = tasks.filter(t =>
-        t.status === 'pending' && t.due_date && isToday(parseISO(t.due_date))
-    ).length
-
-    const pendingCount = tasks.filter(t => t.status === 'pending').length
-
-    const TABS = [
-        { key: 'all',       label: 'All' },
-        { key: 'overdue',   label: 'Overdue',   count: overdueCount, urgent: true },
-        { key: 'today',     label: 'Today',     count: todayCount },
-        { key: 'upcoming',  label: 'Upcoming' },
-        { key: 'no_date',   label: 'No Date' },
-        { key: 'completed', label: 'Completed' },
-    ]
-
-    const EMPTY_MSGS = {
-        overdue:   { title: 'All clear', sub: 'No overdue tasks' },
-        today:     { title: 'Nothing due today', sub: 'Enjoy your day!' },
-        upcoming:  { title: 'No upcoming tasks', sub: 'Schedule for later' },
-        no_date:   { title: 'No undated tasks' },
-        completed: { title: 'No completed tasks' },
-        all:       { title: 'No tasks yet', sub: 'Create your first task to get started' },
-    }
+    const overdueCount = tasks.filter(t => t.status !== 'completed' && getIsOverdue(t)).length
+    const pendingCount = tasks.filter(t => t.status !== 'completed').length
+    const highPriorityCount = tasks.filter(t => t.status !== 'completed' && t.priority === 'high').length
+    const completedCount = tasks.filter(t => t.status === 'completed').length
 
     if (permLoading || (loading && tasks.length === 0)) {
         return (
-            <div className="flex-1 space-y-5 p-8 pt-6">
-                <Skeleton className="h-9 w-40" />
-                <div className="flex gap-2">
-                    {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-7 w-20 rounded-full" />)}
+            <div className="flex-1 space-y-6 p-8 pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
                 </div>
-                <div className="space-y-2">
-                    {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-[68px] w-full rounded-xl" />)}
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <div className="space-y-4">
+                    {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
                 </div>
             </div>
         )
     }
 
-    const filtered = getFiltered()
 
     return (
         <TooltipProvider delayDuration={0}>
-            <div className="flex-1 space-y-5 p-8 pt-6">
+            <div className="flex-1 space-y-6 p-8 pt-6 min-h-0 overflow-y-auto bg-slate-50/30">
+                {/* Header Analytics */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {[
+                        { label: 'Pending', value: pendingCount, icon: Clock, color: 'blue' },
+                        { label: 'Overdue', value: overdueCount, icon: AlertCircle, color: 'red' },
+                        { label: 'High Priority', value: highPriorityCount, icon: Zap, color: 'rose' },
+                        { label: 'Completed', value: completedCount, icon: CheckCircle2, color: 'emerald' },
+                    ].map(({ label, value, icon: Icon, color }) => (
+                        <Card key={label} className="border-0 shadow-sm ring-1 ring-gray-100 bg-white">
+                            <CardContent className="p-4 flex items-center gap-4">
+                                <div className={cn("p-2.5 rounded-xl", 
+                                    color === 'blue' ? 'bg-blue-50 text-blue-600' : 
+                                    color === 'red' ? 'bg-red-50 text-red-600' : 
+                                    color === 'rose' ? 'bg-rose-50 text-rose-600' :
+                                    'bg-emerald-50 text-emerald-600'
+                                )}>
+                                    <Icon className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">{label}</p>
+                                    <p className={cn(
+                                        "text-base font-black mt-0.5",
+                                        label === 'Overdue' && value > 0 ? 'text-red-600' : 'text-gray-900'
+                                    )}>{value}</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
 
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-2xl font-bold tracking-tight">Tasks</h2>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                            {pendingCount} pending{pendingCount !== 1 ? '' : ''}
-                            {overdueCount > 0 && (
-                                <span className="ml-2 text-red-600 font-medium">· {overdueCount} overdue</span>
-                            )}
-                        </p>
+                {/* Filter & Action Row */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-2 rounded-xl shadow-sm ring-1 ring-slate-100">
+                    <div className="flex items-center gap-3 flex-1 min-w-[200px]">
+                        <div className="relative flex-1 max-w-sm group">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                            <Input 
+                                placeholder="Search tasks or lead name..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-9 h-9 text-xs border-slate-100 bg-slate-50/50 rounded-lg focus-visible:ring-indigo-500/20 transition-all focus-visible:bg-white"
+                            />
+                        </div>
+                        <div className="h-6 w-[1px] bg-slate-100 mx-1 hidden sm:block" />
+                        <Select value={filterPriority} onValueChange={setFilterPriority}>
+                            <SelectTrigger className="w-[140px] h-9 border-slate-100 bg-slate-50/50 rounded-lg text-xs font-semibold focus:ring-indigo-500/20">
+                                <div className="flex items-center gap-2">
+                                    <Zap className="w-3 h-3 text-slate-400" />
+                                    <SelectValue placeholder="Priority" />
+                                </div>
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                                <SelectItem value="all">All Priorities</SelectItem>
+                                <SelectItem value="high">High Priority</SelectItem>
+                                <SelectItem value="medium">Medium Priority</SelectItem>
+                                <SelectItem value="low">Low Priority</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
-                    <Button onClick={() => setCreateOpen(true)} size="sm" className="gap-1.5">
+                    
+                    <Button onClick={() => setCreateOpen(true)} size="sm" className="h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 font-bold shadow-md transition-all active:scale-95 shrink-0">
                         <Plus className="w-4 h-4" /> Add Task
                     </Button>
                 </div>
 
-                {/* Filter pills */}
-                <div className="flex gap-1.5 flex-wrap">
-                    {TABS.map(({ key, label, count, urgent }) => (
-                        <button
-                            key={key}
-                            onClick={() => setFilter(key)}
-                            className={`
-                                inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
-                                transition-all duration-150 border
-                                ${filter === key
-                                    ? 'bg-foreground text-background border-foreground'
-                                    : 'bg-background text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
-                                }
-                            `}
-                        >
-                            {label}
-                            {count > 0 && (
-                                <span className={`
-                                    px-1.5 rounded-full text-[10px] font-bold leading-4
-                                    ${filter === key
-                                        ? 'bg-background/20 text-background'
-                                        : urgent ? 'bg-red-500 text-white' : 'bg-blue-100 text-blue-700'
-                                    }
-                                `}>
-                                    {count}
-                                </span>
-                            )}
-                        </button>
-                    ))}
-                </div>
-
-                {/* List */}
-                {filtered.length === 0 ? (
-                    <Card className="border-dashed">
-                        <CardContent className="py-14 text-center">
-                            <CheckCircle2 className="w-10 h-10 text-muted-foreground/25 mx-auto mb-3" />
-                            <p className="font-medium text-sm">{EMPTY_MSGS[filter]?.title}</p>
-                            {EMPTY_MSGS[filter]?.sub && (
-                                <p className="text-xs text-muted-foreground mt-1">{EMPTY_MSGS[filter].sub}</p>
-                            )}
-                            {filter === 'all' && (
-                                <Button variant="outline" size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-                                    <Plus className="w-3.5 h-3.5 mr-1.5" /> Create first task
-                                </Button>
-                            )}
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div className="space-y-2">
-                        {filtered.map(task => {
-                            const isOverdue   = getIsOverdue(task)
-                            const isCompleted = task.status === 'completed'
-                            const pCfg        = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
-                            const stageColor  = task.lead?.stage?.color || '#94a3b8'
-                            const leadInitial = (task.lead?.name || '?')[0].toUpperCase()
-
+                {/* Task Content Area */}
+                <div className="space-y-8">
+                    {filteredTasks.length === 0 ? (
+                        <div className="text-center py-24 bg-white rounded-2xl shadow-sm ring-1 ring-slate-100">
+                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Search className="w-8 h-8 text-slate-200" />
+                            </div>
+                            <h4 className="text-sm font-bold text-slate-900">No tasks found</h4>
+                            <p className="text-xs text-slate-500 mt-1 max-w-[200px] mx-auto">Try adjusting your filters or search query.</p>
+                        </div>
+                    ) : (
+                        groups.filter(g => g.tasks.length > 0).map(group => {
+                            const isCollapsed = collapsedGroups.has(group.id)
                             return (
-                                <div
-                                    key={task.id}
-                                    className={[
-                                        'group rounded-xl border bg-background transition-all duration-150 cursor-pointer',
-                                        isOverdue && !isCompleted
-                                            ? 'border-red-200 bg-red-50/20'
-                                            : isCompleted
-                                                ? 'border-border/40 opacity-60'
-                                                : 'border-border hover:border-border/80 hover:shadow-sm',
-                                    ].join(' ')}
-                                    onClick={() => setDetailTask(task)}
-                                >
-                                    {/* Top row — checkbox · title */}
-                                    <div className="flex items-start gap-2.5 px-3 pt-3 pb-1">
-                                        <div onClick={e => e.stopPropagation()}>
-                                            <button
-                                                onClick={() => handleToggle(task)}
-                                                className={cn(
-                                                    "mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
-                                                    isCompleted
-                                                        ? "bg-indigo-600 border-indigo-600"
-                                                        : "border-gray-200 hover:border-indigo-500 text-transparent hover:text-indigo-500"
-                                                )}
+                                <div key={group.id} className="space-y-4">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button 
+                                                onClick={() => toggleGroup(group.id)}
+                                                className="flex items-center gap-2.5 px-1 w-full group/header focus:outline-none"
                                             >
-                                                <CheckCircle2 className={cn("w-3.5 h-3.5", isCompleted ? "text-white" : "opacity-0 hover:opacity-100")} />
+                                                <div className={cn("p-1.5 rounded-lg transition-colors", group.bg)}>
+                                                    <group.icon className={cn("w-4 h-4", group.color)} />
+                                                </div>
+                                                <h3 className="text-[12px] font-black uppercase tracking-widest text-slate-500 group-hover/header:text-slate-900 transition-colors">
+                                                    {group.label} 
+                                                    <span className="ml-2 font-medium text-slate-400">({group.tasks.length})</span>
+                                                </h3>
+                                                <div className="h-px bg-slate-100 flex-1 ml-2" />
+                                                <ChevronDown className={cn(
+                                                    "w-4 h-4 text-slate-300 transition-transform duration-300",
+                                                    isCollapsed ? "-rotate-90" : "rotate-0"
+                                                )} />
                                             </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-[10px] font-bold uppercase tracking-wider py-1 px-2 border-slate-200">
+                                            {isCollapsed ? 'Expand Group' : 'Collapse Group'}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                    
+                                    {!isCollapsed && (
+                                        <div className="grid grid-cols-1 gap-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                                            {group.tasks.map(task => (
+                                                <TaskRow 
+                                                    key={task.id} 
+                                                    task={task} 
+                                                    onToggle={handleToggle}
+                                                    onEditClick={setDetailTask}
+                                                />
+                                            ))}
                                         </div>
-                                        <p className={`flex-1 min-w-0 text-sm font-medium leading-snug ${isCompleted ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                                            {task.title}
-                                        </p>
-                                    </div>
-
-                                    {/* Description */}
-                                    {task.description && !isCompleted && (
-                                        <p className="text-xs text-muted-foreground px-3 pb-1 pl-[calc(0.75rem+1.25rem+0.625rem)] line-clamp-1">
-                                            {task.description}
-                                        </p>
                                     )}
-
-                                    {/* Footer — left: date  ·  right: lead + priority + assignee */}
-                                    <div className="flex items-center justify-between px-3 pb-2.5 pt-1 pl-[calc(0.75rem+1.25rem+0.625rem)]">
-                                        {/* Left: date */}
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                            {!isCompleted && <DueDateBadge task={task} />}
-                                            {isCompleted && task.completed_at && (
-                                                <span className="text-[11px] text-muted-foreground">
-                                                    Done {format(parseISO(task.completed_at), 'MMM d')}
-                                                </span>
-                                            )}
-                                            {!isCompleted && !task.due_date && (
-                                                <span className="text-[11px] text-muted-foreground/50">No due date</span>
-                                            )}
-                                        </div>
-
-                                        {/* Right: lead · priority · assignee */}
-                                        <div className="flex items-center gap-1.5 shrink-0 ml-2" onClick={e => e.stopPropagation()}>
-                                            {/* Lead pill */}
-                                            {task.lead && (
-                                                <LeadHoverCard lead={task.lead} leadId={task.lead_id}>
-                                                    <button className="inline-flex items-center gap-1 max-w-[120px] rounded-full border border-border bg-muted/50 px-1.5 py-0.5 hover:bg-muted transition-colors">
-                                                        <span
-                                                            className="w-3 h-3 rounded-full shrink-0 flex items-center justify-center text-white text-[7px] font-bold"
-                                                            style={{ background: stageColor }}
-                                                        >
-                                                            {leadInitial}
-                                                        </span>
-                                                        <span className="text-[11px] font-medium text-foreground truncate">{task.lead.name}</span>
-                                                    </button>
-                                                </LeadHoverCard>
-                                            )}
-
-                                            <span className="text-border text-[10px]">·</span>
-
-                                            {/* Priority dot + label */}
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <span className="inline-flex items-center gap-1 cursor-default">
-                                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pCfg.dot}`} />
-                                                        <span className={`text-[11px] font-medium ${pCfg.text}`}>{pCfg.label}</span>
-                                                    </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent className="text-xs">Priority: {pCfg.label}</TooltipContent>
-                                            </Tooltip>
-
-                                            {/* Assignee avatar */}
-                                            {task.assignee && (
-                                                <>
-                                                    <span className="text-border text-[10px]">·</span>
-                                                    <AssigneeAvatar assignee={task.assignee} />
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
                             )
-                        })}
-                    </div>
-                )}
+                        })
+                    )}
+                </div>
             </div>
 
             {/* ─── Task Detail Sheet ──────────────────────────────────── */}

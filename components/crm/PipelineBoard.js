@@ -1,77 +1,191 @@
 'use client'
 
-import { useState, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useState, useCallback, useRef, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     DndContext,
-    closestCorners,
-    KeyboardSensor,
+    closestCenter,
     PointerSensor,
+    KeyboardSensor,
     useSensor,
     useSensors,
-    DragOverlay
+    DragOverlay,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { PipelineColumn } from './PipelineColumn'
 import { LeadCard } from './LeadCard'
-import { createClient } from '@/lib/supabase/client'
-import { toast } from 'react-hot-toast'
+import { StageSettingsSheet } from './StageSettingsSheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
-    DialogTitle
+    DialogTitle,
 } from '@/components/ui/dialog'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 import LeadForm from './LeadForm'
 import { usePermission } from '@/contexts/PermissionContext'
-
-// React Query Hooks
 import { useLeads } from '@/hooks/useLeads'
 import { usePipelines, useUsers } from '@/hooks/usePipelines'
 import { useProjects } from '@/hooks/useProjects'
+import { toast } from 'sonner'
+import { Plus, Filter, X } from 'lucide-react'
 
-/**
- * Optimized PipelineBoard with React Query
- * Parallelized fetching and cross-tab caching
- */
-const PipelineBoard = forwardRef(({ projectId, campaignId }, ref) => {
-    // 1. Parallel Fetching (Hydrates instantly if cached)
-    const { data: pipelines = [], isLoading: pipesLoading } = usePipelines()
+const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {}, showFilters = true }, ref) => {
+    const { data: pipelines = [], isLoading: pipesLoading, refetch: refetchPipelines } = usePipelines()
     const { data: leadsResponse, isLoading: leadsLoading, refetch: refetchLeads } = useLeads({
-        projectId: projectId,
-        campaign_id: campaignId
+        projectId,
+        campaign_id: campaignId,
+        ...externalFilters,
     })
     const { data: projectsData } = useProjects({ status: 'active' })
     const { data: users = [] } = useUsers()
-    
-    // UI Helpers
+
     const leads = leadsResponse?.leads || []
     const projects = Array.isArray(projectsData) ? projectsData : (projectsData?.projects || [])
     const loading = pipesLoading || leadsLoading
-    const activePipeline = pipelines.length > 0 ? pipelines[0] : null
-    
-    // Local UI interactions
+    const activePipeline = pipelines[0] ?? null
+
+    // Optimistic stage overrides: Map<leadId, stageId>
+    const [optimisticMoves, setOptimisticMoves] = useState(new Map())
+    const rollbackRef = useRef(null)
+
+    // Local UI state
     const [activeDragItem, setActiveDragItem] = useState(null)
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [targetStageId, setTargetStageId] = useState(null)
     const [submitting, setSubmitting] = useState(false)
-    const canManageDeals = usePermission('manage_deals')
+    const [settingsStage, setSettingsStage] = useState(null)
 
-    const supabase = createClient()
+    // Filters
+    const [filterAgent, setFilterAgent] = useState('__all__')
+    const [filterProject, setFilterProject] = useState('__all__')
+    const [filterStaleOnly, setFilterStaleOnly] = useState(false)
+
+    const canManageDeals = usePermission('manage_deals')
+    const canManageSettings = usePermission('manage_crm_settings')
     const router = useRouter()
 
-    // Sensors for drag detection
+    useImperativeHandle(ref, () => ({ refresh: refetchLeads }))
+
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     )
 
-    // Expose refresh function to parent
-    useImperativeHandle(ref, () => ({
-        refresh: refetchLeads
-    }))
+    // Merge optimistic overrides into leads
+    const displayLeads = useMemo(() => {
+        if (!optimisticMoves.size) return leads
+        return leads.map(l => {
+            const override = optimisticMoves.get(l.id)
+            return override !== undefined ? { ...l, stage_id: override } : l
+        })
+    }, [leads, optimisticMoves])
+
+    // Apply local filters
+    const filteredLeads = useMemo(() => {
+        let result = displayLeads
+        if (filterAgent && filterAgent !== '__all__') result = result.filter(l => l.assigned_to === filterAgent)
+        if (filterProject && filterProject !== '__all__') result = result.filter(l => l.project_id === filterProject)
+        if (filterStaleOnly) result = result.filter(l => {
+            if (!l.stage?.stale_days) return false
+            return l.days_in_current_stage >= l.stage.stale_days
+        })
+        return result
+    }, [displayLeads, filterAgent, filterProject, filterStaleOnly])
+
+    const hasFilters = (filterAgent && filterAgent !== '__all__') || (filterProject && filterProject !== '__all__') || filterStaleOnly
+
+    const handleDragStart = ({ active }) => {
+        if (!canManageDeals) return
+        const lead = leads.find(l => l.id === active.id)
+        if (lead) setActiveDragItem(lead)
+    }
+
+    const handleDragEnd = ({ active, over }) => {
+        setActiveDragItem(null)
+        if (!over || !canManageDeals) return
+
+        const stages = activePipeline?.stages || []
+        let newStageId = null
+
+        if (stages.find(s => s.id === over.id)) {
+            newStageId = over.id
+        } else {
+            const overLead = leads.find(l => l.id === over.id)
+            if (overLead) newStageId = overLead.stage_id
+        }
+
+        if (newStageId) moveLead(active.id, newStageId)
+    }
+
+    const moveLead = useCallback(async (leadId, newStageId) => {
+        const lead = leads.find(l => l.id === leadId)
+        if (!lead || lead.stage_id === newStageId) return
+
+        const previousStageId = lead.stage_id
+
+        // Optimistic update — instant visual feedback
+        setOptimisticMoves(prev => new Map(prev).set(leadId, newStageId))
+        rollbackRef.current = () => setOptimisticMoves(prev => {
+            const next = new Map(prev)
+            next.set(leadId, previousStageId)
+            return next
+        })
+
+        try {
+            const res = await fetch(`/api/leads/${leadId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stageId: newStageId }),
+            })
+            if (!res.ok) throw new Error('Update failed')
+            await refetchLeads()
+            setOptimisticMoves(prev => { const next = new Map(prev); next.delete(leadId); return next })
+        } catch {
+            rollbackRef.current?.()
+            toast.error('Failed to move lead')
+        }
+    }, [leads, refetchLeads])
+
+    const handleStageUpdate = useCallback(async (stageId, updates) => {
+        try {
+            const res = await fetch('/api/pipeline/stages', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stages: [{ id: stageId, ...updates }] }),
+            })
+            if (!res.ok) throw new Error('Stage update failed')
+            refetchPipelines()
+        } catch {
+            toast.error('Failed to update stage')
+        }
+    }, [refetchPipelines])
+
+    const handleAddStage = async () => {
+        if (!activePipeline) return
+        const name = prompt('Stage name:')
+        if (!name?.trim()) return
+        try {
+            const maxOrder = Math.max(...(activePipeline.stages.map(s => s.order_index) || [0]))
+            await fetch('/api/pipeline/stages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pipeline_id: activePipeline.id, name: name.trim(), order_index: maxOrder + 1 }),
+            })
+            refetchPipelines()
+        } catch {
+            toast.error('Failed to add stage')
+        }
+    }
 
     const handleAddLead = (stageId) => {
         setTargetStageId(stageId)
@@ -82,18 +196,15 @@ const PipelineBoard = forwardRef(({ projectId, campaignId }, ref) => {
         setSubmitting(true)
         try {
             if (!formData.projectId && projectId) formData.projectId = projectId
-            
             const res = await fetch('/api/leads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(formData),
             })
-
             const result = await res.json()
             if (!res.ok) throw new Error(result.error || 'Failed to create lead')
-
-            toast.success('Lead created successfully')
-            refetchLeads() // Sync with server cache
+            toast.success('Lead created')
+            refetchLeads()
             setAddDialogOpen(false)
         } catch (error) {
             toast.error(error.message)
@@ -102,128 +213,170 @@ const PipelineBoard = forwardRef(({ projectId, campaignId }, ref) => {
         }
     }
 
-    const handleDragStart = (event) => {
-        if (!canManageDeals) return
-        const { active } = event
-        setActiveDragItem(active.data.current)
-    }
-
-    const handleDragEnd = async (event) => {
-        const { active, over } = event
-        setActiveDragItem(null)
-        if (!over) return
-
-        let leadId = active.id
-        const overId = over.id
-
-        let newStageId = null
-        if (activePipeline?.stages.find(s => s.id === overId)) {
-            newStageId = overId
-        } else {
-            const overLead = leads.find(l => l.id === overId)
-            if (overLead) newStageId = overLead.stage_id
-        }
-
-        if (newStageId) moveLead(leadId, newStageId)
-    }
-
-    const moveLead = useCallback(async (leadId, newStageId) => {
-        const leadToUpdate = leads.find(l => l.id === leadId)
-        if (!leadToUpdate || leadToUpdate.stage_id === newStageId) return
-
-        try {
-            const res = await fetch(`/api/leads/${leadId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: leadToUpdate.name,
-                    stageId: newStageId
-                })
-            })
-
-            if (!res.ok) throw new Error('Update failed')
-            refetchLeads() // Let React Query sync the state
-            toast.success('Lead stage updated')
-        } catch (error) {
-            console.error('Failed to move lead:', error)
-            toast.error(`Failed to move lead`)
-        }
-    }, [leads, refetchLeads])
-
-    const handleLeadClick = (lead) => {
-        router.push(`/dashboard/admin/crm/leads/${lead.id}`)
-    }
-
-    // [LOADING STATE]
-    if (loading && !leads.length) return (
-        <div className="flex min-h-[calc(100vh-300px)] gap-4 overflow-x-auto pb-2">
-            {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex-shrink-0 w-full md:w-[300px] h-full rounded-xl bg-muted/30 border border-border/50 p-4 space-y-4">
-                    <div className="flex items-center justify-between mb-4">
-                        <Skeleton className="h-6 w-32 rounded-md" />
-                        <Skeleton className="h-6 w-8 rounded-full" />
+    // Loading skeleton
+    if (loading && !leads.length) {
+        return (
+            <div className="flex gap-4 overflow-x-auto pb-2 min-h-[calc(100vh-320px)]">
+                {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="flex-shrink-0 w-[300px] space-y-3">
+                        <Skeleton className="h-10 w-full rounded-xl" />
+                        <Skeleton className="h-36 w-full rounded-xl" />
+                        <Skeleton className="h-28 w-full rounded-xl" />
                     </div>
-                    <div className="space-y-3">
-                        <Skeleton className="h-40 w-full rounded-lg bg-card border border-border/50" />
-                        <Skeleton className="h-40 w-full rounded-lg bg-card border border-border/50" />
-                    </div>
-                </div>
-            ))}
-        </div>
-    )
+                ))}
+            </div>
+        )
+    }
 
-    if (!activePipeline) return (
-        <div className="flex flex-col items-center justify-center h-64 border border-dashed border-border rounded-xl bg-muted/20">
-            <h3 className="text-lg font-medium text-foreground">No Pipelines Found</h3>
-            <p className="text-muted-foreground text-sm mb-6 max-w-md text-center">It looks like you haven't set up a sales pipeline yet.</p>
-        </div>
-    )
+    if (!activePipeline) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-border rounded-2xl bg-muted/20">
+                <p className="text-base font-medium text-foreground">No pipeline configured</p>
+                <p className="text-sm text-muted-foreground mt-1">Set up a pipeline in org settings to get started.</p>
+            </div>
+        )
+    }
 
     return (
         <>
+            {/* Filter bar */}
+            {showFilters && <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <Select value={filterAgent} onValueChange={setFilterAgent}>
+                    <SelectTrigger className="h-8 w-40 text-xs bg-card">
+                        <SelectValue placeholder="All agents" />
+                    </SelectTrigger>
+                     <SelectContent>
+                        <SelectItem value="__all__">All agents</SelectItem>
+                        {Array.isArray(users) && users.map(u => (
+                            <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                {!projectId && (
+                    <Select value={filterProject} onValueChange={setFilterProject}>
+                        <SelectTrigger className="h-8 w-40 text-xs bg-card">
+                            <SelectValue placeholder="All projects" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__all__">All projects</SelectItem>
+                            {Array.isArray(projects) && projects.map(p => (
+                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+
+                <Button
+                    variant={filterStaleOnly ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFilterStaleOnly(v => !v)}
+                    className="h-8 text-xs gap-1.5"
+                >
+                    <Filter className="w-3 h-3" />
+                    Stale only
+                    {filterStaleOnly && (
+                        <Badge className="h-4 text-[9px] px-1 bg-primary-foreground text-primary border-0 rounded ml-0.5">
+                            ON
+                        </Badge>
+                    )}
+                </Button>
+
+                {hasFilters && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs text-muted-foreground gap-1"
+                        onClick={() => { setFilterAgent('__all__'); setFilterProject('__all__'); setFilterStaleOnly(false) }}
+                    >
+                        <X className="w-3 h-3" /> Clear
+                    </Button>
+                )}
+
+                <div className="ml-auto text-xs text-muted-foreground">
+                    {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
+                </div>
+            </div>}
+
             <DndContext
                 sensors={sensors}
-                collisionDetection={closestCorners}
+                collisionDetection={closestCenter}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
-            >
-                <div className="flex min-h-[calc(100vh-300px)] gap-4 overflow-x-auto pb-2">
-                    {activePipeline.stages.map(stage => {
-                        const stageLeads = leads.filter(l => l.stage_id === stage.id || (!l.stage_id && stage.order_index === 0))
+                            >
+                <div className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-380px)]">
+                    {Array.isArray(activePipeline?.stages) && activePipeline.stages.map(stage => {
+                        const stageLeads = filteredLeads
+                            .filter(l => l.stage_id === stage.id || (!l.stage_id && stage.order_index === 0))
+                            .map(l => ({ ...l, onClick: (lead) => router.push(`/dashboard/admin/crm/leads/${lead.id}`) }))
                         return (
                             <PipelineColumn
                                 key={stage.id}
                                 stage={stage}
-                                leads={stageLeads.map(l => ({ ...l, onClick: handleLeadClick }))}
+                                leads={stageLeads}
                                 onAddLead={handleAddLead}
-                                canDrop={canManageDeals}
+                                onStageUpdate={handleStageUpdate}
+                                onOpenSettings={setSettingsStage}
+                                canManageSettings={canManageSettings}
                             />
                         )
                     })}
-                </div>
-                <DragOverlay>
-                    {activeDragItem ? <LeadCard lead={activeDragItem} /> : null}
-                </DragOverlay>
 
-                <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Quick Add Deal</DialogTitle>
-                        </DialogHeader>
-                        {targetStageId && (
-                            <LeadForm
-                                projects={projects}
-                                users={users}
-                                stages={activePipeline?.stages || []}
-                                initialStageId={targetStageId}
-                                onSubmit={handleCreateLead}
-                                onCancel={() => setAddDialogOpen(false)}
-                                isSubmitting={submitting}
-                            />
-                        )}
-                    </DialogContent>
-                </Dialog>
+                    {/* Add Stage button */}
+                    {canManageSettings && (
+                        <div className="flex-shrink-0 w-[300px] flex items-start pt-0.5">
+                            <Button
+                                variant="outline"
+                                onClick={handleAddStage}
+                                className="h-10 w-full border-dashed text-muted-foreground hover:text-primary hover:border-primary text-sm gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Stage
+                            </Button>
+                        </div>
+                    )}
+                </div>
+
+                <DragOverlay dropAnimation={{ duration: 150 }}>
+                    {activeDragItem ? (
+                        <div className="rotate-2 scale-105 shadow-2xl opacity-95">
+                            <LeadCard lead={activeDragItem} />
+                        </div>
+                    ) : null}
+                </DragOverlay>
             </DndContext>
+
+            {/* Add Lead Dialog */}
+            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add Lead</DialogTitle>
+                    </DialogHeader>
+                    {targetStageId && (
+                        <LeadForm
+                            projects={projects}
+                            users={users}
+                            stages={activePipeline?.stages || []}
+                            initialStageId={targetStageId}
+                            onSubmit={handleCreateLead}
+                            onCancel={() => setAddDialogOpen(false)}
+                            isSubmitting={submitting}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Stage Settings Sheet */}
+            {settingsStage && (
+                <StageSettingsSheet
+                    stage={settingsStage}
+                    pipeline={activePipeline}
+                    open={!!settingsStage}
+                    onClose={() => setSettingsStage(null)}
+                    onStageUpdate={handleStageUpdate}
+                    onPipelineRefresh={refetchPipelines}
+                />
+            )}
         </>
     )
 })

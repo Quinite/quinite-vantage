@@ -85,7 +85,6 @@ export default function CrmSidebar() {
             title: 'Admin',
             items: [
                 { label: 'Audit Log', href: '/dashboard/admin/crm/auditlog', icon: FileText, permission: 'view_audit_logs' },
-                { label: 'Settings', href: '/dashboard/admin/crm/settings', icon: Settings, permission: 'view_settings' },
             ]
         }
     ]
@@ -94,7 +93,7 @@ export default function CrmSidebar() {
         <TooltipProvider delayDuration={0}>
             <aside
                 className={cn(
-                    "bg-background border-r border-border h-full hidden md:flex flex-col transition-all duration-300 relative",
+                    "bg-white border-r border-border h-full hidden md:flex flex-col transition-all duration-300 relative",
                     isCollapsed ? "w-20" : "w-64"
                 )}
             >

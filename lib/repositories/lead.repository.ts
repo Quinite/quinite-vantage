@@ -51,13 +51,16 @@ export class LeadRepository extends BaseRepository<Lead> {
             .select(`
         *,
         project:projects(id, name),
-        stage:pipeline_stages(id, name, color, pipeline_id),
+        stage:pipeline_stages(id, name, color, pipeline_id, stale_days),
         deals(id, amount, status),
         assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name, avatar_url),
-        call_logs!call_logs_lead_id_fkey(id, ended_at, sentiment_score, call_status, created_at)
+        call_logs!call_logs_lead_id_fkey(id, ended_at, sentiment_score, call_status, created_at),
+        last_transition:pipeline_stage_transitions(created_at)
       `)
             .eq('organization_id', organizationId)
- 
+            .order('created_at', { referencedTable: 'pipeline_stage_transitions', ascending: false })
+            .limit(1, { referencedTable: 'pipeline_stage_transitions' })
+
         // Order Results
         const sortBy = filters.sortBy || 'created_at'
         const sortOrder = filters.sortOrder || 'desc'
@@ -78,17 +81,21 @@ export class LeadRepository extends BaseRepository<Lead> {
             )
         }
 
-        // Status filter removed as column does not exist
-
         if (filters.assignedTo) {
             query = query.eq('assigned_to', filters.assignedTo)
+        }
+
+        // Campaign filter: only leads enrolled in this campaign (IDs pre-fetched by service layer)
+        if (filters.campaignLeadIds) {
+            query = filters.campaignLeadIds.length
+                ? query.in('id', filters.campaignLeadIds)
+                : query.eq('id', '00000000-0000-0000-0000-000000000000') // no results
         }
 
         // Archive Filtering
         if (filters.viewMode === 'archived') {
             query = query.not('archived_at', 'is', null)
         } else {
-            // Default: show only active leads
             query = query.is('archived_at', null)
         }
 

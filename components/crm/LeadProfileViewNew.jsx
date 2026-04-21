@@ -20,13 +20,17 @@ import LeadTasksManager from '@/components/crm/LeadTasksManager'
 import LeadCallsTab from '@/components/crm/LeadCallsTab'
 
 // Parallel Hooks
-import { useLead } from '@/hooks/useLeads'
+import { useLead, useLeadTasks, useLeadInteractions } from '@/hooks/useLeads'
 import { useOrgSettings } from '@/hooks/usePipelines'
 
 export default function LeadProfileView({ leadId, onClose, isModal = false }) {
     // 1. Data Fetching (Hydrates instantly if hovered earlier)
     const { data: lead, isLoading: leadLoading, refetch: refetchLead } = useLead(leadId)
     const { data: organization } = useOrgSettings()
+    
+    // Background pre-fetching for other tabs to ensure instant switching
+    useLeadTasks(leadId)
+    useLeadInteractions(leadId)
 
     const loading = leadLoading
     const [activeTab, setActiveTab] = useState('overview')
@@ -166,6 +170,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                         onUpdate={refreshAll}
                         onLinkUnit={() => setLinkDialogOpen(true)}
                         onUnlinkUnit={handleUnlink}
+                        onViewAllTasks={() => setActiveTab('tasks')}
                     />
                 )}
                 {activeTab === 'calls' && (
@@ -183,9 +188,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                     />
                 )}
                 {activeTab === 'timeline' && (
-                    <div className="max-w-3xl">
-                        <LeadActivityTimeline leadId={leadId} />
-                    </div>
+                    <LeadActivityTimeline leadId={leadId} />
                 )}
             </div>
 

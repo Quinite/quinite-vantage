@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Plus, Archive, AlertCircle, ShieldAlert, Loader2 } from 'lucide-react'
+import { Plus, Archive, AlertCircle, ShieldAlert, Loader2, LayoutGrid, List } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { usePermission } from '@/contexts/PermissionContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'react-hot-toast'
@@ -22,12 +23,9 @@ import {
 } from '@/hooks/useLeads'
 import { useProjects } from '@/hooks/useProjects'
 import { useQuery } from '@tanstack/react-query'
+import { useUsers } from '@/hooks/usePipelines'
 
 // Components
-import dynamic from 'next/dynamic'
-
-// Components
-// ... existing imports ...
 import { LeadTable } from '@/components/crm/leads/LeadTable'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,6 +35,7 @@ const LeadFilters = dynamic(() => import('@/components/crm/leads/LeadFilters').t
 })
 const LeadDialog = dynamic(() => import('@/components/crm/leads/LeadDialog').then(mod => mod.LeadDialog))
 const LeadSourceDialog = dynamic(() => import('@/components/crm/LeadSourceDialog'))
+// PipelineBoard import removed as it is no longer used here
 
 export default function LeadsPage() {
   // State
@@ -51,7 +50,8 @@ export default function LeadsPage() {
   const [sortOrder, setSortOrder] = useState('desc')
   const [viewMode, setViewMode] = useState('active') // 'active' or 'archived'
 
-  // Dialog States
+  // View type is now fixed to table
+  const viewType = 'table'
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSourceDialogOpen, setIsSourceDialogOpen] = useState(false)
   const [editingLead, setEditingLead] = useState(null)
@@ -111,16 +111,8 @@ export default function LeadsPage() {
 
   const { data: projects } = useProjects({ status: 'active' })
 
-  // Fetch users for assignment (inline hook usage since simple)
-  const { data: usersData } = useQuery({
-    queryKey: ['users'],
-    queryFn: async () => {
-      const res = await fetch('/api/admin/users')
-      if (!res.ok) throw new Error('Failed')
-      return res.json()
-    }
-  })
-  const users = usersData?.users || []
+  // Fetch users for assignment
+  const { data: users = [] } = useUsers()
 
   // Mutations
   const createLeadMutation = useCreateLead()
@@ -338,7 +330,8 @@ export default function LeadsPage() {
     <div className="flex-1 space-y-4 p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Leads</h2>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
+          {/* View toggle removed */}
           <Button onClick={() => setIsSourceDialogOpen(true)} disabled={!canCreate}>
             <Plus className="mr-2 h-4 w-4" /> Add Lead
           </Button>
@@ -366,7 +359,9 @@ export default function LeadsPage() {
         }}
       />
 
-      <LeadTable
+      {/* Kanban view removed */}
+
+      {viewType === 'table' ? <LeadTable
         leads={leads}
         loading={leadsListLoading}
         viewMode={viewMode}
@@ -409,7 +404,7 @@ export default function LeadsPage() {
         hasMore={metadata?.hasMore}
         totalLeads={metadata?.total || 0}
         isLoadingMore={isPlaceholderData}
-      />
+      /> : null}
 
       <LeadDialog
         open={isDialogOpen}

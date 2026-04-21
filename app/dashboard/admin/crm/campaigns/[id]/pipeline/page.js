@@ -112,8 +112,16 @@ export default function CampaignPipelinePage() {
                     </h1>
                     <div className="flex items-center gap-3 mt-1">
                         <p className="text-muted-foreground text-sm">
-                            Manage deals for <strong>{project?.name || 'Loading...'}</strong> (linked to this campaign)
+                            Showing leads enrolled in this campaign
+                            {project?.name ? <span> · <strong>{project.name}</strong></span> : null}
                         </p>
+                        {campaign.status && (
+                            <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
+                                campaign.status === 'running' ? 'bg-green-100 text-green-700' :
+                                campaign.status === 'paused' ? 'bg-amber-100 text-amber-700' :
+                                'bg-muted text-muted-foreground'
+                            }`}>{campaign.status}</span>
+                        )}
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -151,15 +159,10 @@ export default function CampaignPipelinePage() {
                 </div>
             </div>
 
-            {/* Board - Filtering by the Campaign's Project ID */}
-            {/* This ensures we see leads relevant to the campaign (since the campaign targets the project) */}
-            {
-                campaign.project_id && (
-                    <div className="p-6">
-                        <PipelineBoard ref={pipelineBoardRef} projectId={campaign.project_id} />
-                    </div>
-                )
-            }
+            {/* Board — filtered to enrolled leads only via campaign_id */}
+            <div className="p-6">
+                <PipelineBoard ref={pipelineBoardRef} campaignId={campaignId} />
+            </div>
 
             <LeadSourceDialog
                 open={isDealInitOpen}

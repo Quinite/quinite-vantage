@@ -83,7 +83,7 @@ export default function LeadProfileSidebar({ lead, onEditProfile, onEditAvatar }
     const hasIntelligence = lead.score > 0 || interest || sentiment || readiness || lead.budget_range || lead.total_calls > 0
 
     return (
-        <div className="bg-card border rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
+        <div className="bg-white border rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
             {/* Banner */}
             <div
                 className="relative h-28 w-full"
@@ -144,7 +144,7 @@ export default function LeadProfileSidebar({ lead, onEditProfile, onEditAvatar }
                             }}
                             className="text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
                         >
-                            {lead.stage.name}
+                            {'Stage: ' + lead.stage.name}
                         </span>
                     )}
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -157,8 +157,8 @@ export default function LeadProfileSidebar({ lead, onEditProfile, onEditAvatar }
                     </div>
                 </div>
                 {/* Source + Created */}
-                <p className="text-[11px] text-slate-400 leading-none">
-                    {lead.source || 'Manual'} · Added {relativeTime(lead.created_at)}
+                <p className="text-[11px] text-slate-400 capitalize leading-none">
+                    {'Source: ' + lead.source || 'Manual'} · Added {relativeTime(lead.created_at)}
                 </p>
             </div>
 

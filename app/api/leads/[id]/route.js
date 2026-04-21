@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { hasDashboardPermission } from '@/lib/dashboardPermissions'
 import { withAuth } from '@/lib/middleware/withAuth'
 import { LeadService } from '@/services/lead.service'
+import { logStageTransition, runAutomations } from '@/lib/pipeline-automation'
 
 /**
  * GET /api/leads/[id]
@@ -95,10 +96,10 @@ export async function PUT(request, { params }) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // 1. Fetch existing lead to check ownership
+        // 1. Fetch existing lead to check ownership + capture pre-update state
         const { data: existingLead, error: fetchError } = await supabase
             .from('leads')
-            .select('assigned_to, organization_id')
+            .select('assigned_to, organization_id, stage_id, interest_level, score')
             .eq('id', id)
             .maybeSingle()
 
@@ -181,6 +182,56 @@ export async function PUT(request, { params }) {
 
         if (!data) {
             return NextResponse.json({ error: 'Lead row not found after update' }, { status: 404 })
+        }
+
+        // [Pipeline] Log stage transition + run automations when stage changes
+        const stageChanged = body.stageId !== undefined && body.stageId !== existingLead.stage_id
+        const interestChanged = body.interest_level !== undefined && body.interest_level !== existingLead.interest_level
+        const scoreChanged = body.score !== undefined && body.score !== existingLead.score
+
+        if (stageChanged) {
+            await logStageTransition(
+                id,
+                existingLead.organization_id,
+                existingLead.stage_id,
+                body.stageId,
+                'manual',
+                user.id
+            )
+            await runAutomations({
+                leadId: id,
+                organizationId: existingLead.organization_id,
+                trigger: 'stage_exit',
+                triggerData: { fromStageId: existingLead.stage_id, toStageId: body.stageId },
+                userId: user.id,
+            })
+            await runAutomations({
+                leadId: id,
+                organizationId: existingLead.organization_id,
+                trigger: 'stage_enter',
+                triggerData: { toStageId: body.stageId, fromStageId: existingLead.stage_id },
+                userId: user.id,
+            })
+        }
+
+        if (interestChanged) {
+            await runAutomations({
+                leadId: id,
+                organizationId: existingLead.organization_id,
+                trigger: 'interest_level_change',
+                triggerData: { interestLevel: body.interest_level, prevInterestLevel: existingLead.interest_level },
+                userId: user.id,
+            })
+        }
+
+        if (scoreChanged) {
+            await runAutomations({
+                leadId: id,
+                organizationId: existingLead.organization_id,
+                trigger: 'score_threshold',
+                triggerData: { score: body.score, prevScore: existingLead.score ?? 0 },
+                userId: user.id,
+            })
         }
 
         // [Inventory Automation] If Lead is WON, mark linked unit as SOLD

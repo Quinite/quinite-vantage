@@ -1,17 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { useState } from 'react'
 import { toast } from 'sonner'
-import { GripVertical, Trash2, Plus, Loader2, Lock, ShieldCheck } from 'lucide-react'
+import { Loader2, Pencil, Check, X, Plus, Trash2, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { usePermission } from '@/contexts/PermissionContext'
-import PermissionTooltip from '@/components/permissions/PermissionTooltip'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
     AlertDialog,
     AlertDialogAction,
@@ -20,457 +15,203 @@ import {
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
-    AlertDialogTitle
+    AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { usePermission } from '@/contexts/PermissionContext'
+import { usePipelines } from '@/hooks/usePipelines'
+import Link from 'next/link'
 
-const MANDATORY_STAGE_NAMES = ['New Lead', 'Won', 'Lost']
-const DEFAULT_STAGE_COLORS = {
-    'New Lead': '#3b82f6',
-    'Won': '#16a34a',
-    'Lost': '#ef4444'
-}
+function PipelineRow({ pipeline, onRename, onSetDefault, onDelete }) {
+    const [editing, setEditing] = useState(false)
+    const [name, setName] = useState(pipeline.name)
+    const [saving, setSaving] = useState(false)
 
-const normalizeStageName = (name) => (name || '').trim().toLowerCase()
-const isMandatoryStage = (stage) => MANDATORY_STAGE_NAMES.some(
-    (mandatoryName) => normalizeStageName(mandatoryName) === normalizeStageName(stage?.name)
-)
-
-const ensureMandatoryStages = (stageList = [], pipelineId) => {
-    const normalizedMap = new Map(stageList.map((s) => [normalizeStageName(s.name), s]))
-    const next = [...stageList]
-
-    for (const mandatoryName of MANDATORY_STAGE_NAMES) {
-        if (!normalizedMap.has(normalizeStageName(mandatoryName))) {
-            next.push({
-                id: `temp-default-${mandatoryName.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
-                name: mandatoryName,
-                color: DEFAULT_STAGE_COLORS[mandatoryName],
-                order_index: next.length,
-                pipeline_id: pipelineId || null,
-            })
-        }
-    }
-
-    return next.map((stage) => {
-        if (!isMandatoryStage(stage)) return stage
-        const canonicalName = MANDATORY_STAGE_NAMES.find(
-            (mandatoryName) => normalizeStageName(mandatoryName) === normalizeStageName(stage.name)
-        ) || stage.name
-        return {
-            ...stage,
-            name: canonicalName,
-            color: stage.color || DEFAULT_STAGE_COLORS[canonicalName] || '#94a3b8',
-        }
-    })
-}
-
-function SortableStage({ id, stage, onChange, onDelete, canEdit }) {
-    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id, disabled: !canEdit })
-    const mandatory = isMandatoryStage(stage)
-
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: canEdit ? 1 : 0.7
+    const commitRename = async () => {
+        const trimmed = name.trim()
+        if (!trimmed || trimmed === pipeline.name) { setEditing(false); setName(pipeline.name); return }
+        setSaving(true)
+        await onRename(pipeline.id, trimmed)
+        setSaving(false)
+        setEditing(false)
     }
 
     return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl mb-3 shadow-sm group hover:shadow-md transition-shadow"
-        >
-            <div {...attributes} {...listeners} className={`outline-none ${canEdit ? 'cursor-grab hover:text-blue-600' : 'cursor-not-allowed text-gray-300'}`}>
-                <GripVertical className="h-5 w-5" />
-            </div>
+        <div className="flex items-center gap-3 py-3 px-4 rounded-xl border border-border bg-card hover:border-border/80 transition-colors">
+            {editing ? (
+                <Input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setEditing(false); setName(pipeline.name) } }}
+                    autoFocus
+                    className="h-8 text-sm flex-1"
+                />
+            ) : (
+                <span className="flex-1 text-sm font-medium text-foreground">{pipeline.name}</span>
+            )}
 
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                <div className="md:col-span-7">
-                    <Input
-                        value={stage.name}
-                        onChange={(e) => onChange(id, 'name', e.target.value)}
-                        placeholder="Stage Name"
-                        className="h-10"
-                        disabled={!canEdit}
-                    />
-                </div>
-                <div className="md:col-span-5 flex gap-2">
-                    <label className="h-10 w-12 rounded-md border border-slate-300 bg-white flex items-center justify-center cursor-pointer">
-                        <input
-                            type="color"
-                            value={stage.color || '#94a3b8'}
-                            onChange={(e) => onChange(id, 'color', e.target.value)}
-                            disabled={!canEdit}
-                            className="h-7 w-7 border-0 bg-transparent p-0 cursor-pointer"
-                            aria-label={`Pick color for ${stage.name}`}
-                        />
-                    </label>
-                    <div className="relative flex-1">
-                        <div className="absolute left-2 top-2.5 h-4 w-4 rounded-full border border-gray-200" style={{ backgroundColor: stage.color || '#94a3b8' }}></div>
-                        <Input
-                            value={stage.color || ''}
-                            onChange={(e) => onChange(id, 'color', e.target.value)}
-                            placeholder="#RRGGBB"
-                            className="h-9 pl-8 font-mono"
-                            disabled={!canEdit}
-                        />
-                    </div>
-                </div>
-            </div>
+            {pipeline.is_default && (
+                <Badge variant="secondary" className="text-[9px] h-4 px-1.5 shrink-0">Default</Badge>
+            )}
 
-            <PermissionTooltip
-                hasPermission={canEdit && !mandatory}
-                message={mandatory
-                    ? 'Default stages are mandatory and cannot be deleted.'
-                    : "You need 'Manage CRM Settings' permission to delete stages."}
-            >
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                        if (!canEdit || mandatory) return
-                        onDelete(id)
-                    }}
-                    disabled={!canEdit || mandatory}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 relative"
-                >
-                    {!canEdit ? <Lock className="w-3 h-3 absolute" /> : <Trash2 className="h-4 w-4" />}
-                </Button>
-            </PermissionTooltip>
+            <div className="flex items-center gap-1 shrink-0">
+                {editing ? (
+                    <>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={commitRename} disabled={saving}>
+                            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3 text-primary" />}
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(false); setName(pipeline.name) }}>
+                            <X className="w-3 h-3" />
+                        </Button>
+                    </>
+                ) : (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => setEditing(true)}>
+                        <Pencil className="w-3 h-3" />
+                    </Button>
+                )}
+                {!pipeline.is_default && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => onSetDefault(pipeline.id)}>
+                        Set default
+                    </Button>
+                )}
+                {!pipeline.is_default && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete(pipeline)}>
+                        <Trash2 className="w-3 h-3" />
+                    </Button>
+                )}
+            </div>
         </div>
     )
 }
 
 export default function PipelineSettingsPage() {
     const canEdit = usePermission('manage_crm_settings')
-    const [pipelines, setPipelines] = useState([])
-    const [selectedPipelineId, setSelectedPipelineId] = useState(null)
-    const [stages, setStages] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [saving, setSaving] = useState(false)
-    const [stageToDelete, setStageToDelete] = useState(null)
+    const { data: pipelines = [], isLoading, refetch } = usePipelines()
 
-    // Sensors for Drag and Drop
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 8,
-            },
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
+    const [newName, setNewName] = useState('')
+    const [creating, setCreating] = useState(false)
+    const [deleteTarget, setDeleteTarget] = useState(null)
+    const [deleting, setDeleting] = useState(false)
+
+    const handleRename = async (id, name) => {
+        const res = await fetch(`/api/pipelines/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
         })
-    )
+        if (res.ok) { toast.success('Pipeline renamed'); refetch() }
+        else toast.error('Failed to rename')
+    }
 
-    useEffect(() => {
-        fetchPipelines()
-    }, [])
+    const handleSetDefault = async (id) => {
+        const res = await fetch(`/api/pipelines/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_default: true }),
+        })
+        if (res.ok) { toast.success('Default pipeline updated'); refetch() }
+        else toast.error('Failed to update')
+    }
 
-    useEffect(() => {
-        if (selectedPipelineId && pipelines.length > 0) {
-            const pipeline = pipelines.find(p => p.id === selectedPipelineId)
-            if (pipeline) {
-                setStages(ensureMandatoryStages(pipeline.stages || [], selectedPipelineId))
-            }
-        }
-    }, [selectedPipelineId, pipelines])
+    const handleCreate = async () => {
+        if (!newName.trim()) return
+        setCreating(true)
+        const res = await fetch('/api/pipelines', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName.trim() }),
+        })
+        if (res.ok) { toast.success('Pipeline created'); setNewName(''); refetch() }
+        else toast.error('Failed to create pipeline')
+        setCreating(false)
+    }
 
-    const fetchPipelines = async () => {
-        try {
-            const res = await fetch('/api/crm/pipelines')
+    const handleDelete = async () => {
+        if (!deleteTarget) return
+        setDeleting(true)
+        const res = await fetch(`/api/pipelines/${deleteTarget.id}`, { method: 'DELETE' })
+        if (res.ok) { toast.success('Pipeline deleted'); refetch() }
+        else {
             const data = await res.json()
-            if (data.pipelines) {
-                setPipelines(data.pipelines)
-                if (data.pipelines.length > 0 && !selectedPipelineId) {
-                    setSelectedPipelineId(data.pipelines[0].id)
-                }
-            }
-        } catch (error) {
-            console.error('Failed to fetch pipelines:', error)
-            toast.error('Failed to load pipelines')
-        } finally {
-            setLoading(false)
+            toast.error(data.error || 'Cannot delete pipeline with active leads')
         }
+        setDeleting(false)
+        setDeleteTarget(null)
     }
-
-    const handleDragEnd = (event) => {
-        const { active, over } = event
-
-        if (!over || active.id === over.id) return
-
-        if (active.id !== over.id) {
-            setStages((items) => {
-                const oldIndex = items.findIndex(i => i.id === active.id)
-                const newIndex = items.findIndex(i => i.id === over.id)
-                return arrayMove(items, oldIndex, newIndex)
-            })
-        }
-    }
-
-    const handleStageChange = (id, field, value) => {
-        setStages(prev => prev.map(stage =>
-            stage.id === id ? { ...stage, [field]: value } : stage
-        ))
-    }
-
-    const handleDeleteStage = async (id) => {
-        const target = stages.find((s) => s.id === id)
-        if (!target || isMandatoryStage(target)) {
-            toast.error('This stage is mandatory and cannot be deleted')
-            return
-        }
-
-        if (String(id).startsWith('temp-')) {
-            setStages(prev => prev.filter(s => s.id !== id))
-            return
-        }
-
-        try {
-            const res = await fetch(`/api/pipeline/stages/${id}`, { method: 'DELETE' })
-            const data = await res.json()
-            if (res.ok) {
-                setStages(prev => prev.filter(s => s.id !== id))
-                toast.success('Stage deleted')
-            } else {
-                toast.error(data.error || 'Failed to delete stage')
-            }
-        } catch (error) {
-            toast.error('Error deleting stage')
-        }
-    }
-
-    const handleAddStage = () => {
-        const newStage = {
-            id: `temp-${Date.now()}`,
-            name: 'New Stage',
-            color: '#cbd5e1',
-            order_index: stages.length,
-            pipeline_id: selectedPipelineId
-        }
-        setStages([...stages, newStage])
-    }
-
-    const handleSave = async () => {
-        if (!selectedPipelineId) return
-        setSaving(true)
-
-        try {
-            const stagesWithDefaults = ensureMandatoryStages(stages, selectedPipelineId)
-            const hasEmptyName = stagesWithDefaults.some((stage) => !stage.name?.trim())
-            if (hasEmptyName) {
-                toast.error('Stage name cannot be empty')
-                return
-            }
-
-            // Prepare payload
-            // For new stages (temp-id), we need to POST them first or let PUT handle them if we modify API?
-            // Existing API: 
-            // PUT expects list of updates. 
-            // POST creates one.
-
-            // Strategy: 
-            // 1. Filter new stages (temp-) -> Create them via POST
-            // 2. Filter existing stages -> Update them via PUT (batch)
-
-            const newStages = stagesWithDefaults.filter(s => String(s.id).startsWith('temp-'))
-            const existingStages = stagesWithDefaults.filter(s => !String(s.id).startsWith('temp-'))
-
-            // Create new stages
-            const createdStages = []
-            for (const stage of newStages) {
-                const res = await fetch('/api/pipeline/stages', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        pipeline_id: selectedPipelineId,
-                        name: stage.name,
-                        color: stage.color || '#94a3b8',
-                        order_index: stagesWithDefaults.findIndex((s) => s.id === stage.id)
-                    })
-                })
-                const data = await res.json()
-                if (data.stage) {
-                    createdStages.push(data.stage)
-                }
-            }
-
-            // Update existing stages order and data
-            const updates = existingStages.map((stage, index) => ({
-                id: stage.id,
-                name: stage.name,
-                color: stage.color,
-                order_index: stages.indexOf(stage) // Update order based on current list position taking new ones into account?
-                // Wait, if I insert new ones, the indices list is mixed.
-                // Actually easier: Upload everything.
-            }))
-
-            // Correct approach:
-            // 1. Create new items. Get their real IDs.
-            // 2. Re-construct the full list with real IDs.
-            // 3. Send PUT with full list to update orders.
-
-            // Let's refine:
-            // The `createdStages` are now in DB.
-            // We need to update `existingStages` too.
-
-            // But I can't easily map the `temp` ones to the `created` ones to know their order unless I do it sequentially or careful mapping.
-            // Simple: just update order_index for existing ones relative to their position in `stages` excluding or including temp ones?
-
-            // Better: 
-            // 1. Create new ones.
-            // 2. Refresh list from server ? No, that loses pending edits to existing ones.
-
-            // Re-map:
-            // We know the index of each stage in `stages`.
-            // For `existingStages`, updates are easy.
-            // For `newStages`, they are created with the correct `order_index`.
-
-            // So: 
-            // 1. POST new stages with correct `order_index`.
-            // 2. PUT existing stages with correct `order_index` (and name/color).
-
-            // Note: `stages.indexOf(stage)` gives the correct index in the UI list.
-
-            await fetch('/api/pipeline/stages', {
-                method: 'PUT',
-                body: JSON.stringify({
-                    stages: existingStages.map(s => ({
-                        ...s,
-                        color: s.color || '#94a3b8',
-                        order_index: stagesWithDefaults.findIndex(st => st.id === s.id)
-                    }))
-                })
-            })
-
-            toast.success('Pipeline saved successfully')
-            fetchPipelines() // Refresh to get real IDs for new items
-        } catch (error) {
-            console.error(error)
-            toast.error('Failed to save changes')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
 
     return (
-        <div className="max-w-4xl mx-auto p-8">
-            <div className="flex justify-between items-center mb-8">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Pipeline Settings</h1>
-                    <p className="text-gray-500 mt-1">Manage stages with drag-and-drop, color coding, and mandatory defaults.</p>
-                </div>
-                <div className="flex gap-4">
-                    <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
-                        <SelectTrigger className="w-full sm:w-[200px]">
-                            <SelectValue placeholder="Select Pipeline" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {pipelines.map(p => (
-                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+        <div className="max-w-2xl mx-auto space-y-6 py-8 px-4">
+            <div>
+                <h1 className="text-2xl font-bold text-foreground">Pipeline Settings</h1>
+                <p className="text-sm text-muted-foreground mt-1">Manage your sales pipelines. To edit stages and automation rules, open a pipeline from the CRM.</p>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Stages</CardTitle>
-                    <CardDescription>Default mandatory stages: New Lead, Won, Lost. You can edit names/colors but cannot delete them.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 flex items-start gap-2">
-                        <ShieldCheck className="h-4 w-4 mt-0.5" />
-                        <span>Use the color picker for quick stage color selection. Drag rows to reorder the pipeline flow.</span>
+            {/* Edit stages CTA */}
+            <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="py-4 flex items-center justify-between gap-4">
+                    <div>
+                        <p className="text-sm font-medium text-foreground">Stage & Automation Editing</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Click any stage header in the pipeline board to rename, recolor, set stale thresholds, or manage automation rules inline.</p>
                     </div>
-                    <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                    >
-                        <SortableContext
-                            items={stages.map(s => s.id)}
-                            strategy={verticalListSortingStrategy}
-                        >
-                            {stages.map((stage) => (
-                                <SortableStage
-                                    key={stage.id}
-                                    id={stage.id}
-                                    stage={stage}
-                                    onChange={handleStageChange}
-                                    onDelete={(id) => {
-                                        const stage = stages.find((s) => s.id === id)
-                                        if (!stage) return
-                                        setStageToDelete(stage)
-                                    }}
-                                    canEdit={canEdit}
-                                />
-                            ))}
-                        </SortableContext>
-                    </DndContext>
-
-                    <PermissionTooltip
-                        hasPermission={canEdit}
-                        message="You need 'Manage CRM Settings' permission to add new stages."
-                    >
-                        <Button
-                            variant="outline"
-                            className="w-full mt-4 border-dashed"
-                            onClick={() => {
-                                if (!canEdit) return
-                                handleAddStage()
-                            }}
-                            disabled={!canEdit}
-                        >
-                            {!canEdit ? <Lock className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                            Add Stage
-                        </Button>
-                    </PermissionTooltip>
+                    <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
+                        <Link href="/dashboard/admin/crm/projects">
+                            Open Pipeline <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                    </Button>
                 </CardContent>
             </Card>
 
-            <div className="flex justify-end mt-6">
-                <PermissionTooltip
-                    hasPermission={canEdit}
-                    message="You need 'Manage CRM Settings' permission to save changes."
-                >
-                    <Button
-                        onClick={() => {
-                            if (!canEdit) return
-                            handleSave()
-                        }}
-                        disabled={saving || !canEdit}
-                    >
-                        {saving ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                            !canEdit && <Lock className="mr-2 h-4 w-4" />
-                        )}
-                        Save Changes
-                    </Button>
-                </PermissionTooltip>
-            </div>
+            {/* Pipelines list */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Pipelines</CardTitle>
+                    <CardDescription>Rename, set default, or delete empty pipelines.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                    {isLoading ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>
+                    ) : pipelines.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">No pipelines found.</p>
+                    ) : (
+                        pipelines.map(p => (
+                            <PipelineRow
+                                key={p.id}
+                                pipeline={p}
+                                onRename={handleRename}
+                                onSetDefault={handleSetDefault}
+                                onDelete={setDeleteTarget}
+                            />
+                        ))
+                    )}
 
-            <AlertDialog open={!!stageToDelete} onOpenChange={(open) => !open && setStageToDelete(null)}>
+                    {/* Create new pipeline */}
+                    {canEdit && (
+                        <div className="flex gap-2 pt-2 border-t border-border mt-2">
+                            <Input
+                                value={newName}
+                                onChange={e => setNewName(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                                placeholder="New pipeline name…"
+                                className="h-8 text-sm flex-1"
+                            />
+                            <Button size="sm" className="h-8 gap-1.5" onClick={handleCreate} disabled={creating || !newName.trim()}>
+                                {creating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                                Create
+                            </Button>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Stage?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action will permanently remove the stage{stageToDelete?.name ? ` "${stageToDelete.name}"` : ''}. This cannot be undone.
-                        </AlertDialogDescription>
+                        <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+                        <AlertDialogDescription>This pipeline and all its stages will be permanently deleted. Leads must be moved out first.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            className="bg-red-600 hover:bg-red-700"
-                            onClick={() => {
-                                if (!stageToDelete) return
-                                handleDeleteStage(stageToDelete.id)
-                                setStageToDelete(null)
-                            }}
-                        >
-                            Delete Stage
+                        <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            {deleting && <Loader2 className="w-3 h-3 animate-spin mr-1" />} Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -9,10 +10,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Mail, Phone, MessageSquare, FileText, Plus, Clock } from 'lucide-react'
+import { Mail, Phone, MessageSquare, FileText, Plus, Clock, Activity, Calendar } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { formatDistanceToNow } from 'date-fns'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useLeadInteractions } from '@/hooks/useLeads'
 
 const INTERACTION_TYPES = {
     email: { icon: Mail, label: 'Email', color: 'bg-blue-100 text-blue-700' },
@@ -24,10 +26,13 @@ const INTERACTION_TYPES = {
 }
 
 export default function LeadActivityTimeline({ leadId }) {
-    const [interactions, setInteractions] = useState([])
-    const [loading, setLoading] = useState(true)
+    const queryClient = useQueryClient()
+    
+    // Fetch interactions using React Query for pre-fetching and caching
+    const { data: interactions = [], isLoading: loading, refetch: fetchInteractions } = useLeadInteractions(leadId)
+
     const [dialogOpen, setDialogOpen] = useState(false)
-    const [submitting, setSubmitting] = useState(false)
+    const [submitting, setSubmitting]   = useState(false)
     const [formData, setFormData] = useState({
         type: 'note',
         direction: 'outbound',
@@ -36,25 +41,6 @@ export default function LeadActivityTimeline({ leadId }) {
         duration: '',
         outcome: ''
     })
-
-    useEffect(() => {
-        fetchInteractions()
-    }, [leadId])
-
-    const fetchInteractions = async () => {
-        try {
-            setLoading(true)
-            const res = await fetch(`/api/leads/${leadId}/interactions`)
-            if (!res.ok) throw new Error('Failed to fetch interactions')
-            const data = await res.json()
-            setInteractions(data.interactions || [])
-        } catch (error) {
-            console.error('Error fetching interactions:', error)
-            toast.error('Failed to load activity timeline')
-        } finally {
-            setLoading(false)
-        }
-    }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -81,7 +67,7 @@ export default function LeadActivityTimeline({ leadId }) {
                 duration: '',
                 outcome: ''
             })
-            fetchInteractions()
+            queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'interactions'] })
         } catch (error) {
             console.error('Error adding interaction:', error)
             toast.error('Failed to add activity')
@@ -90,36 +76,67 @@ export default function LeadActivityTimeline({ leadId }) {
         }
     }
 
+    const totalInteractions = interactions.length
+    const lastActivity = interactions.length > 0 ? interactions[0].created_at : null
+    const notesCount = interactions.filter(i => i.type === 'note').length
+
+    const stats = [
+        { label: 'Total Logs', value: totalInteractions, icon: Activity, color: 'indigo' },
+        { label: 'Last Active', value: lastActivity ? formatDistanceToNow(new Date(lastActivity), { addSuffix: true }) : 'Never', icon: Calendar, color: 'emerald' },
+        { label: 'Total Notes', value: notesCount, icon: FileText, color: 'blue' },
+    ]
+
     if (loading) {
         return (
-            <Card>
-                <CardHeader>
-                    <Skeleton className="h-6 w-48" />
-                    <Skeleton className="h-4 w-64 mt-2" />
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-20 w-full" />
-                </CardContent>
-            </Card>
+            <div className="space-y-4 py-2 w-full">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-50 rounded-xl animate-pulse border" />)}
+                </div>
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-48" />
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Skeleton className="h-20 w-full" />
+                        <Skeleton className="h-20 w-full" />
+                    </CardContent>
+                </Card>
+            </div>
         )
     }
 
     return (
-        <Card>
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                    <CardTitle>Activity Timeline</CardTitle>
-                    <CardDescription>All interactions and communications</CardDescription>
-                </div>
-                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button size="sm" className="w-full sm:w-auto">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Activity
-                        </Button>
-                    </DialogTrigger>
+        <div className="space-y-6 w-full">
+            {/* Header Analytics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {stats.map(({ label, value, icon: Icon, color }) => (
+                    <Card key={label} className="border-0 shadow-sm ring-1 ring-gray-200 bg-white">
+                        <CardContent className="p-4 flex items-center gap-4">
+                            <div className={`p-2.5 bg-${color}-50 text-${color}-600 rounded-xl`}>
+                                <Icon className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">{label}</p>
+                                <p className="text-sm md:text-base font-extrabold text-gray-900 mt-0.5 truncate">{value}</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            <Card className="border-0 shadow-sm ring-1 ring-gray-200">
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div className="space-y-1">
+                        <CardTitle className="text-base font-bold text-gray-900">Activity Timeline</CardTitle>
+                        <CardDescription className="text-xs">All interactions and communications</CardDescription>
+                    </div>
+                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">
+                                <Plus className="w-4 h-4 mr-2" />
+                                Add Activity
+                            </Button>
+                        </DialogTrigger>
                     <DialogContent className="max-w-2xl">
                         <DialogHeader>
                             <DialogTitle>Add New Activity</DialogTitle>
@@ -220,7 +237,7 @@ export default function LeadActivityTimeline({ leadId }) {
                         <p className="text-sm text-gray-500 mt-1">Start by adding a note or logging a call.</p>
                     </div>
                 ) : (
-                    <div className="relative pl-4 space-y-8 before:absolute before:inset-y-0 before:left-[11px] before:w-[2px] before:bg-gray-200 first:before:mt-1 last:before:h-auto">
+                    <div className="relative pl-4 space-y-8 mt-4 before:absolute before:inset-y-0 before:left-[11px] before:w-[2px] before:bg-gray-200 first:before:mt-1 last:before:h-auto">
                         {interactions.map((interaction) => {
                             const typeInfo = INTERACTION_TYPES[interaction.type] || INTERACTION_TYPES.note
                             const Icon = typeInfo.icon
@@ -279,5 +296,6 @@ export default function LeadActivityTimeline({ leadId }) {
                 )}
             </CardContent>
         </Card>
+    </div>
     )
 }

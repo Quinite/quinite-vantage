@@ -576,6 +576,8 @@ CREATE TABLE public.pipeline_stages (
   name text NOT NULL,
   order_index integer NOT NULL DEFAULT 0,
   color text DEFAULT '#cbd5e1'::text,
+  is_default boolean DEFAULT false,
+  stale_days integer DEFAULT NULL,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT pipeline_stages_pkey PRIMARY KEY (id),
@@ -847,3 +849,58 @@ CREATE TABLE public.websocket_servers (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT websocket_servers_pkey PRIMARY KEY (id)
 );
+
+-- Pipeline: Stage Transitions (audit log of every lead stage move)
+CREATE TABLE public.stage_transitions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  lead_id uuid NOT NULL,
+  from_stage_id uuid,
+  to_stage_id uuid NOT NULL,
+  organization_id uuid NOT NULL,
+  moved_by uuid,
+  source text NOT NULL DEFAULT 'manual' CHECK (source = ANY (ARRAY['manual'::text, 'automation'::text, 'ai_call'::text, 'import'::text])),
+  automation_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT stage_transitions_pkey PRIMARY KEY (id),
+  CONSTRAINT stage_transitions_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE,
+  CONSTRAINT stage_transitions_from_stage_id_fkey FOREIGN KEY (from_stage_id) REFERENCES public.pipeline_stages(id) ON DELETE SET NULL,
+  CONSTRAINT stage_transitions_to_stage_id_fkey FOREIGN KEY (to_stage_id) REFERENCES public.pipeline_stages(id) ON DELETE CASCADE,
+  CONSTRAINT stage_transitions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
+  CONSTRAINT stage_transitions_moved_by_fkey FOREIGN KEY (moved_by) REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_stage_transitions_lead ON public.stage_transitions(lead_id);
+CREATE INDEX idx_stage_transitions_org ON public.stage_transitions(organization_id);
+CREATE INDEX idx_stage_transitions_created ON public.stage_transitions(created_at DESC);
+
+-- Pipeline: Automation Rules (trigger → action rules per pipeline)
+CREATE TABLE public.pipeline_automations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL,
+  pipeline_id uuid NOT NULL,
+  name text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  trigger_type text NOT NULL CHECK (trigger_type = ANY (ARRAY[
+    'stage_enter'::text, 'stage_exit'::text, 'stale_in_stage'::text,
+    'ai_call_outcome'::text, 'interest_level_change'::text,
+    'score_threshold'::text, 'task_completed'::text, 'call_logged'::text
+  ])),
+  trigger_config jsonb NOT NULL DEFAULT '{}'::jsonb,
+  action_type text NOT NULL CHECK (action_type = ANY (ARRAY[
+    'move_stage'::text, 'assign_agent'::text, 'create_task'::text, 'add_tag'::text
+  ])),
+  action_config jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pipeline_automations_pkey PRIMARY KEY (id),
+  CONSTRAINT pipeline_automations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
+  CONSTRAINT pipeline_automations_pipeline_id_fkey FOREIGN KEY (pipeline_id) REFERENCES public.pipelines(id) ON DELETE CASCADE,
+  CONSTRAINT pipeline_automations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_pipeline_automations_org ON public.pipeline_automations(organization_id);
+CREATE INDEX idx_pipeline_automations_pipeline ON public.pipeline_automations(pipeline_id);
+
+-- Add FK from stage_transitions to pipeline_automations (deferred — both tables now exist)
+ALTER TABLE public.stage_transitions
+  ADD CONSTRAINT stage_transitions_automation_id_fkey
+  FOREIGN KEY (automation_id) REFERENCES public.pipeline_automations(id) ON DELETE SET NULL;

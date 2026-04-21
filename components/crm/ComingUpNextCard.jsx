@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'react-hot-toast'
 import TaskFormFields, { formDataToPayload, EMPTY_FORM } from '@/components/crm/TaskFormFields'
 
-export default function ComingUpNextCard({ leadId }) {
+export default function ComingUpNextCard({ leadId, onShowAll }) {
     const [tasks, setTasks] = useState([])
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -204,7 +204,7 @@ export default function ComingUpNextCard({ leadId }) {
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {tasks.map((task) => (
+                        {tasks.slice(0, 3).map((task) => (
                             <div
                                 key={task.id}
                                 className={cn(
@@ -298,6 +298,17 @@ export default function ComingUpNextCard({ leadId }) {
                                 </div>
                             </div>
                         ))}
+
+                        {tasks.length > 0 && (
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={onShowAll}
+                                className="w-full mt-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 text-xs font-semibold py-2 h-auto"
+                            >
+                                {tasks.length > 3 ? `Show all ${tasks.length} tasks` : "View all tasks"}
+                            </Button>
+                        )}
                     </div>
                 )}
             </CardContent>

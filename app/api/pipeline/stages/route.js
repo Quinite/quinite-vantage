@@ -41,7 +41,7 @@ export async function GET(request) {
             .from('pipeline_stages')
             // Using pipeline_id to link to organization. Removing project_id selection.
             // Correcting column name: position -> order_index
-            .select('id, name, color, order_index, pipeline_id')
+            .select('id, name, color, order_index, pipeline_id, stale_days')
             .in('pipeline_id', pipelineIds)
             .order('order_index', { ascending: true })
 
@@ -138,18 +138,12 @@ export async function PUT(request) {
         }
 
         const body = await request.json()
-        const { stages } = body // Expecting array of { id, name, color, order_index }
+        const { stages, fullSync } = body 
 
         if (!Array.isArray(stages)) {
             return corsJSON({ error: 'Invalid payload: stages array required' }, { status: 400 })
         }
 
-        // We should verify ownership of these stages, but for now assuming if they have ID they exist.
-        // A robust implementation would filter updates by organization ownership. 
-        // We'll trust the RLS policies or simple checks if RLS isn't strict enough on 'adminClient'.
-        // Since we are using adminClient, we bypass RLS, so ID verification is crucial.
-
-        // Fetch all stage IDs belonging to this org's pipelines to verify
         const { data: orgPipelines } = await adminClient
             .from('pipelines')
             .select('id')
@@ -157,30 +151,44 @@ export async function PUT(request) {
 
         const validPipelineIds = orgPipelines.map(p => p.id)
 
-        // Bulk upsert is tricky with ownership check. 
-        // Simplest strategy: iterate and update. Or use `upsert` and trust RLS/Policies logic (but we are admin).
-        // Let's iterate for safety.
+        // 1. Bulk Update / Upsert
+        const updatePromises = stages.map(async (stage) => {
+            if (!stage.id) return null 
 
-        const updates = stages.map(async (stage) => {
-            // Verify this stage belongs to a valid pipeline
-            if (!stage.id) return null // Skip creation here, use POST
-
+            // Verify ownership
             const { data: currentStage } = await adminClient.from('pipeline_stages').select('pipeline_id').eq('id', stage.id).single()
             if (!currentStage || !validPipelineIds.includes(currentStage.pipeline_id)) {
-                return null // Invalid or unauthorized
+                return null
             }
 
             return adminClient
                 .from('pipeline_stages')
                 .update({
                     name: stage.name,
-                    color: stage.color,
-                    order_index: stage.order_index
+                    order_index: stage.order_index,
+                    stale_days: stage.stale_days === undefined ? undefined : stage.stale_days
                 })
                 .eq('id', stage.id)
         })
 
-        await Promise.all(updates)
+        await Promise.all(updatePromises)
+
+        // 2. Handle Deletions if fullSync is requested
+        if (fullSync && stages.length > 0) {
+            // We assume all stages in the request belong to the same pipeline for simplicity in this bulk UI
+            // Fetch the pipeline_id from the first valid stage in the request
+            const firstStage = stages[0]
+            const { data: stageInfo } = await adminClient.from('pipeline_stages').select('pipeline_id').eq('id', firstStage.id).single()
+            
+            if (stageInfo && validPipelineIds.includes(stageInfo.pipeline_id)) {
+                const keepIds = stages.map(s => s.id)
+                await adminClient
+                    .from('pipeline_stages')
+                    .delete()
+                    .eq('pipeline_id', stageInfo.pipeline_id)
+                    .not('id', 'in', `(${keepIds.join(',')})`)
+            }
+        }
 
         return corsJSON({ success: true })
 

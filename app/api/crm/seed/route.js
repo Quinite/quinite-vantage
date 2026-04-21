@@ -40,14 +40,16 @@ export async function POST(request) {
 
         if (pipeError) throw pipeError
 
-        // 2. Create Default Stages
+        // 2. Create Default Stages (Indian Real Estate pipeline)
         const stages = [
-            { name: 'New Lead', order_index: 0, color: '#3b82f6' },
-            { name: 'Contacted', order_index: 1, color: '#eab308' },
-            { name: 'Qualified', order_index: 2, color: '#22c55e' },
-            { name: 'Negotiation', order_index: 3, color: '#a855f7' },
-            { name: 'Won', order_index: 4, color: '#15803d' },
-            { name: 'Lost', order_index: 5, color: '#ef4444' }
+            { name: 'New Lead',             order_index: 0, color: '#3b82f6', is_default: true  },
+            { name: 'Contacted',            order_index: 1, color: '#eab308', is_default: false },
+            { name: 'Interested',           order_index: 2, color: '#f97316', is_default: false },
+            { name: 'Site Visit Scheduled', order_index: 3, color: '#a855f7', is_default: false },
+            { name: 'Site Visit Done',      order_index: 4, color: '#06b6d4', is_default: false },
+            { name: 'Negotiation',          order_index: 5, color: '#8b5cf6', is_default: false },
+            { name: 'Won',                  order_index: 6, color: '#22c55e', is_default: true  },
+            { name: 'Lost',                 order_index: 7, color: '#ef4444', is_default: true  }
         ]
 
         const stagesWithIds = stages.map(s => ({

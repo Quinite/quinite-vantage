@@ -29,7 +29,8 @@ export default function LeadProfileOverview({
     organization,
     onUpdate,
     onLinkUnit,
-    onUnlinkUnit
+    onUnlinkUnit,
+    onViewAllTasks
 }) {
     const leadId = lead.id
     const unit = lead.unit
@@ -187,7 +188,10 @@ export default function LeadProfileOverview({
             {/* Secondary Row */}
             <div className="grid grid-cols-12 gap-6">
                 <div className="col-span-12 md:col-span-6">
-                    <ComingUpNextCard leadId={leadId} />
+                    <ComingUpNextCard 
+                        leadId={leadId} 
+                        onShowAll={onViewAllTasks}
+                    />
                 </div>
                 <div className="col-span-12 md:col-span-6">
                     <BestTimeToContactCard

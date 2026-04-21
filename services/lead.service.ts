@@ -11,6 +11,8 @@ export interface FilterOptions {
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
     viewMode?: 'active' | 'archived'
+    campaignId?: string
+    campaignLeadIds?: string[]
 }
 
 export interface PermissionOptions {
@@ -80,9 +82,19 @@ export class LeadService {
 
         const repo = new LeadRepository()
 
-        const filterOverrides = { ...filters }
+        const filterOverrides: FilterOptions = { ...filters }
         if (!canViewAll && !canViewTeam && canViewOwn) {
             filterOverrides.assignedTo = userId
+        }
+
+        // Pre-fetch campaign lead IDs if filtering by campaign
+        if (filters.campaignId) {
+            const { data: enrolled } = await repo.client
+                .from('campaign_leads')
+                .select('lead_id')
+                .eq('campaign_id', filters.campaignId)
+                .neq('status', 'archived')
+            filterOverrides.campaignLeadIds = (enrolled ?? []).map((r: any) => r.lead_id)
         }
 
         const query = repo.findLeadsWithRelations(organizationId, filterOverrides)

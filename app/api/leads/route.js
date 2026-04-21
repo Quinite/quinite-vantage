@@ -51,7 +51,8 @@ export const GET = withAuth(async (request, context) => {
             page: searchParams.get('page') || 1,
             limit: searchParams.get('limit') || 20,
             sortBy: searchParams.get('sortBy'),
-            sortOrder: searchParams.get('sortOrder')
+            sortOrder: searchParams.get('sortOrder'),
+            campaignId: searchParams.get('campaign_id') || undefined,
         }
 
         // Fetch leads using service layer
@@ -63,13 +64,28 @@ export const GET = withAuth(async (request, context) => {
         )
 
         // Compute fields that were removed from the leads table schema
+        const now = Date.now()
         const enrichedLeads = (leads || []).map(lead => {
             const callLogs = lead.call_logs || []
             const totalCalls = callLogs.length
             const endedLogs = callLogs.filter(c => c.ended_at).sort((a, b) => new Date(b.ended_at) - new Date(a.ended_at))
             const lastContactedAt = endedLogs[0]?.ended_at || null
             const lastSentimentScore = endedLogs[0]?.sentiment_score ?? null
-            return { ...lead, call_logs: undefined, total_calls: totalCalls, last_contacted_at: lastContactedAt, last_sentiment_score: lastSentimentScore }
+
+            // Compute days in current stage from last stage_transition entry
+            const lastTransition = Array.isArray(lead.last_transition) ? lead.last_transition[0] : null
+            const transitionAt = lastTransition?.created_at ? new Date(lastTransition.created_at).getTime() : new Date(lead.created_at).getTime()
+            const daysInCurrentStage = Math.floor((now - transitionAt) / (1000 * 60 * 60 * 24))
+
+            return {
+                ...lead,
+                call_logs: undefined,
+                last_transition: undefined,
+                total_calls: totalCalls,
+                last_contacted_at: lastContactedAt,
+                last_sentiment_score: lastSentimentScore,
+                days_in_current_stage: daysInCurrentStage,
+            }
         })
 
         console.log('✅ [Leads GET] Fetched', enrichedLeads.length, 'leads (Page', filters.page, ')')

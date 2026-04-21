@@ -1,8 +1,10 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw } from 'lucide-react'
+import { Plus, RefreshCw, Settings } from 'lucide-react'
 import PipelineBoard from '@/components/crm/PipelineBoard'
+import ManageStagesSheet from '@/components/crm/ManageStagesSheet'
+import { usePipelines } from '@/hooks/usePipelines'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { PermissionGate } from '@/components/permissions/PermissionGate'
@@ -20,7 +22,10 @@ function CrmPipelineContent() {
     const router = useRouter()
     const projectId = searchParams.get('project_id')
     const [isDealInitOpen, setIsDealInitOpen] = useState(false)
+    const [manageStagesOpen, setManageStagesOpen] = useState(false)
     const [projects, setProjects] = useState([])
+    const { data: pipelines = [], refetch: refetchPipelines } = usePipelines()
+    const activePipeline = pipelines[0] ?? null
     const pipelineBoardRef = useRef(null)
 
     // Fetch projects for the dialog dropdown
@@ -36,59 +41,23 @@ function CrmPipelineContent() {
         <div className="min-h-screen bg-muted/5 flex flex-col">
             {/* Header */}
             <div className="p-6 border-b border-border bg-background sticky top-0 z-10">
-                <div className="flex items-center justify-between gap-4 mb-6">
+                <div className="flex items-center justify-between gap-4 mb-0">
                     <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
                         CRM Pipeline
                     </h1>
 
-                    <PermissionGate permission="create_leads">
+                    <PermissionGate feature={['manage_crm_settings', 'view_settings']}>
                         <Button
-                            onClick={() => setIsDealInitOpen(true)}
-                            className="w-auto"
+                            onClick={() => setManageStagesOpen(true)}
+                            className="bg-muted hover:bg-muted/80 text-foreground border border-border shadow-sm h-10 px-4 transition-all"
                         >
-                            <Plus className="w-4 h-4 mr-2" />
-                            <span className="hidden sm:inline">New Lead</span>
-                            <span className="sm:hidden">New</span>
+                            <Settings className="w-4 h-4 mr-2" />
+                            Manage Pipeline
                         </Button>
                     </PermissionGate>
                 </div>
 
-                {/* Filter Card */}
-                <div className="bg-card rounded-lg border border-border p-4">
-                    <div className="flex gap-2">
-                        <Select
-                            value={projectId || 'all'}
-                            onValueChange={(val) => {
-                                const params = new URLSearchParams(searchParams.toString())
-                                if (val === 'all') {
-                                    params.delete('project_id')
-                                } else {
-                                    params.set('project_id', val)
-                                }
-                                router.push(`?${params.toString()}`)
-                            }}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="All Projects" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Projects</SelectItem>
-                                {projects.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        <Button
-                            onClick={() => pipelineBoardRef.current?.refresh()}
-                            variant="outline"
-                            size="icon"
-                            className="shrink-0"
-                        >
-                            <RefreshCw className="w-4 h-4" />
-                        </Button>
-                    </div>
-                </div>
+                {/* Filters removed to maximize pipeline view */}
             </div>
 
             {/* Pipeline Board */}
@@ -105,6 +74,14 @@ function CrmPipelineContent() {
                 onOpenChange={setIsDealInitOpen}
                 projects={projects}
                 initialProjectId={projectId}
+            />
+
+            {/* Manage Stages Sheet */}
+            <ManageStagesSheet
+                open={manageStagesOpen}
+                onClose={() => setManageStagesOpen(false)}
+                pipeline={activePipeline}
+                onRefresh={refetchPipelines}
             />
         </div>
     )

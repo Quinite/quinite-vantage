@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, ChevronUp, Volume2, FileText } from 'lucide-react'
+import { Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, ChevronUp, Volume2, FileText, Clock, CheckCircle2, TrendingUp } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 
 function formatDuration(seconds) {
     if (!seconds || seconds <= 0) return '—'
@@ -190,41 +191,57 @@ export default function LeadCallsTab({ callLogs = [] }) {
 
     if (sorted.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                    <Phone className="w-6 h-6 text-gray-300" />
+            <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-2xl border border-dashed border-slate-200">
+                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mb-6">
+                    <Phone className="w-10 h-10 text-slate-200" />
                 </div>
-                <p className="text-sm font-semibold text-gray-700">No calls recorded yet</p>
-                <p className="text-xs text-muted-foreground mt-1">AI-dialer call history will appear here</p>
+                <h3 className="text-base font-bold text-slate-900">No calls recorded yet</h3>
+                <p className="text-sm text-slate-500 mt-2 max-w-[240px]">AI-dialer call history and analytics will appear here once initiated.</p>
             </div>
         )
     }
 
-    const totalAnswered = sorted.filter(c => (c.call_status || '').toLowerCase() === 'answered').length
+    const totalAnswered = sorted.filter(c => ['completed', 'answered'].includes((c.call_status || '').toLowerCase())).length
     const totalDuration = sorted.reduce((s, c) => s + (c.duration || 0), 0)
 
+    const stats = [
+        { label: 'Total Calls', value: sorted.length, icon: Phone, color: 'indigo' },
+        { label: 'Answered', value: totalAnswered, icon: CheckCircle2, color: 'emerald' },
+        { label: 'Total Talk Time', value: formatDuration(totalDuration), icon: Clock, color: 'orange' },
+    ]
+
     return (
-        <div className="space-y-4 max-w-3xl">
-            {/* Summary strip */}
-            <div className="flex items-center gap-6 px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 text-sm">
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Total Calls</span>
-                    <span className="text-base font-bold text-slate-700">{sorted.length}</span>
-                </div>
-                <div className="w-px h-8 bg-slate-200" />
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Answered</span>
-                    <span className="text-base font-bold text-green-700">{totalAnswered}</span>
-                </div>
-                <div className="w-px h-8 bg-slate-200" />
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Total Talk Time</span>
-                    <span className="text-base font-bold text-slate-700">{formatDuration(totalDuration)}</span>
-                </div>
+        <div className="space-y-6 w-full">
+            {/* Header Analytics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {stats.map(({ label, value, icon: Icon, color }) => (
+                    <Card key={label} className="border-0 shadow-sm ring-1 ring-gray-200 bg-white">
+                        <CardContent className="p-4 flex items-center gap-4">
+                            <div className={`p-2.5 bg-${color}-50 text-${color}-600 rounded-xl`}>
+                                <Icon className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">{label}</p>
+                                <p className={`text-base font-black text-gray-900 mt-0.5`}>{value}</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            {/* List Header */}
+            <div className="flex items-center justify-between pb-0 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-indigo-500" />
+                    Call History
+                </h3>
+                <span className="text-[11px] font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100 uppercase tracking-tighter">
+                    Last {sorted.length} interactions
+                </span>
             </div>
 
             {/* Call cards */}
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 gap-3">
                 {sorted.map((call) => (
                     <CallCard key={call.id} call={call} />
                 ))}
