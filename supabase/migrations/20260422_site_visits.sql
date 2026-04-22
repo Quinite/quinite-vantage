@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS public.site_visits (
   booked_via         text        NOT NULL DEFAULT 'manual',
   assigned_agent_id  uuid        NULL,
   visit_notes        text        NULL,
-  feedback_score     integer     NULL,
   outcome            text        NULL,
   pipeline_stage_id  uuid        NULL,
   created_by         uuid        NULL,
@@ -36,8 +35,6 @@ CREATE TABLE IF NOT EXISTS public.site_visits (
     CHECK (booked_via IN ('ai_call', 'manual', 'self_booking')),
   CONSTRAINT site_visits_outcome_check
     CHECK (outcome IS NULL OR outcome IN ('interested', 'not_interested', 'follow_up_needed')),
-  CONSTRAINT site_visits_feedback_score_check
-    CHECK (feedback_score IS NULL OR (feedback_score >= 1 AND feedback_score <= 5)),
   CONSTRAINT site_visits_lead_id_fkey
     FOREIGN KEY (lead_id) REFERENCES public.leads (id) ON DELETE CASCADE,
   CONSTRAINT site_visits_organization_id_fkey
@@ -45,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.site_visits (
   CONSTRAINT site_visits_project_id_fkey
     FOREIGN KEY (project_id) REFERENCES public.projects (id) ON DELETE SET NULL,
   CONSTRAINT site_visits_unit_id_fkey
-    FOREIGN KEY (unit_id) REFERENCES public.properties (id) ON DELETE SET NULL,
+    FOREIGN KEY (unit_id) REFERENCES public.units (id) ON DELETE SET NULL,
   CONSTRAINT site_visits_assigned_agent_id_fkey
     FOREIGN KEY (assigned_agent_id) REFERENCES public.profiles (id) ON DELETE SET NULL,
   CONSTRAINT site_visits_pipeline_stage_id_fkey

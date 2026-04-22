@@ -38,6 +38,27 @@ import { usePipelines, useUsers } from '@/hooks/usePipelines'
 import { useProjects } from '@/hooks/useProjects'
 import { toast } from 'sonner'
 import { Plus, Filter, X } from 'lucide-react'
+import { isSiteVisitScheduledStage, isSiteVisitDoneStage } from '@/lib/site-visit-stages'
+import { useSiteVisits, useAllSiteVisits } from '@/hooks/useSiteVisits'
+import SiteVisitStageGateDialog from '@/components/crm/site-visits/SiteVisitStageGateDialog'
+import SiteVisitOutcomeDialog from '@/components/crm/site-visits/SiteVisitOutcomeDialog'
+
+function SiteVisitOutcomeDialogForPipeline({ open, onOpenChange, leadId, onSuccess }) {
+    const { data: visits = [] } = useSiteVisits(leadId)
+    const latestScheduled = visits
+        .filter(v => v.status === 'scheduled')
+        .sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at))[0] ?? null
+
+    return (
+        <SiteVisitOutcomeDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            leadId={leadId}
+            visit={latestScheduled}
+            onSuccess={onSuccess}
+        />
+    )
+}
 
 const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {}, showFilters = true }, ref) => {
     const { data: pipelines = [], isLoading: pipesLoading, refetch: refetchPipelines } = usePipelines()
@@ -65,6 +86,10 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
     const [submitting, setSubmitting] = useState(false)
     const [settingsStage, setSettingsStage] = useState(null)
 
+    const [svGateOpen, setSvGateOpen] = useState(false)
+    const [svOutcomeOpen, setSvOutcomeOpen] = useState(false)
+    const [pendingMove, setPendingMove] = useState(null)
+
     // Filters
     const [filterAgent, setFilterAgent] = useState('__all__')
     const [filterProject, setFilterProject] = useState('__all__')
@@ -75,6 +100,18 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
     const router = useRouter()
 
     useImperativeHandle(ref, () => ({ refresh: refetchLeads }))
+
+    const { data: orgVisits = [] } = useAllSiteVisits({
+        from: new Date().toISOString(),
+        to:   new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    })
+    const visitByLead = useMemo(() => {
+        const map = new Map()
+        orgVisits.forEach(v => {
+            if (v.status === 'scheduled' && !map.has(v.lead_id)) map.set(v.lead_id, v)
+        })
+        return map
+    }, [orgVisits])
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -124,7 +161,25 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
             if (overLead) newStageId = overLead.stage_id
         }
 
-        if (newStageId) moveLead(active.id, newStageId)
+        if (!newStageId) return
+
+        const targetStage = stages.find(s => s.id === newStageId)
+        const stageName   = targetStage?.name ?? ''
+        const movingLead  = leads.find(l => l.id === active.id)
+
+        if (isSiteVisitScheduledStage(stageName)) {
+            setPendingMove({ leadId: active.id, newStageId, lead: movingLead })
+            setSvGateOpen(true)
+            return
+        }
+
+        if (isSiteVisitDoneStage(stageName)) {
+            setPendingMove({ leadId: active.id, newStageId, lead: movingLead })
+            setSvOutcomeOpen(true)
+            return
+        }
+
+        moveLead(active.id, newStageId)
     }
 
     const moveLead = useCallback(async (leadId, newStageId) => {
@@ -155,6 +210,32 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
             toast.error('Failed to move lead')
         }
     }, [leads, refetchLeads])
+
+    const handleSiteVisitGateConfirm = useCallback(async (visitPayload) => {
+        if (!pendingMove) return
+        const { leadId, newStageId } = pendingMove
+        if (visitPayload) {
+            try {
+                await fetch(`/api/leads/${leadId}/site-visits`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...visitPayload, pipeline_stage_id: newStageId }),
+                })
+            } catch {
+                toast.error('Visit could not be saved — moving lead anyway.')
+            }
+        }
+        await moveLead(leadId, newStageId)
+        setSvGateOpen(false)
+        setPendingMove(null)
+    }, [pendingMove, moveLead])
+
+    const handleSiteVisitOutcomeConfirm = useCallback(async () => {
+        if (!pendingMove) return
+        await moveLead(pendingMove.leadId, pendingMove.newStageId)
+        setSvOutcomeOpen(false)
+        setPendingMove(null)
+    }, [pendingMove, moveLead])
 
     const handleStageUpdate = useCallback(async (stageId, updates) => {
         try {
@@ -308,7 +389,11 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
                     {Array.isArray(activePipeline?.stages) && activePipeline.stages.map(stage => {
                         const stageLeads = filteredLeads
                             .filter(l => l.stage_id === stage.id || (!l.stage_id && stage.order_index === 0))
-                            .map(l => ({ ...l, onClick: (lead) => router.push(`/dashboard/admin/crm/leads/${lead.id}`) }))
+                            .map(l => ({
+                                ...l,
+                                onClick: (lead) => router.push(`/dashboard/admin/crm/leads/${lead.id}`),
+                                upcomingVisit: visitByLead.get(l.id) ?? null,
+                            }))
                         return (
                             <PipelineColumn
                                 key={stage.id}
@@ -375,6 +460,30 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
                     onClose={() => setSettingsStage(null)}
                     onStageUpdate={handleStageUpdate}
                     onPipelineRefresh={refetchPipelines}
+                />
+            )}
+
+            {/* Site Visit Stage Gate — fires when lead is dropped into a "Site Visit Scheduled" stage */}
+            <SiteVisitStageGateDialog
+                open={svGateOpen}
+                onOpenChange={(o) => {
+                    if (!o) { setSvGateOpen(false); setPendingMove(null) }
+                }}
+                lead={pendingMove?.lead}
+                agents={users ?? []}
+                defaultAgentId={pendingMove?.lead?.assigned_to}
+                onConfirm={handleSiteVisitGateConfirm}
+            />
+
+            {/* Site Visit Outcome Gate — fires when lead is dropped into a "Site Visit Done" stage */}
+            {pendingMove?.lead && (
+                <SiteVisitOutcomeDialogForPipeline
+                    open={svOutcomeOpen}
+                    onOpenChange={(o) => {
+                        if (!o) { setSvOutcomeOpen(false); setPendingMove(null) }
+                    }}
+                    leadId={pendingMove.lead.id}
+                    onSuccess={handleSiteVisitOutcomeConfirm}
                 />
             )}
         </>

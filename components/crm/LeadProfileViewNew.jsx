@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'react-hot-toast'
-import { LayoutDashboard, Phone, ClipboardList, FileText, Activity } from 'lucide-react'
+import { LayoutDashboard, Phone, ClipboardList, FileText, Activity, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import LeadActivityTimeline from '@/components/crm/LeadActivityTimeline'
@@ -18,10 +18,12 @@ import LeadProfileOverview from '@/components/crm/LeadProfileOverview'
 import LeadProfileNotes from '@/components/crm/LeadProfileNotes'
 import LeadTasksManager from '@/components/crm/LeadTasksManager'
 import LeadCallsTab from '@/components/crm/LeadCallsTab'
+import SiteVisitsTab from '@/components/crm/site-visits/SiteVisitsTab'
 
 // Parallel Hooks
 import { useLead, useLeadTasks, useLeadInteractions } from '@/hooks/useLeads'
 import { useOrgSettings } from '@/hooks/usePipelines'
+import { useSiteVisits } from '@/hooks/useSiteVisits'
 
 export default function LeadProfileView({ leadId, onClose, isModal = false }) {
     // 1. Data Fetching (Hydrates instantly if hovered earlier)
@@ -31,6 +33,10 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
     // Background pre-fetching for other tabs to ensure instant switching
     useLeadTasks(leadId)
     useLeadInteractions(leadId)
+
+    const { data: siteVisits = [] } = useSiteVisits(leadId)
+    const upcomingSiteVisitsCount = siteVisits.filter(v => v.status === 'scheduled').length
+    const nextUpcomingVisit = siteVisits.find(v => v.status === 'scheduled' && new Date(v.scheduled_at) >= new Date()) ?? null
 
     const loading = leadLoading
     const [activeTab, setActiveTab] = useState('overview')
@@ -119,6 +125,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                     lead={lead}
                     onEditProfile={() => setEditDialogOpen(true)}
                     onEditAvatar={() => setAvatarPickerOpen(true)}
+                    upcomingVisit={nextUpcomingVisit}
                 />
             </div>
 
@@ -131,6 +138,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                         { id: 'tasks',     label: 'Tasks',     Icon: ClipboardList   },
                         { id: 'notes',     label: 'Notes',     Icon: FileText,       dot: !!lead?.notes },
                         { id: 'timeline',  label: 'Timeline',  Icon: Activity        },
+                        { id: 'site-visits', label: 'Site Visits', Icon: MapPin, count: upcomingSiteVisitsCount || undefined },
                     ].map(({ id, label, Icon, count, dot }) => {
                         const active = activeTab === id
                         return (
@@ -189,6 +197,9 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                 )}
                 {activeTab === 'timeline' && (
                     <LeadActivityTimeline leadId={leadId} />
+                )}
+                {activeTab === 'site-visits' && (
+                    <SiteVisitsTab leadId={leadId} lead={lead} />
                 )}
             </div>
 

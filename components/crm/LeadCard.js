@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Phone, AlertTriangle, Clock, Flame, Timer, Zap, Snowflake } from 'lucide-react'
 import { getDefaultAvatar } from '@/lib/avatar-utils'
 import { useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
 
 function getScoreStyle(score) {
     if (score >= 70) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
@@ -51,6 +52,8 @@ function LeadCardInner({ lead }) {
     const handleClick = () => {
         if (!isDragging && lead.onClick) lead.onClick(lead)
     }
+
+    const upcomingVisit = lead.upcomingVisit ?? null
 
     const hasCallbackPending = lead.waiting_status === 'callback_scheduled'
     const isStale = lead.stage?.stale_days && lead.days_in_current_stage >= lead.stage.stale_days
@@ -126,6 +129,23 @@ function LeadCardInner({ lead }) {
                     <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         <Phone className="w-3 h-3 shrink-0 opacity-60" />
                         <span className="truncate">{lead.phone}</span>
+                    </div>
+                )}
+
+                {/* Upcoming site visit pill */}
+                {upcomingVisit && (
+                    <div className="rounded-md bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 px-2 py-1.5 space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-violet-500 shrink-0" />
+                            <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                                {format(new Date(upcomingVisit.scheduled_at), 'EEE, d MMM · h:mm a')}
+                            </span>
+                        </div>
+                        {upcomingVisit.assigned_agent?.full_name && (
+                            <p className="text-[9px] text-violet-500 dark:text-violet-400 pl-4 truncate">
+                                with {upcomingVisit.assigned_agent.full_name}
+                            </p>
+                        )}
                     </div>
                 )}
 
@@ -223,7 +243,8 @@ export const LeadCard = memo(LeadCardInner, (prev, next) => {
         prev.lead.score === next.lead.score &&
         prev.lead.interest_level === next.lead.interest_level &&
         prev.lead.days_in_current_stage === next.lead.days_in_current_stage &&
-        prev.lead.assigned_to === next.lead.assigned_to
+        prev.lead.assigned_to === next.lead.assigned_to &&
+        prev.lead.upcomingVisit?.id === next.lead.upcomingVisit?.id
     )
 })
 LeadCard.displayName = 'LeadCard'

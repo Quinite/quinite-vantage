@@ -16,7 +16,8 @@ import {
     TrendingUp,
     Clock,
     CheckSquare,
-    LogOut
+    LogOut,
+    MapPin
 } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -65,6 +66,7 @@ export default function CrmSidebar() {
                 { label: 'Pipeline', href: '/dashboard/admin/crm?tab=pipeline', icon: KanbanSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
                 { label: 'Projects', href: '/dashboard/admin/crm/projects', icon: FolderKanban, permission: 'view_projects' },
                 { label: 'Campaigns', href: '/dashboard/admin/crm/campaigns', icon: Megaphone, permission: 'view_campaigns' },
+                { label: 'Site Visits', href: '/dashboard/admin/crm/site-visits', icon: MapPin, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
             ]
         },
         {

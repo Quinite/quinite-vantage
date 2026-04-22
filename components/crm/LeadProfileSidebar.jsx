@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Camera, Mail, Phone, Smartphone, Building, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User } from 'lucide-react'
+import { format } from 'date-fns'
 
 const getInitials = (name) => {
     if (!name) return 'LP'
@@ -72,7 +73,7 @@ function IntelPill({ label, cls }) {
     )
 }
 
-export default function LeadProfileSidebar({ lead, onEditProfile, onEditAvatar }) {
+export default function LeadProfileSidebar({ lead, onEditProfile, onEditAvatar, upcomingVisit }) {
     if (!lead) return null
 
     const interest = interestConfig(lead.interest_level)
@@ -161,6 +162,23 @@ export default function LeadProfileSidebar({ lead, onEditProfile, onEditAvatar }
                     {'Source: ' + lead.source || 'Manual'} · Added {relativeTime(lead.created_at)}
                 </p>
             </div>
+
+            {upcomingVisit && (
+                <div className="mx-4 mb-3 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2.5 space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
+                        <MapPin className="w-3.5 h-3.5" />
+                        Upcoming Site Visit
+                    </div>
+                    <p className="text-xs text-blue-600 font-medium">
+                        {format(new Date(upcomingVisit.scheduled_at), 'EEE, d MMM • h:mm a')}
+                    </p>
+                    {upcomingVisit.assigned_agent && (
+                        <p className="text-[11px] text-blue-500">
+                            with {upcomingVisit.assigned_agent.full_name}
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* ── Call Status Flags ───────────────────────────────── */}
             <div className="px-4 space-y-2 mb-3">
