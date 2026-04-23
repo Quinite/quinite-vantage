@@ -57,14 +57,14 @@ export const GET = withAuth(async (request, { profile }) => {
         if (lead.stage_id) activeCountMap[lead.stage_id] = (activeCountMap[lead.stage_id] ?? 0) + 1
     }
 
-    const enteredThisMonthMap: Record<string, number> = {}
+    const enteredThisMonthMap = {}
     for (const t of (recentTransitions ?? [])) {
         enteredThisMonthMap[t.to_stage_id] = (enteredThisMonthMap[t.to_stage_id] ?? 0) + 1
     }
 
     // Avg days between entering a stage and leaving it (approximation from consecutive transitions per lead)
-    const stageTimeMap: Record<string, number[]> = {}
-    const byLead: Record<string, typeof allTransitions> = {}
+    const stageTimeMap = {}
+    const byLead = {}
     for (const t of (allTransitions ?? [])) {
         if (!byLead[t.lead_id]) byLead[t.lead_id] = []
         byLead[t.lead_id]!.push(t)
