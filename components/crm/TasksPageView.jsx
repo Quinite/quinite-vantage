@@ -975,11 +975,29 @@ export default function TasksPageView() {
                             canAssignOthers={canAssignOthers}
                         />
 
-                        <div className="flex gap-2 pt-1">
-                            <Button type="submit" disabled={submitting || !selectedLead} className="flex-1">
-                                {submitting ? 'Creating...' : 'Create Task'}
+                        <div className="flex items-center justify-end gap-3 pt-6 border-t mt-4">
+                            <Button 
+                                type="button" 
+                                variant="ghost" 
+                                onClick={() => setCreateOpen(false)}
+                                className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                            >
+                                Cancel
                             </Button>
-                            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                            <Button 
+                                type="submit" 
+                                disabled={submitting || !selectedLead} 
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100 px-6 font-semibold"
+                            >
+                                {submitting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Creating...
+                                    </>
+                                ) : (
+                                    'Create Task'
+                                )}
+                            </Button>
                         </div>
                     </form>
                 </DialogContent>

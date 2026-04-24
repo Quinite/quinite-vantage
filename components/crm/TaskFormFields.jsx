@@ -180,7 +180,11 @@ export default function TaskFormFields({
                             type="time"
                             value={formData.due_time}
                             onChange={e => onChange('due_time', e.target.value)}
-                            className={cn('pl-8', compact ? 'h-8 text-xs' : 'h-9 text-sm')}
+                            onClick={(e) => e.currentTarget.showPicker()}
+                            className={cn(
+                                'pl-9 cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden', 
+                                compact ? 'h-8 text-xs' : 'h-9 text-sm'
+                            )}
                         />
                     </div>
                 </div>
