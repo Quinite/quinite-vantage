@@ -32,7 +32,6 @@ export function LeadTable({
     selectedLeads,
     setSelectedLeads,
     onEdit,
-    onDelete,
     canEditLead,
     canDelete,
     stages = [], // For inline status update
@@ -43,7 +42,6 @@ export function LeadTable({
     hasMore = false,
     isLoadingMore = false,
     onBulkAssign,
-    onBulkDelete,
     users = [],
     sortBy = 'created_at',
     sortOrder = 'desc',
@@ -244,11 +242,6 @@ export function LeadTable({
                                                         <Archive className="h-4 w-4" />
                                                     </Button>
                                                 </>
-                                            )}
-                                            {canDelete && isPlatformAdmin && (
-                                                <Button variant="ghost" size="sm" onClick={() => onDelete(lead)} className="h-8 w-8 p-0 text-destructive hover:text-destructive">
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
                                             )}
                                         </>
                                     )}
@@ -519,11 +512,6 @@ export function LeadTable({
                                                             </Button>
                                                         </>
                                                     )}
-                                                    {canDelete && isPlatformAdmin && (
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => onDelete(lead)} title="Delete">
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                    )}
                                                 </>
                                             )}
                                         </div>
@@ -632,18 +620,7 @@ export function LeadTable({
                         </Button>
                     )}
 
-                    {/* Bulk Delete */}
-                    {onBulkDelete && viewMode !== 'archived' && (canDelete || true) && (
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            className="h-8 rounded-full px-4"
-                            onClick={onBulkDelete}
-                        >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete
-                        </Button>
-                    )}
+
 
                     {/* Clear Selection */}
                     <Button

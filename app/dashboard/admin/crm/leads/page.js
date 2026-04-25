@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Plus, Archive, AlertCircle, ShieldAlert, Loader2, LayoutGrid, List } from 'lucide-react'
+import { Plus, Archive, AlertCircle, ShieldAlert, Loader2, LayoutGrid, List, Users, CheckCircle2, Package, Clock } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { usePermission } from '@/contexts/PermissionContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -56,14 +56,14 @@ export default function LeadsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSourceDialogOpen, setIsSourceDialogOpen] = useState(false)
   const [editingLead, setEditingLead] = useState(null)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [leadToDelete, setLeadToDelete] = useState(null)
   const [isRefreshingLeads, setIsRefreshingLeads] = useState(false)
 
   // Archive States
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false)
   const [leadToArchive, setLeadToArchive] = useState(null)
   const [archiveImpact, setArchiveImpact] = useState(null)
+  const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false)
+  const [bulkArchiveImpact, setBulkArchiveImpact] = useState(null)
   const [isCalculatingImpact, setIsCalculatingImpact] = useState(false)
 
   // Permissions & Auth
@@ -156,32 +156,9 @@ export default function LeadsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDeleteClick = (lead) => {
-    setLeadToDelete(lead)
-    setDeleteDialogOpen(true)
-  }
 
-  const confirmDelete = async () => {
-    if (!leadToDelete) return
-    setIsRefreshingLeads(true)
-    try {
-      await deleteLeadMutation.mutateAsync(leadToDelete.id)
-      setDeleteDialogOpen(false)
-      setLeadToDelete(null)
-      setSelectedLeads(prev => {
-        const next = new Set(prev)
-        next.delete(leadToDelete.id)
-        return next
-      })
-      await refetchLeads()
-      toast.success('Lead deleted')
-    } catch (error) {
-      console.error(error)
-      toast.error('Failed to delete lead')
-    } finally {
-      setIsRefreshingLeads(false)
-    }
-  }
+
+
 
   const handleArchiveClick = async (lead) => {
     setLeadToArchive(lead)
@@ -229,34 +206,40 @@ export default function LeadsPage() {
     }
   }
 
-  const handleBulkDelete = async () => {
-    if (selectedLeads.size === 0) return
-    if (!confirm(`Are you sure you want to delete ${selectedLeads.size} selected leads?`)) return
 
-    setIsRefreshingLeads(true)
-    try {
-      await bulkDeleteMutation.mutateAsync(Array.from(selectedLeads))
-      setSelectedLeads(new Set())
-      await refetchLeads()
-      toast.success('Leads deleted successfully')
-    } catch (error) {
-      console.error(error)
-      toast.error('Failed to delete leads')
-    } finally {
-      setIsRefreshingLeads(false)
-    }
-  }
 
   const handleBulkArchive = async () => {
     if (selectedLeads.size === 0) return
-    if (!confirm(`Archive ${selectedLeads.size} leads? This will freeze their active campaigns and cancel pending tasks.`)) return
+    
+    setIsCalculatingImpact(true)
+    setBulkArchiveDialogOpen(true)
+    try {
+      const res = await fetch('/api/leads/bulk-archive/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadIds: Array.from(selectedLeads) })
+      })
+      const data = await res.json()
+      setBulkArchiveImpact(data.impact)
+    } catch (e) {
+      console.error(e)
+      toast.error('Failed to calculate impact')
+    } finally {
+      setIsCalculatingImpact(false)
+    }
+  }
 
+  const confirmBulkArchive = async () => {
+    if (selectedLeads.size === 0) return
     setIsRefreshingLeads(true)
+    const count = selectedLeads.size
     try {
       await bulkArchiveMutation.mutateAsync(Array.from(selectedLeads))
       setSelectedLeads(new Set())
+      setBulkArchiveDialogOpen(false)
+      setBulkArchiveImpact(null)
       await refetchLeads()
-      toast.success(`${selectedLeads.size} leads archived`)
+      toast.success(`${count} leads archived safely`)
     } catch (error) {
       console.error(error)
       toast.error('Failed to archive leads')
@@ -374,7 +357,6 @@ export default function LeadsPage() {
         selectedLeads={selectedLeads}
         setSelectedLeads={setSelectedLeads}
         onEdit={handleEditClick}
-        onDelete={handleDeleteClick}
         onArchive={handleArchiveClick}
         onRestore={handleRestore}
         onBulkRestore={handleBulkRestore}
@@ -383,8 +365,8 @@ export default function LeadsPage() {
         isPlatformAdmin={isPlatformAdmin}
         onStatusUpdate={handleStatusUpdate}
         stages={allStages}
-        onBulkDelete={handleBulkDelete}
         onBulkArchive={handleBulkArchive}
+        onBulkRestore={handleBulkRestore}
         onBulkAssign={handleBulkAssign}
         users={users}
 
@@ -434,25 +416,7 @@ export default function LeadsPage() {
         onSuccess={refetchLeads}
       />
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-destructive" />
-              Permanent Deletion?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This is a <span className="font-bold text-destructive underline">Hard Delete</span>. All call logs, conversation insights, and deals for this lead will be permanently scrubbed from the database. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Permanently Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
 
       {/* Archive Dialog */}
       <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
@@ -526,6 +490,92 @@ export default function LeadsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Bulk Archive Dialog */}
+      <AlertDialog open={bulkArchiveDialogOpen} onOpenChange={setBulkArchiveDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Archive className="w-5 h-5 text-amber-600" />
+              Bulk Archive Leads
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to archive <span className="font-bold text-slate-900">{selectedLeads.size} leads</span>. 
+              This will safely move them out of your active pipeline.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {isCalculatingImpact ? (
+            <div className="py-6 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+              <p className="text-sm text-slate-500">Calculating aggregated impact...</p>
+            </div>
+          ) : bulkArchiveImpact ? (
+            <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-100 my-2">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Aggregated Impact</p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-blue-100 rounded-md">
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">{bulkArchiveImpact.pending_tasks}</p>
+                    <p className="text-[10px] text-slate-500 uppercase">Tasks Cancelled</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-red-100 rounded-md">
+                    <Package className="w-3.5 h-3.5 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">{bulkArchiveImpact.active_deals}</p>
+                    <p className="text-[10px] text-slate-500 uppercase">Deals Lost</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-100 rounded-md">
+                    <Users className="w-3.5 h-3.5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">{bulkArchiveImpact.active_campaigns}</p>
+                    <p className="text-[10px] text-slate-500 uppercase">Campaign Removal</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-green-100 rounded-md">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">{bulkArchiveImpact.has_linked_units}</p>
+                    <p className="text-[10px] text-slate-500 uppercase">Linked Units</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200">
+                <p className="text-[11px] text-slate-500 leading-relaxed italic">
+                  * All active tasks will be cancelled, deals marked as lost, and leads removed from any active AI call queues.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkArchiveImpact(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmBulkArchive}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={isCalculatingImpact}
+            >
+              {isRefreshingLeads ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Archive className="w-4 h-4 mr-2" />}
+              Archive {selectedLeads.size} Leads
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

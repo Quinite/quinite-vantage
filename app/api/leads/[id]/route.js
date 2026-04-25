@@ -296,82 +296,8 @@ export async function PUT(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-    try {
-        const supabase = await createServerSupabaseClient()
-        const { id } = await params
-
-        // Get user profile
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        // Platform Admin Hard-Delete Guard Check
-        const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-        
-        if (userProfile?.role !== 'platform_admin') {
-            return NextResponse.json({
-                success: false,
-                message: 'Permanent deletion is locked. Only Platform Admins can hard delete leads. Please use the Archive function instead.'
-            }, { status: 403 })
-        }
-
-        const canDelete = await hasDashboardPermission(user.id, 'delete_leads')
-        if (!canDelete) {
-            return NextResponse.json({
-                success: false,
-                message: 'You don\'t have permission to delete leads'
-            }, { status: 200 })
-        }
-
-        const adminClient = createAdminClient()
-        const now = new Date().toISOString()
-
-        // Clean up campaign enrollment: remove from call_queue and mark campaign_leads archived
-        const { data: activeCampaignLeads } = await adminClient
-            .from('campaign_leads')
-            .select('id, campaign_id')
-            .eq('lead_id', id)
-            .in('status', ['enrolled', 'queued'])
-
-        if (activeCampaignLeads?.length > 0) {
-            const campaignIds = [...new Set(activeCampaignLeads.map(cl => cl.campaign_id))]
-            await Promise.all([
-                adminClient.from('call_queue').delete().eq('lead_id', id).in('campaign_id', campaignIds).eq('status', 'queued'),
-                adminClient.from('campaign_leads')
-                    .update({ status: 'archived', skip_reason: 'lead_archived', updated_at: now })
-                    .in('id', activeCampaignLeads.map(cl => cl.id))
-            ])
-        }
-
-        // Delete dependent records manually (Cascade)
-
-        // 1. Delete call-related data (depend on call_logs and lead)
-        await Promise.all([
-            supabase.from('conversation_insights').delete().eq('lead_id', id),
-            supabase.from('agent_calls').delete().eq('lead_id', id)
-        ])
-
-        // 2. Delete call logs (depends on lead)
-        await supabase.from('call_logs').delete().eq('lead_id', id)
-
-        // 3. Delete deals (depends on lead)
-        await supabase.from('deals').delete().eq('lead_id', id)
-
-        // 4. Delete lead
-        const { error } = await supabase
-            .from('leads')
-            .delete()
-            .eq('id', id)
-
-        if (error) {
-            console.error('Error deleting lead:', error)
-            return NextResponse.json({ error: error.message }, { status: 500 })
-        }
-
-        return NextResponse.json({ success: true }, { status: 200 })
-    } catch (error) {
-        console.error('Error deleting lead:', error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-    }
+    return NextResponse.json({
+        success: false,
+        message: 'Permanent lead deletion is no longer supported from the CRM. Please use the Archive feature. Permanent deletion is strictly reserved for the Platform Control Plane.'
+    }, { status: 403 })
 }
