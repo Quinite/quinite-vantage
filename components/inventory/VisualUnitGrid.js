@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { 
-  Plus, 
-  Building2, 
-  Layers, 
+import {
+  Plus,
+  Building2,
+  Layers,
   Home,
-  Info, 
+  Info,
   MoreVertical,
   MoreHorizontal,
   Edit,
@@ -23,7 +23,8 @@ import {
   Briefcase,
   ShoppingBag,
   Factory,
-  ConciergeBell
+  ConciergeBell,
+  TreePine,
 } from 'lucide-react';
 import { 
   DropdownMenu, 
@@ -52,12 +53,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 
 export default function VisualUnitGrid({ projectId, project, organizationId, readOnly = false }) {
-  // Only treat as land if every unit config is land category.
-  // A single non-land config (or any existing towers) means tower/floor view.
-  const allConfigsAreLand =
-    project?.unit_configs?.length > 0 &&
-    project.unit_configs.every(c => c.category === 'land');
-  const projectType = allConfigsAreLand ? 'land' : 'residential';
   
   const { 
     towers = [], 
@@ -98,6 +93,14 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
   const activeTower = towers.find(t => t.id === activeTowerId);
   const towerUnits = units[activeTowerId] || [];
   const unassignedUnits = units['unassigned'] || [];
+
+  // Plot units: unassigned units with a land config — survive tower deletion
+  const plotUnits = unassignedUnits.filter(u => u.config?.category === 'land');
+  const otherUnassigned = unassignedUnits.filter(u => u.config?.category !== 'land');
+  const hasLandConfigs = unitConfigs.some(c => c.category === 'land');
+
+  // UnitDialog needs a projectType hint; the unit's own config category takes priority inside the dialog
+  const projectType = 'residential';
 
   const unitCountsByConfig = useMemo(() => {
     const allUnits = Object.values(units).flat();
@@ -200,6 +203,30 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
     }
   };
 
+  const handlePaintPlot = async () => {
+    if (!selectedConfig || selectedConfig.category !== 'land') return;
+    const nextIndex = plotUnits.length;
+    try {
+      await addUnit({
+        tower_id: null,
+        floor_number: null,
+        config_id: selectedConfig.id,
+        unit_number: `P-${String(nextIndex + 1).padStart(2, '0')}`,
+        status: 'available',
+        transaction_type: selectedConfig.transaction_type || 'sell',
+        plot_area: selectedConfig.plot_area || 0,
+        base_price: selectedConfig.base_price || 0,
+        total_price: selectedConfig.base_price || 0,
+        project_id: projectId,
+        organization_id: organizationId,
+        metadata: { slot_index: nextIndex },
+        facing: 'North',
+      });
+    } catch (error) {
+      console.error('Plot paint error:', error);
+    }
+  };
+
   const handleEditUnit = (unit) => {
     setSelectedUnit(unit);
     setTargetFloor(unit.floor_number);
@@ -216,19 +243,6 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
         <Skeleton className="h-[400px] w-full" />
       </div>
     );
-  }
-
-  // Show land plot view only when: explicitly land project, loading done, and no towers have been created
-  if (projectType === 'land' && !isLoading && towers.length === 0) {
-     return <FloorPlanLand
-        projectId={projectId}
-        project={project}
-        units={Object.values(units).flat()}
-        organizationId={organizationId}
-        onAddUnit={addUnit}
-        onUpdateUnit={updateUnit}
-        onDeleteUnit={deleteUnit}
-     />;
   }
 
   return (
@@ -362,14 +376,24 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
         <div className="flex-1 overflow-auto p-4 md:p-8 overflow-x-auto">
           <div className="max-w-[1400px] mx-auto space-y-12 pb-20">
             {selectedConfig && (
-              <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between animate-in slide-in-from-top-3 sticky top-0 z-50">
+              <div className={cn(
+                "text-white p-4 rounded-2xl shadow-xl flex items-center justify-between animate-in slide-in-from-top-3 sticky top-0 z-50",
+                selectedConfig.category === 'land' ? "bg-amber-500" : "bg-blue-600"
+              )}>
                 <div className="flex items-center gap-4">
                   <div className="p-2 bg-white/20 rounded-xl animate-pulse">
-                    <Zap className="w-5 h-5" />
+                    {selectedConfig.category === 'land' ? <TreePine className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h4 className="text-yellow-300 text-sm uppercase tracking-tight">Quick-Fill Active</h4>
-                    <p className="text-[10px] opacity-90 font-bold uppercase tracking-widest">Click empty boxes to place <span className="underline">{selectedConfig.config_name || selectedConfig.property_type}</span></p>
+                    <h4 className={cn("text-sm uppercase tracking-tight", selectedConfig.category === 'land' ? "text-amber-100" : "text-yellow-300")}>
+                      {selectedConfig.category === 'land' ? 'Plot Placement Active' : 'Quick-Fill Active'}
+                    </h4>
+                    <p className="text-[10px] opacity-90 font-bold uppercase tracking-widest">
+                      {selectedConfig.category === 'land'
+                        ? <>Click the <span className="underline">Plots section</span> below to add <span className="underline">{selectedConfig.config_name || selectedConfig.property_type}</span></>
+                        : <>Click empty boxes to place <span className="underline">{selectedConfig.config_name || selectedConfig.property_type}</span></>
+                      }
+                    </p>
                   </div>
                 </div>
                 <Button variant="secondary" size="sm" onClick={() => setSelectedConfig(null)} className="h-8 font-black text-xs uppercase px-4 rounded-lg">Done</Button>
@@ -390,7 +414,7 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
                       onStatusChange={updateUnitStatus}
                       onDeleteUnit={deleteUnit}
                       onFillFloor={() => handleFillFloor(floorNum)}
-                      paintingActive={!!selectedConfig}
+                      paintingActive={!!selectedConfig && selectedConfig.category !== 'land'}
                     />
                   ))
                 ) : (
@@ -403,33 +427,38 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
               </div>
             </div>
 
-            {/* Unassigned Section */}
-            {unassignedUnits.length > 0 && (
-              <div className="pt-16 border-t-2 border-slate-200 border-dashed animate-in fade-in slide-in-from-bottom-8">
-                 <div className="flex items-center gap-4 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500 shadow-lg shadow-emerald-100 flex items-center justify-center text-white">
-                      <LandPlot className="w-5 h-5" />
+            {/* Plots / Land Section */}
+            {hasLandConfigs && (
+              <PlotsSection
+                units={plotUnits}
+                paintingActive={selectedConfig?.category === 'land'}
+                onUnitClick={handleEditUnit}
+                onAddUnit={handlePaintPlot}
+                onStatusChange={updateUnitStatus}
+                onDeleteUnit={deleteUnit}
+                onOpenDialog={() => { setTargetFloor(null); setDrawerMode('add_unit'); setSelectedUnit(null); setDrawerOpen(true); }}
+              />
+            )}
+
+            {/* Other unassigned (non-land) assets */}
+            {otherUnassigned.length > 0 && (
+              <div className="pt-10 border-t-2 border-slate-200 border-dashed animate-in fade-in slide-in-from-bottom-8">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500 shadow-lg shadow-emerald-100 flex items-center justify-center text-white">
+                    <LandPlot className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Other Assets</h3>
+                    <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Inventory not mapped to structural grid</p>
+                  </div>
+                </div>
+                <div className="flex gap-4 overflow-x-auto pb-6 custom-scrollbar scroll-smooth">
+                  {otherUnassigned.map(unit => (
+                    <div key={unit.id} className="min-w-[110px] max-w-[110px]">
+                      <UnitCell unit={unit} onClick={() => handleEditUnit(unit)} onStatusChange={updateUnitStatus} onDelete={() => deleteUnit(unit.id)} />
                     </div>
-                    <div>
-                      <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Other Assets</h3>
-                      <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Inventory not mapped to structural grid</p>
-                    </div>
-                 </div>
-                 
-                 <div className="flex gap-4 overflow-x-auto pb-6 custom-scrollbar scroll-smooth">
-                    {unassignedUnits.map(unit => (
-                      <div key={unit.id} className="min-w-[110px] max-w-[110px]">
-                        <UnitCell unit={unit} onClick={() => handleEditUnit(unit)} onStatusChange={updateUnitStatus} onDelete={() => deleteUnit(unit.id)} />
-                      </div>
-                    ))}
-                    <button 
-                      onClick={() => { setTargetFloor(null); setDrawerMode('add_unit'); setSelectedUnit(null); setDrawerOpen(true); }}
-                      className="h-[80px] min-w-[110px] rounded-xl border-2 border-dashed border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50 transition-all flex flex-col items-center justify-center text-slate-400 hover:text-emerald-500 group"
-                    >
-                       <Plus className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
-                       <span className="text-[8px] font-black uppercase tracking-tighter">New Asset</span>
-                    </button>
-                 </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -464,6 +493,64 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
         onSave={drawerMode === 'add_tower' ? addTower : (data) => updateTower(activeTowerId, data)}
         onDelete={deleteTower}
       />
+    </div>
+  );
+}
+
+function PlotsSection({ units, paintingActive, onUnitClick, onAddUnit, onStatusChange, onDeleteUnit, onOpenDialog }) {
+  return (
+    <div className="pt-6 border-t-2 border-amber-100 border-dashed animate-in fade-in slide-in-from-bottom-4">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl bg-amber-500 shadow-lg shadow-amber-100 flex items-center justify-center text-white shrink-0">
+          <TreePine className="w-4 h-4" />
+        </div>
+        <div>
+          <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">Plots / Land</h3>
+          <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
+            {units.length > 0 ? `${units.length} plot${units.length !== 1 ? 's' : ''}` : 'No plots yet — select a plot config above to start placing'}
+          </p>
+        </div>
+        {paintingActive && (
+          <span className="ml-auto text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full animate-pulse">
+            Click + to place
+          </span>
+        )}
+      </div>
+
+      {/* Plot cells */}
+      <div className="flex gap-2 flex-wrap pl-12">
+        {units.map(unit => (
+          <div key={unit.id} className="shrink-0 min-w-[110px] max-w-[110px]">
+            <UnitCell unit={unit} onClick={() => onUnitClick(unit)} onStatusChange={onStatusChange} onDelete={() => onDeleteUnit(unit.id)} />
+          </div>
+        ))}
+
+        {/* Paint slot — active only when a land config is selected */}
+        <div
+          onClick={paintingActive ? onAddUnit : undefined}
+          className={cn(
+            'h-[80px] min-w-[110px] max-w-[110px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all shadow-sm select-none',
+            paintingActive
+              ? 'border-amber-400 bg-amber-50/50 cursor-pointer hover:bg-amber-100/60 hover:shadow-md hover:-translate-y-0.5 active:scale-95'
+              : 'border-amber-100 bg-transparent cursor-default opacity-30'
+          )}
+        >
+          <Plus className={cn('w-4 h-4', paintingActive ? 'text-amber-500' : 'text-amber-200')} />
+          {paintingActive && <span className="text-[8px] font-black uppercase tracking-wider text-amber-400">Add Plot</span>}
+        </div>
+
+        {/* Manual add via dialog (always available) */}
+        {!paintingActive && (
+          <button
+            onClick={onOpenDialog}
+            className="h-[80px] min-w-[110px] rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-amber-400 hover:bg-amber-50 transition-all flex flex-col items-center justify-center text-slate-300 hover:text-amber-500 group shadow-sm"
+          >
+            <Plus className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
+            <span className="text-[8px] font-black uppercase tracking-tighter">New Plot</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -32,7 +32,7 @@ export async function GET(request) {
         // Fetch public projects
         let query = admin
             .from('projects')
-            .select('id, name, description, address, status, image_url, metadata, unit_types, total_units, price_range')
+            .select('id, name, description, address, status, image_url, total_units, available_units, min_price, max_price, project_status, city, locality, possession_date, rera_number, amenities')
             .eq('organization_id', org.id)
             .eq('public_visibility', true) // Only visible projects
             .order('created_at', { ascending: false })
@@ -47,6 +47,9 @@ export async function GET(request) {
 
     } catch (e) {
         console.error('Public projects fetch error:', e)
-        return corsJSON({ error: 'Internal Server Error' }, { status: 500 })
+        return corsJSON(
+            { error: 'Internal Server Error', detail: process.env.NODE_ENV !== 'production' ? e?.message : undefined },
+            { status: 500 }
+        )
     }
 }

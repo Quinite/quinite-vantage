@@ -183,6 +183,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                 possessionDate: initialData.possession_date || '',
                 completionDate: initialData.completion_date || '',
                 showInInventory: initialData.show_in_inventory !== false,
+                publicVisibility: initialData.public_visibility ?? true,
                 amenities: Array.isArray(initialData.amenities) ? initialData.amenities : [],
             })
 

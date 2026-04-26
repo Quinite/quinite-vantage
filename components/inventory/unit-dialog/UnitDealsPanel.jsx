@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import {
     Plus, User, Phone, Trash2, ExternalLink, Mail, MapPin, Tag,
-    Star, IndianRupee, AlertCircle, Search, Loader2, CheckCheck,
+    Star, IndianRupee, AlertCircle, Search, Loader2, CheckCheck, TrendingDown, TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,11 +12,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { useUnitDeals, useUnitDealsInvalidate } from '@/hooks/useUnitDeals'
 import { usePermission } from '@/contexts/PermissionContext'
 import { DEAL_STATUSES } from '@/components/crm/AddDealDialog'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils/date'
 import { formatCurrency } from '@/lib/utils/currency'
+import { formatINR } from '@/lib/inventory'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -67,6 +69,8 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
     const [leads, setLeads] = useState([])
     const [loading, setLoading] = useState(false)
     const [selectedLead, setSelectedLead] = useState(null)
+    const [amount, setAmount] = useState('')
+    const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
 
     const fetchLeads = async (q = '', pId = null) => {
@@ -90,6 +94,8 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
         if (isOpen) {
             setSearch('')
             setSelectedLead(null)
+            setAmount('')
+            setNotes('')
             fetchLeads('', projectId)
         }
     }, [isOpen, projectId])
@@ -108,7 +114,14 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
             const res = await fetch('/api/deals', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lead_id: selectedLead.id, unit_id: unitId, name, status: 'interested' }),
+                body: JSON.stringify({
+                    lead_id: selectedLead.id,
+                    unit_id: unitId,
+                    name,
+                    status: 'interested',
+                    ...(amount ? { amount: Number(amount) } : {}),
+                    ...(notes.trim() ? { notes: notes.trim() } : {}),
+                }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || 'Failed')
@@ -191,6 +204,29 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
                             </div>
                         ))}
                     </div>
+                    <div className="relative">
+                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input
+                            type="number"
+                            placeholder="Amount (optional)"
+                            className="pl-8 pr-28"
+                            value={amount}
+                            onChange={e => setAmount(e.target.value)}
+                            min={0}
+                        />
+                        {amount && Number(amount) > 0 && (
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-emerald-600 pointer-events-none">
+                                {formatINR(Number(amount))}
+                            </span>
+                        )}
+                    </div>
+                    <Textarea
+                        placeholder="Notes (optional)"
+                        className="resize-none text-sm"
+                        rows={2}
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                    />
                 </div>
                 <DialogFooter>
                     <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
@@ -203,8 +239,37 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
     )
 }
 
+// ── Price comparison helper ──────────────────────────────────────────────────
+function PriceComparison({ dealAmount, listedPrice }) {
+    if (!dealAmount || !listedPrice) return null
+    const diff = dealAmount - listedPrice
+    if (Math.abs(diff) < 1) return null // no meaningful difference
+    const isDiscount = diff < 0
+    const pct = Math.abs(diff / listedPrice * 100).toFixed(1)
+    return (
+        <div className={cn(
+            'flex items-center gap-2 flex-wrap rounded-lg px-2.5 py-1.5 text-[11px] font-medium border',
+            isDiscount
+                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                : 'bg-blue-50 border-blue-200 text-blue-700'
+        )}>
+            {isDiscount
+                ? <TrendingDown className="w-3 h-3 shrink-0" />
+                : <TrendingUp className="w-3 h-3 shrink-0" />
+            }
+            <span>
+                Sold at <span className="font-bold">{formatCurrency(dealAmount)}</span>
+                <span className="text-[10px] mx-1.5 opacity-60">·</span>
+                Listed <span className="line-through opacity-60">{formatCurrency(listedPrice)}</span>
+                <span className="text-[10px] mx-1.5 opacity-60">·</span>
+                {isDiscount ? '−' : '+'}{formatCurrency(Math.abs(diff))} ({pct}%)
+            </span>
+        </div>
+    )
+}
+
 // ── Deal card ────────────────────────────────────────────────────────────────
-function DealCard({ deal, unitId, onRefresh, canManage, canDelete }) {
+function DealCard({ deal, unit, unitId, onRefresh, canManage, canDelete }) {
     const [changingStatus, setChangingStatus] = useState(false)
     const [deleting, setDeleting] = useState(false)
 
@@ -360,11 +425,19 @@ function DealCard({ deal, unitId, onRefresh, canManage, canDelete }) {
                 </div>
             )}
 
-            {/* Won badge */}
+            {/* Won badge + price comparison */}
             {isWon && (
-                <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold px-2.5 py-1 rounded-full">
-                    <CheckCheck className="w-3 h-3" />Deal Won
-                    {deal.won_at && <span className="font-normal text-emerald-500">· {formatRelativeTime(deal.won_at)}</span>}
+                <div className="space-y-2">
+                    <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold px-2.5 py-1 rounded-full">
+                        <CheckCheck className="w-3 h-3" />Deal Won
+                        {deal.won_at && <span className="font-normal text-emerald-500">· {formatRelativeTime(deal.won_at)}</span>}
+                    </div>
+                    {deal.amount && (
+                        <PriceComparison
+                            dealAmount={Number(deal.amount)}
+                            listedPrice={Number(unit?.total_price || unit?.base_price || 0)}
+                        />
+                    )}
                 </div>
             )}
 
@@ -422,6 +495,11 @@ export default function UnitDealsPanel({ unit, project }) {
         won:         deals.filter(d => d.status === 'won').length,
     }
 
+    const wonDeal = deals.find(d => d.status === 'won')
+    const listedPrice = Number(unit?.total_price || unit?.base_price || 0)
+    const wonAmount = wonDeal?.amount ? Number(wonDeal.amount) : null
+    const priceDiff = wonAmount && listedPrice ? wonAmount - listedPrice : null
+
     const activeDeals = deals.filter(d => d.status !== 'lost')
     const lostDeals   = deals.filter(d => d.status === 'lost')
     const handleRefresh = () => invalidate(unit?.id)
@@ -436,6 +514,31 @@ export default function UnitDealsPanel({ unit, project }) {
 
     return (
         <div className="space-y-4">
+            {/* Sold price vs listed banner */}
+            {wonDeal && wonAmount && listedPrice > 0 && priceDiff !== null && Math.abs(priceDiff) >= 1 && (
+                <div className={cn(
+                    'flex items-center gap-2.5 rounded-xl px-4 py-3 border text-sm',
+                    priceDiff < 0
+                        ? 'bg-amber-50 border-amber-200 text-amber-800'
+                        : 'bg-blue-50 border-blue-200 text-blue-800'
+                )}>
+                    {priceDiff < 0
+                        ? <TrendingDown className="w-4 h-4 shrink-0 text-amber-500" />
+                        : <TrendingUp className="w-4 h-4 shrink-0 text-blue-500" />
+                    }
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span className="font-semibold">
+                            Unit sold at {formatCurrency(wonAmount)}
+                        </span>
+                        <span className="text-[12px] opacity-70">
+                            Listed price: <span className="line-through">{formatCurrency(listedPrice)}</span>
+                        </span>
+                        <span className={cn('text-[12px] font-semibold', priceDiff < 0 ? 'text-amber-600' : 'text-blue-600')}>
+                            {priceDiff < 0 ? '−' : '+'}{formatCurrency(Math.abs(priceDiff))} ({Math.abs(priceDiff / listedPrice * 100).toFixed(1)}%)
+                        </span>
+                    </div>
+                </div>
+            )}
             {/* Header: summary chips + Add Lead */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -468,7 +571,7 @@ export default function UnitDealsPanel({ unit, project }) {
             {activeDeals.length > 0 && (
                 <div className="space-y-2">
                     {activeDeals.map(deal => (
-                        <DealCard key={deal.id} deal={deal} unitId={unit?.id} onRefresh={handleRefresh} canManage={canManage} canDelete={canDelete} />
+                        <DealCard key={deal.id} deal={deal} unit={unit} unitId={unit?.id} onRefresh={handleRefresh} canManage={canManage} canDelete={canDelete} />
                     ))}
                 </div>
             )}
@@ -486,7 +589,7 @@ export default function UnitDealsPanel({ unit, project }) {
                 <div className="space-y-2">
                     <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Lost ({lostDeals.length})</p>
                     {lostDeals.map(deal => (
-                        <DealCard key={deal.id} deal={deal} unitId={unit?.id} onRefresh={handleRefresh} canManage={canManage} canDelete={canDelete} />
+                        <DealCard key={deal.id} deal={deal} unit={unit} unitId={unit?.id} onRefresh={handleRefresh} canManage={canManage} canDelete={canDelete} />
                     ))}
                 </div>
             )}

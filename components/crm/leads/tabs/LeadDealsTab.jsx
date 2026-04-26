@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { usePermission } from '@/contexts/PermissionContext'
 import AddDealDialog, { DEAL_STATUSES } from '@/components/crm/AddDealDialog'
+import UnitDetailSheet from '@/components/inventory/UnitDetailSheet'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils/date'
 import { formatCurrency } from '@/lib/utils/currency'
 import { cn } from '@/lib/utils'
@@ -436,6 +437,7 @@ function LostReasonDialog({ deal, isOpen, onClose, onSuccess }) {
 function DealCard({ deal, onRefresh, canManage, canDelete }) {
     const [editOpen, setEditOpen] = useState(false)
     const [lostOpen, setLostOpen] = useState(false)
+    const [unitSheetOpen, setUnitSheetOpen] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [changingStatus, setChangingStatus] = useState(false)
 
@@ -643,17 +645,28 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
                     </div>
 
                     {unit && (
-                        <Link href={`/dashboard/inventory?unit=${unit.id}`} target="_blank">
-                            <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 gap-1 text-gray-400 hover:text-gray-700">
-                                <ExternalLink className="w-3 h-3" />Unit
-                            </Button>
-                        </Link>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[11px] px-2 gap-1 text-gray-400 hover:text-gray-700"
+                            onClick={() => setUnitSheetOpen(true)}
+                        >
+                            <Building className="w-3 h-3" />View Unit
+                        </Button>
                     )}
                 </div>
             </div>
 
             <EditDealDialog deal={deal} isOpen={editOpen} onClose={() => setEditOpen(false)} onSuccess={onRefresh} />
             <LostReasonDialog deal={deal} isOpen={lostOpen} onClose={() => setLostOpen(false)} onSuccess={onRefresh} />
+            {unit && (
+                <UnitDetailSheet
+                    unit={unit}
+                    unitId={unit.id}
+                    open={unitSheetOpen}
+                    onClose={() => setUnitSheetOpen(false)}
+                />
+            )}
         </>
     )
 }

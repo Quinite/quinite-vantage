@@ -4,6 +4,42 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { corsJSON } from '@/lib/cors'
 
 /**
+ * GET /api/inventory/units/[id]
+ * Fetch a single unit with relations
+ */
+export async function GET(request, { params }) {
+    try {
+        const supabase = await createServerSupabaseClient()
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) return corsJSON({ error: 'Unauthorized' }, { status: 401 })
+
+        const adminClient = createAdminClient()
+        const { data: profile } = await adminClient
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', user.id)
+            .single()
+        if (!profile?.organization_id) return corsJSON({ error: 'Organization not found' }, { status: 400 })
+
+        const { id } = await params
+        const { data: unit, error } = await adminClient
+            .from('units')
+            .select('*, config:unit_configs(*), tower:towers(id,name), project:projects(id,name,address,image_url)')
+            .eq('id', id)
+            .eq('organization_id', profile.organization_id)
+            .single()
+
+        if (error) throw error
+        if (!unit) return corsJSON({ error: 'Unit not found' }, { status: 404 })
+
+        return corsJSON({ unit })
+    } catch (e) {
+        console.error('units GET error:', e)
+        return corsJSON({ error: e.message }, { status: 500 })
+    }
+}
+
+/**
  * PATCH /api/inventory/units/[id]
  * Update unit fields
  */
