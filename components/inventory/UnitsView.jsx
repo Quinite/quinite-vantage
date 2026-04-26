@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/table"
 import { usePermission } from '@/contexts/PermissionContext'
 import { useInventoryProjects, useInventoryUnits } from '@/hooks/useInventory'
-import UnitDrawer from './UnitDrawer'
+import UnitDialog from './UnitDialog'
 import StatusChangeModal from './StatusChangeModal'
 import { formatINR, getStatusConfig } from '@/lib/inventory'
 import { cn } from '@/lib/utils'
@@ -506,7 +506,7 @@ export function UnitsView({ projectId = null }) {
             </div>
 
             {/* Reuse Refactored Drawer Component */}
-            <UnitDrawer
+            <UnitDialog
                 open={drawerState.open}
                 onClose={() => setDrawerState({ ...drawerState, open: false })}
                 mode={drawerState.mode}

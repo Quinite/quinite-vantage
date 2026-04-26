@@ -24,6 +24,7 @@ export async function GET(request) {
         const to        = searchParams.get('to')
         const agentId   = searchParams.get('agent_id')
         const projectId = searchParams.get('project_id')
+        const unitId    = searchParams.get('unit_id')
 
         let query = supabase
             .from('site_visits')
@@ -38,6 +39,7 @@ export async function GET(request) {
         if (to)        query = query.lte('scheduled_at', to)
         if (agentId)   query = query.eq('assigned_agent_id', agentId)
         if (projectId) query = query.eq('project_id', projectId)
+        if (unitId)    query = query.eq('unit_id', unitId)
 
         const { data: visits, error } = await query
 

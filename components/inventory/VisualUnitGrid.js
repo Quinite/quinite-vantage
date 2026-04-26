@@ -44,7 +44,7 @@ import {
   buildEmptyFloorSlots,
   generateUnitNumber
 } from '@/lib/inventory';
-import UnitDrawer from './UnitDrawer';
+import UnitDialog from './UnitDialog';
 import TowerDrawer from './TowerDrawer';
 import FloorPlanLand from './FloorPlanLand';
 import { toast } from 'react-hot-toast';
@@ -436,7 +436,7 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
         </div>
       </div>
 
-      <UnitDrawer 
+      <UnitDialog
         open={drawerOpen && drawerMode?.includes('unit')}
         onClose={() => setDrawerOpen(false)}
         mode={drawerMode?.includes('add') ? 'add' : 'edit'}
@@ -452,8 +452,8 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
         onSave={drawerMode?.includes('add') ? addUnit : (data) => updateUnit(selectedUnit.id, data)}
         onDelete={deleteUnit}
       />
-      
-      <TowerDrawer 
+
+      <TowerDrawer
         open={drawerOpen && drawerMode?.includes('tower')}
         onClose={() => setDrawerOpen(false)}
         mode={drawerMode === 'add_tower' ? 'add' : 'edit'}

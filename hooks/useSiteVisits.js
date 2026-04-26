@@ -76,6 +76,22 @@ export function useDeleteSiteVisit(leadId) {
     })
 }
 
+// ── Unit-scoped hook (for UnitDialog site visits tab) ─────────────────────
+
+export function useUnitSiteVisits(unitId) {
+    return useQuery({
+        queryKey: ['site-visits-unit', unitId],
+        queryFn: async () => {
+            const res = await fetch(`/api/crm/site-visits?unit_id=${unitId}`)
+            if (!res.ok) throw new Error('Failed to fetch site visits')
+            const data = await res.json()
+            return data.visits ?? []
+        },
+        enabled: !!unitId,
+        staleTime: 30 * 1000,
+    })
+}
+
 // ── Org-wide hook (calendar) ───────────────────────────────────────────────
 
 export function useAllSiteVisits({ from, to, agentId, projectId } = {}) {
