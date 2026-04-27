@@ -63,8 +63,7 @@ export async function POST(request) {
 
         // 3. Auto-assign Stage
         let stageId = null
-        if (form.project_id) {
-            try {
+        try {
                 // Determine organization default pipeline stage
                 const { data: pipelines } = await adminClient
                     .from('pipelines')
@@ -95,9 +94,8 @@ export async function POST(request) {
 
                     if (stages?.length > 0) stageId = stages[0].id
                 }
-            } catch (e) {
-                console.warn('Defaults fetch error', e)
-            }
+        } catch (e) {
+            console.warn('Defaults fetch error', e)
         }
 
         // 4. Create Lead
@@ -112,7 +110,6 @@ export async function POST(request) {
                 phone: leadData.phone,
                 notes: leadData.notes.trim(),
                 source: 'web_form',
-                status: 'new',
                 raw_data: { form_id: formId, submission: data }
             })
             .select()

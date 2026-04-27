@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
-import { CalendarIcon, User, MapPin, FileText, Building, Home } from 'lucide-react'
+import { CalendarIcon, User, MapPin, FileText, Building, Home, ChevronsUpDown, Check } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { useCreateSiteVisit, useUpdateSiteVisit } from '@/hooks/useSiteVisits'
 import { useProjects } from '@/hooks/useProjects'
 import { useUnits } from '@/hooks/useUnits'
+import { useLeads } from '@/hooks/useLeads'
 import { formatCurrency } from '@/lib/utils/currency'
 import { toast } from 'react-hot-toast'
 
@@ -40,13 +41,25 @@ function toFormData(visit) {
     }
 }
 
-export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, visit = null, agents = [], onSuccess, defaultAgentId }) {
+export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, visit = null, agents = [], onSuccess, defaultAgentId, defaultDate }) {
     const isEdit = !!visit
     const [form, setForm] = useState(EMPTY)
     const [calOpen, setCalOpen] = useState(false)
-    const createMutation = useCreateSiteVisit(leadId)
-    const updateMutation = useUpdateSiteVisit(leadId)
+    const [leadPickerOpen, setLeadPickerOpen] = useState(false)
+    const [unitPickerOpen, setUnitPickerOpen] = useState(false)
+    const [unitSearch, setUnitSearch] = useState('')
+    const [leadSearch, setLeadSearch] = useState('')
+    const [selectedLeadId, setSelectedLeadId] = useState('')
+    const effectiveLeadId = leadId || selectedLeadId
+    const createMutation = useCreateSiteVisit(effectiveLeadId)
+    const updateMutation = useUpdateSiteVisit(effectiveLeadId)
     const loading = createMutation.isPending || updateMutation.isPending
+
+    // Only fetch leads when no leadId provided (calendar slot click mode)
+    const { data: leadsData } = useLeads(
+        !leadId ? { search: leadSearch, limit: 20 } : {}
+    )
+    const leadOptions = leadsData?.leads ?? []
 
     // Fetch projects
     const { data: projects = [] } = useProjects()
@@ -62,10 +75,13 @@ export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, 
                 if (defaultAgentId) base.assigned_agent_id = defaultAgentId
                 if (lead?.project_id) base.project_id = lead.project_id
                 else if (lead?.project?.id) base.project_id = lead.project.id
+                if (defaultDate) base.date = format(new Date(defaultDate), 'yyyy-MM-dd')
             }
             setForm(base)
+            setSelectedLeadId('')
+            setLeadSearch('')
         }
-    }, [open, visit, defaultAgentId, lead])
+    }, [open, visit, defaultAgentId, lead, defaultDate])
 
     const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
@@ -98,7 +114,9 @@ export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, 
         }
     }
 
-    const selectedDate = form.date ? new Date(form.date) : undefined
+    const selectedDate = form.date
+        ? (() => { const [y, m, d] = form.date.split('-'); return new Date(+y, +m - 1, +d) })()
+        : undefined
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -111,6 +129,73 @@ export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, 
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4 py-1">
+                    {/* Lead combobox — only shown when opened from calendar (no leadId prop) */}
+                    {!leadId && (
+                        <div className="space-y-1.5">
+                            <Label>Lead <span className="text-red-500">*</span></Label>
+                            <Popover open={leadPickerOpen} onOpenChange={setLeadPickerOpen}>
+                                <PopoverTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'w-full flex items-center justify-between h-9 px-3 rounded-md border border-input bg-white text-sm transition-colors',
+                                            'hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                                            !selectedLeadId && 'text-muted-foreground'
+                                        )}
+                                    >
+                                        <span className="flex items-center gap-2 truncate">
+                                            <User className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                                            {selectedLeadId
+                                                ? leadOptions.find(l => l.id === selectedLeadId)?.name ?? 'Selected'
+                                                : 'Search and select lead…'
+                                            }
+                                        </span>
+                                        <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                                    <div className="flex flex-col rounded-md bg-popover text-popover-foreground">
+                                        <div className="flex items-center border-b px-3">
+                                            <User className="mr-2 h-4 w-4 shrink-0 opacity-40" />
+                                            <input
+                                                className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+                                                placeholder="Search by name or phone…"
+                                                value={leadSearch}
+                                                onChange={e => setLeadSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        <div
+                                            style={{ maxHeight: 220, overflowY: 'auto' }}
+                                            onWheel={e => e.stopPropagation()}
+                                        >
+                                            {leadOptions.length === 0 ? (
+                                                <div className="py-4 text-center text-sm text-muted-foreground">
+                                                    {leadSearch ? 'No leads found' : 'Start typing to search'}
+                                                </div>
+                                            ) : (
+                                                <div className="p-1">
+                                                    {leadOptions.map(l => (
+                                                        <div
+                                                            key={l.id}
+                                                            onClick={() => { setSelectedLeadId(l.id); setLeadPickerOpen(false) }}
+                                                            className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+                                                        >
+                                                            <div className="flex flex-col min-w-0">
+                                                                <span className="font-medium truncate">{l.name}</span>
+                                                                {l.phone && <span className="text-xs text-muted-foreground">{l.phone}</span>}
+                                                            </div>
+                                                            {selectedLeadId === l.id && <Check className="w-3.5 h-3.5 shrink-0 text-indigo-600" />}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    )}
+
                     {/* Date and Time Row */}
                     <div className="grid grid-cols-2 gap-4">
                         {/* Date */}
@@ -163,7 +248,8 @@ export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, 
                                 value={form.project_id} 
                                 onValueChange={v => {
                                     set('project_id', v)
-                                    set('unit_id', '') // reset unit when project changes
+                                    set('unit_id', '')
+                                    setUnitSearch('')
                                 }}
                             >
                                 <SelectTrigger className="bg-white">
@@ -179,41 +265,102 @@ export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, 
                             </Select>
                         </div>
 
-                        {/* Unit (Conditionally Shown) */}
+                        {/* Unit of Interest — combobox */}
                         <div className="space-y-1.5">
                             <Label>Unit of Interest</Label>
-                            <Select 
-                                value={form.unit_id} 
-                                onValueChange={v => set('unit_id', v)} 
-                                disabled={!form.project_id || form.project_id === '__none__' || units.length === 0}
-                            >
-                                <SelectTrigger className="bg-white">
-                                    <Home className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
-                                    <SelectValue placeholder={
-                                        (!form.project_id || form.project_id === '__none__') ? "Select project first" 
-                                        : units.length > 0 ? "Select unit" : "No units available"
-                                    } />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__none__">None</SelectItem>
-                                    {units.map(u => {
-                                        const details = [
-                                            u.bedrooms ? `${u.bedrooms}BHK` : null,
-                                            u.carpet_area ? `${u.carpet_area} sqft` : null,
-                                            u.base_price ? formatCurrency(u.base_price) : null,
-                                        ].filter(Boolean).join(' • ')
-                                        
-                                        return (
-                                            <SelectItem key={u.id} value={u.id}>
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium">Unit {u.unit_number} {u.tower?.name ? `(${u.tower.name})` : ''}</span>
-                                                    {details && <span className="text-[10px] text-muted-foreground">{details}</span>}
-                                                </div>
-                                            </SelectItem>
-                                        )
-                                    })}
-                                </SelectContent>
-                            </Select>
+                            <Popover open={unitPickerOpen} onOpenChange={setUnitPickerOpen}>
+                                <PopoverTrigger asChild>
+                                    <button
+                                        type="button"
+                                        disabled={!form.project_id || form.project_id === '__none__'}
+                                        className={cn(
+                                            'w-full flex items-center justify-between h-9 px-3 rounded-md border border-input bg-white text-sm transition-colors',
+                                            'hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                                            'disabled:opacity-50 disabled:cursor-not-allowed',
+                                            !form.unit_id && 'text-muted-foreground'
+                                        )}
+                                    >
+                                        <span className="flex items-center gap-2 truncate">
+                                            <Home className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                                            {form.unit_id && form.unit_id !== '__none__'
+                                                ? (() => {
+                                                    const u = units.find(u => u.id === form.unit_id)
+                                                    return u ? `Unit ${u.unit_number}${u.tower?.name ? ` (${u.tower.name})` : ''}` : 'Selected'
+                                                })()
+                                                : (!form.project_id || form.project_id === '__none__')
+                                                    ? 'Select project first'
+                                                    : units.length === 0 ? 'No units available' : 'Select unit'
+                                            }
+                                        </span>
+                                        <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                                    <div className="flex flex-col rounded-md bg-popover text-popover-foreground">
+                                        <div className="flex items-center border-b px-3">
+                                            <Home className="mr-2 h-4 w-4 shrink-0 opacity-40" />
+                                            <input
+                                                className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+                                                placeholder="Search unit…"
+                                                value={unitSearch}
+                                                onChange={e => setUnitSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        <div
+                                            style={{ maxHeight: 220, overflowY: 'auto' }}
+                                            onWheel={e => e.stopPropagation()}
+                                        >
+                                            {(() => {
+                                                const filtered = units.filter(u => {
+                                                    if (!unitSearch) return true
+                                                    const q = unitSearch.toLowerCase()
+                                                    return (
+                                                        String(u.unit_number).includes(q) ||
+                                                        u.tower?.name?.toLowerCase().includes(q) ||
+                                                        (u.bedrooms && `${u.bedrooms}bhk`.includes(q))
+                                                    )
+                                                })
+                                                if (filtered.length === 0) return (
+                                                    <div className="py-4 text-center text-sm text-muted-foreground">No units found</div>
+                                                )
+                                                return (
+                                                    <div className="p-1">
+                                                        <div
+                                                            onClick={() => { set('unit_id', ''); setUnitPickerOpen(false) }}
+                                                            className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                                        >
+                                                            None
+                                                            {!form.unit_id && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                                                        </div>
+                                                        {filtered.map(u => {
+                                                            const details = [
+                                                                u.bedrooms ? `${u.bedrooms}BHK` : null,
+                                                                u.carpet_area ? `${u.carpet_area} sqft` : null,
+                                                                u.base_price ? formatCurrency(u.base_price) : null,
+                                                            ].filter(Boolean).join(' · ')
+                                                            return (
+                                                                <div
+                                                                    key={u.id}
+                                                                    onClick={() => { set('unit_id', u.id); setUnitPickerOpen(false) }}
+                                                                    className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+                                                                >
+                                                                    <div className="flex flex-col min-w-0">
+                                                                        <span className="font-medium truncate">
+                                                                            Unit {u.unit_number}{u.tower?.name ? ` (${u.tower.name})` : ''}
+                                                                        </span>
+                                                                        {details && <span className="text-xs text-muted-foreground">{details}</span>}
+                                                                    </div>
+                                                                    {form.unit_id === u.id && <Check className="w-3.5 h-3.5 shrink-0 text-indigo-600" />}
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )
+                                            })()}
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
 
@@ -259,7 +406,7 @@ export default function BookSiteVisitDialog({ open, onOpenChange, leadId, lead, 
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={loading || !form.date || !form.time}>
+                        <Button type="submit" disabled={loading || !form.date || !form.time || (!leadId && !selectedLeadId)}>
                             {loading ? (isEdit ? 'Saving...' : 'Booking...') : (isEdit ? 'Save Changes' : 'Book Visit')}
                         </Button>
                     </DialogFooter>
