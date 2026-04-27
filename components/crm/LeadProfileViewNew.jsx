@@ -37,6 +37,20 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
     const upcomingSiteVisitsCount = siteVisits.filter(v => v.status === 'scheduled').length
     const nextUpcomingVisit = siteVisits.find(v => v.status === 'scheduled' && new Date(v.scheduled_at) >= new Date()) ?? null
 
+    // Fetch project for brochure sharing
+    const { data: projectData } = useQuery({
+        queryKey: ['project-brochure', lead?.project_id],
+        queryFn: async () => {
+            if (!lead?.project_id) return null
+            const res = await fetch(`/api/projects/${lead.project_id}`)
+            if (!res.ok) return null
+            const d = await res.json()
+            return d.project
+        },
+        enabled: !!lead?.project_id,
+        staleTime: 60_000,
+    })
+
     // Pre-fetch deals count for badge
     const { data: dealsData } = useQuery({
         queryKey: ['lead-deals', leadId],
@@ -127,6 +141,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
             <div className={`w-full md:w-80 flex flex-col shrink-0 space-y-4 ${!isModal ? '' : 'overflow-y-auto'}`}>
                 <LeadProfileSidebar
                     lead={lead}
+                    project={projectData}
                     onEditProfile={() => setEditDialogOpen(true)}
                     onEditAvatar={() => setAvatarPickerOpen(true)}
                     upcomingVisit={nextUpcomingVisit}

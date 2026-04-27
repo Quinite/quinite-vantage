@@ -83,6 +83,8 @@ export const PUT = withAuth(async (request, { params, user, profile }) => {
         if (body.completion_date !== undefined) updates.completion_date = body.completion_date || null
         if (body.rera_number !== undefined) updates.rera_number = body.rera_number || null
         if (body.amenities !== undefined) updates.amenities = Array.isArray(body.amenities) ? body.amenities : []
+        if (body.brochure_url !== undefined) updates.brochure_url = body.brochure_url || null
+        if (body.brochure_path !== undefined) updates.brochure_path = body.brochure_path || null
 
         // Location — support both flat and legacy real_estate nested shape
         const re = body.real_estate || {}

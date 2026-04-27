@@ -200,6 +200,8 @@ export async function POST(request) {
       min_price: prices.length ? Math.min(...prices) : null,
       max_price: prices.length ? Math.max(...prices) : null,
       amenities: Array.isArray(body.amenities) ? body.amenities : [],
+      brochure_url: body.brochure_url || null,
+      brochure_path: body.brochure_path || null,
     }
 
     const { data: project, error } = await admin

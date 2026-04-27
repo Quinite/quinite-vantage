@@ -13,6 +13,8 @@ import {
     IndianRupee,
     Upload,
     Image as ImageIcon,
+    FileText,
+    X as XIcon,
     Store,
     LandPlot,
     CheckCircle2,
@@ -83,7 +85,9 @@ const STEPS = [
 
 export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitting }) {
     const fileRef = useRef(null)
+    const brochureRef = useRef(null)
     const [uploading, setUploading] = useState(false)
+    const [uploadingBrochure, setUploadingBrochure] = useState(false)
     const [currentStep, setCurrentStep] = useState(0)
     const [touched, setTouched] = useState({})
     const [errors, setErrors] = useState({})
@@ -101,6 +105,9 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
         address: '',
         imageUrl: '',
         imagePath: null,
+        brochureUrl: '',
+        brochurePath: null,
+        brochureFileName: '',
         transaction: 'sell',
         propertyCategory: 'residential',
         propertyUseCase: 'apartment',
@@ -149,6 +156,9 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                 address: initialData.address || '',
                 imageUrl: initialData.image_url || '',
                 imagePath: initialData.image_path || null,
+                brochureUrl: initialData.brochure_url || '',
+                brochurePath: initialData.brochure_path || null,
+                brochureFileName: initialData.brochure_url ? 'Existing brochure' : '',
                 transaction: 'sell',
                 propertyCategory: 'residential',
                 propertyUseCase: 'apartment',
@@ -381,6 +391,56 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
 
 
 
+    const handleBrochureUpload = async (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (file.type !== 'application/pdf') {
+            toast.error("Only PDF files are allowed")
+            return
+        }
+
+        if (file.size > 20 * 1024 * 1024) {
+            toast.error("PDF must be under 20MB")
+            return
+        }
+
+        setUploadingBrochure(true)
+        try {
+            const res = await fetch('/api/projects/brochure-upload-url', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileName: file.name, contentType: file.type })
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error)
+
+            await fetch(data.uploadUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            })
+
+            handleChange('brochureUrl', data.brochure_url)
+            handleChange('brochurePath', data.brochure_path)
+            handleChange('brochureFileName', file.name)
+            toast.success("Brochure uploaded successfully!")
+        } catch (err) {
+            console.error(err)
+            toast.error("Brochure upload failed")
+        } finally {
+            setUploadingBrochure(false)
+            if (brochureRef.current) brochureRef.current.value = ''
+        }
+    }
+
+    const handleRemoveBrochure = () => {
+        handleChange('brochureUrl', '')
+        handleChange('brochurePath', null)
+        handleChange('brochureFileName', '')
+    }
+
     const handleSubmit = (isDraftSave = false) => {
         // If saving as draft, we only require the name
         if (isDraftSave) {
@@ -609,6 +669,80 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                     )}
                                 </div>
                                 {errors.imageUrl && <p className="text-xs text-red-500 mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {errors.imageUrl}</p>}
+                            </div>
+
+                            {/* Brochure Upload */}
+                            <div>
+                                <label className="text-xs sm:text-sm font-semibold text-slate-800 mb-2 block flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-blue-600" />
+                                    Project Brochure
+                                    <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Optional</span>
+                                </label>
+                                <input
+                                    type="file"
+                                    ref={brochureRef}
+                                    className="hidden"
+                                    accept="application/pdf"
+                                    onChange={handleBrochureUpload}
+                                />
+                                {formData.brochureUrl ? (
+                                    <div className="flex items-center gap-3 p-4 border-2 border-green-300 bg-green-50/40 rounded-xl">
+                                        <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+                                            <FileText className="w-5 h-5 text-white" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold text-slate-900 truncate">{formData.brochureFileName || 'Brochure'}</p>
+                                            <p className="text-xs text-green-600 flex items-center gap-1 mt-0.5">
+                                                <CheckCircle2 className="w-3 h-3" /> Ready to share with leads
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => brochureRef.current?.click()}
+                                                className="h-8 text-xs text-slate-500 hover:text-slate-700"
+                                                disabled={uploadingBrochure}
+                                            >
+                                                Replace
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={handleRemoveBrochure}
+                                                className="h-8 w-8 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                            >
+                                                <XIcon className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div
+                                        className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50/20 transition-all cursor-pointer"
+                                        onClick={() => brochureRef.current?.click()}
+                                    >
+                                        {uploadingBrochure ? (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto">
+                                                    <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                                                </div>
+                                                <p className="text-sm font-medium text-slate-600">Uploading brochure...</p>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
+                                                    <FileText className="w-6 h-6 text-slate-400" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-slate-700">Upload PDF Brochure</p>
+                                                    <p className="text-xs text-slate-400 mt-0.5">PDF only · Max 20MB · Share with leads via WhatsApp</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1280,6 +1414,24 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                 <img src={formData.imageUrl} alt="Project" className="w-32 h-32 object-cover rounded-lg border" />
                                             </div>
                                         )}
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1.5">Project Brochure</p>
+                                            {formData.brochureUrl ? (
+                                                <div className="flex items-center gap-3 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg w-fit">
+                                                    <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center shrink-0">
+                                                        <FileText className="w-4 h-4 text-white" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-semibold text-slate-800 truncate max-w-[180px]">{formData.brochureFileName || 'Brochure uploaded'}</p>
+                                                        <p className="text-[10px] text-green-600 flex items-center gap-1 mt-0.5">
+                                                            <CheckCircle2 className="w-3 h-3" /> Ready to share
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-slate-400 italic">No brochure uploaded</p>
+                                            )}
+                                        </div>
                                     </CardContent>
                                 </Card>
 
