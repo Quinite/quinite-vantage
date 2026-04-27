@@ -83,41 +83,58 @@ export default function AdminProfilePage() {
     return (
         <div className="p-6 max-w-4xl mx-auto flex flex-col gap-4">
 
-            {/* Hero — identity banner */}
-            <div className="relative rounded-xl border border-border overflow-hidden">
-                {/* Layered gradient */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/40 to-background" />
-                {/* Decorative blobs */}
-                <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-blue-400/10" />
-                <div className="absolute right-8 bottom-0 h-16 w-16 rounded-full bg-indigo-400/10" />
-
-                <div className="relative flex items-center gap-5 px-6 py-5">
-                    {/* Avatar */}
-                    <div className="relative shrink-0">
-                        <Avatar className="h-[72px] w-[72px] border-[3px] border-white shadow-lg">
-                            <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-2xl font-bold">
-                                {profile?.full_name?.[0] || 'U'}
-                            </AvatarFallback>
-                        </Avatar>
-                        {/* Active indicator */}
-                        <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-400 border-2 border-white shadow-sm" />
+            {/* Hero — Identity Card */}
+            <div className="relative rounded-2xl border border-border overflow-hidden bg-white shadow-sm">
+                {/* Background Banner */}
+                <div className="h-24 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-20">
+                        <div className="absolute top-[-50%] left-[-10%] w-[40%] h-[200%] bg-white/20 blur-[80px] rotate-12" />
+                        <div className="absolute top-[20%] right-[-5%] w-[30%] h-[150%] bg-blue-400/30 blur-[60px] -rotate-12" />
                     </div>
+                </div>
 
-                    {/* Name + meta */}
-                    <div className="min-w-0 flex-1">
-                        <h2 className="text-xl font-bold text-foreground tracking-tight leading-tight truncate">
-                            {profile?.full_name}
-                        </h2>
-                        <p className="text-sm text-muted-foreground truncate mt-0.5">{profile?.email}</p>
-                        {profile?.organization?.name && (
-                            <p className="text-xs text-muted-foreground/60 truncate">{profile.organization.name}</p>
-                        )}
-                        {profile?.role && (
-                            <Badge className="mt-2 capitalize text-xs font-semibold bg-blue-600 text-white hover:bg-blue-600 shadow-sm tracking-wide">
-                                {roleLabel}
-                            </Badge>
-                        )}
+                <div className="px-6 pb-6">
+                    <div className="relative flex flex-col sm:flex-row items-start sm:items-end gap-5 -mt-6">
+                        {/* Avatar Section */}
+                        <div className="relative shrink-0 group">
+                            <div className="absolute -inset-1 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-300" />
+                            <Avatar className="h-24 w-24 rounded-2xl border-[4px] border-white shadow-xl relative z-10">
+                                <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-3xl font-bold rounded-xl">
+                                    {profile?.full_name?.[0] + profile?.full_name?.split(' ')[1][0] || 'U'}
+                                </AvatarFallback>
+                            </Avatar>
+                        </div>
+
+                        {/* Name + Meta info */}
+                        <div className="flex-1 min-w-0 pt-2">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <h2 className="text-2xl font-bold text-foreground tracking-tight leading-tight truncate">
+                                    {profile?.full_name}
+                                </h2>
+                                {profile?.role && (
+                                    <Badge className="capitalize text-[10px] h-5 px-2 font-bold bg-blue-600/10 text-blue-700 border-blue-200/50 hover:bg-blue-600/20 shadow-none tracking-wider">
+                                        <Shield className="w-2.5 h-2.5 mr-1" />
+                                        {roleLabel}
+                                    </Badge>
+                                )}
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
+                                <div className="flex items-center text-sm text-muted-foreground">
+                                    <Mail className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
+                                    {profile?.email}
+                                </div>
+                                {profile?.organization?.name && (
+                                    <div className="flex items-center text-sm font-medium text-slate-600">
+                                        <Building2 className="w-3.5 h-3.5 mr-1.5 text-blue-500" />
+                                        {profile.organization.name}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Action buttons could go here */}
                     </div>
                 </div>
             </div>

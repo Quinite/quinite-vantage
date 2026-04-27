@@ -26,8 +26,8 @@ export default function InventorySidebar() {
             title: 'Inventory',
             items: [
                 { label: 'Overview', href: '/dashboard/admin/inventory', icon: LayoutDashboard, permission: 'view_inventory', exactMatch: true },
-                { label: 'Units', href: '/dashboard/admin/inventory/units', icon: Building, permission: 'view_inventory' },
                 { label: 'Projects', href: '/dashboard/admin/inventory/projects', icon: FolderKanban, permission: 'view_inventory' },
+                { label: 'Units', href: '/dashboard/admin/inventory/units', icon: Building, permission: 'view_inventory' },
             ]
         },
         {
