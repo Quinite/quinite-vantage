@@ -66,9 +66,16 @@ import {
     Loader2,
     MapPin,
     Star,
+    LayoutList,
+    CalendarDays,
+    ChevronLeft,
+    ChevronRight,
+    Filter,
+    SlidersHorizontal,
+    X as XIcon,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { isToday, isPast, parseISO, differenceInDays } from 'date-fns'
+import { isToday, isPast, parseISO, differenceInDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isSameMonth, format, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameWeek, startOfDay, endOfDay } from 'date-fns'
 import { usePermissions } from '@/contexts/PermissionContext'
 import { useRouter } from 'next/navigation'
 import TaskFormFields, { taskToFormData, formDataToPayload, EMPTY_FORM } from '@/components/crm/TaskFormFields'
@@ -745,11 +752,424 @@ function TaskDetailSheet({ task, open, onClose, onToggle, onUpdated, onDelete, t
     )
 }
 
+// ─── Calendar View ────────────────────────────────────────────────────────────
+
+function DayCell({ date, tasks, currentMonth, onTaskClick, onToggle }) {
+    const isCurrentMonth = isSameMonth(date, currentMonth)
+    const isCurrentDay   = isToday(date)
+    const MAX_VISIBLE = 3
+    const visible = tasks.slice(0, MAX_VISIBLE)
+    const overflow = tasks.length - MAX_VISIBLE
+    const [showAll, setShowAll] = useState(false)
+    const displayed = showAll ? tasks : visible
+
+    return (
+        <div className={cn(
+            "min-h-[110px] p-1.5 rounded-xl border transition-colors flex flex-col gap-1",
+            isCurrentDay
+                ? "bg-indigo-50/80 border-indigo-200 ring-1 ring-indigo-300"
+                : isCurrentMonth
+                    ? "bg-white border-slate-100 hover:border-slate-200"
+                    : "bg-slate-50/40 border-slate-50"
+        )}>
+            {/* Day number */}
+            <div className="flex items-center justify-end px-0.5">
+                <span className={cn(
+                    "text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full",
+                    isCurrentDay   ? "bg-indigo-600 text-white" :
+                    isCurrentMonth ? "text-slate-700" : "text-slate-300"
+                )}>
+                    {format(date, 'd')}
+                </span>
+            </div>
+
+            {/* Task chips */}
+            <div className="flex flex-col gap-0.5 flex-1">
+                {displayed.map(task => {
+                    const overdue = getIsOverdue(task)
+                    const done    = task.status === 'completed'
+                    const pCfg    = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+                    return (
+                        <div
+                            key={task.id}
+                            onClick={() => onTaskClick(task)}
+                            className={cn(
+                                "group/chip flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate cursor-pointer transition-all hover:opacity-80 active:scale-95",
+                                done    ? "bg-emerald-50 text-emerald-700 line-through opacity-70" :
+                                overdue ? "bg-red-50 text-red-700 border border-red-100" :
+                                          cn(pCfg.bg, pCfg.text)
+                            )}
+                        >
+                            <button
+                                onClick={e => { e.stopPropagation(); onToggle(task) }}
+                                className="shrink-0 opacity-0 group-hover/chip:opacity-100 transition-opacity"
+                            >
+                                {done
+                                    ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+                                    : <div className="w-2.5 h-2.5 rounded-full border border-current" />
+                                }
+                            </button>
+                            <span className="truncate leading-tight">{task.title}</span>
+                        </div>
+                    )
+                })}
+                {!showAll && overflow > 0 && (
+                    <button
+                        onClick={e => { e.stopPropagation(); setShowAll(true) }}
+                        className="text-[10px] font-semibold text-indigo-500 hover:text-indigo-700 px-1.5 text-left transition-colors"
+                    >
+                        +{overflow} more
+                    </button>
+                )}
+                {showAll && overflow > 0 && (
+                    <button
+                        onClick={e => { e.stopPropagation(); setShowAll(false) }}
+                        className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 px-1.5 text-left transition-colors"
+                    >
+                        Show less
+                    </button>
+                )}
+            </div>
+        </div>
+    )
+}
+
+const CAL_GRANULARITIES = [
+    { id: 'month', label: 'Month' },
+    { id: 'week',  label: 'Week'  },
+    { id: 'day',   label: 'Day'   },
+]
+const WEEKDAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function WeekTaskCard({ task, onTaskClick, onToggle }) {
+    const overdue = getIsOverdue(task)
+    const done    = task.status === 'completed'
+    const pCfg    = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+    return (
+        <div
+            onClick={() => onTaskClick(task)}
+            className={cn(
+                "group/wc flex items-start gap-1.5 p-2 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:opacity-90 border",
+                done    ? "bg-emerald-50 text-emerald-700 border-emerald-100 line-through opacity-70" :
+                overdue ? "bg-red-50 text-red-700 border-red-100" :
+                          cn(pCfg.bg, pCfg.text, pCfg.border)
+            )}
+        >
+            <button
+                onClick={e => { e.stopPropagation(); onToggle(task) }}
+                className="shrink-0 mt-px opacity-0 group-hover/wc:opacity-100 transition-opacity"
+            >
+                {done
+                    ? <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    : <div className="w-3 h-3 rounded-full border border-current" />
+                }
+            </button>
+            <span className="truncate leading-tight flex-1">{task.title}</span>
+            {task.due_time && (
+                <span className="shrink-0 text-[9px] opacity-60 font-normal">{task.due_time}</span>
+            )}
+        </div>
+    )
+}
+
+function TaskCalendarView({ tasks, onTaskClick, onToggle }) {
+    const [granularity, setGranularity] = useState('month')
+    const [anchor, setAnchor]           = useState(new Date())
+
+    function getTasksForDay(day) {
+        return tasks.filter(t => t.due_date && isSameDay(parseISO(t.due_date), day))
+    }
+
+    // ── Navigation helpers ──────────────────────────────────────────────────────
+    function navPrev() {
+        if (granularity === 'month') setAnchor(d => subMonths(d, 1))
+        else if (granularity === 'week') setAnchor(d => subWeeks(d, 1))
+        else setAnchor(d => subDays(d, 1))
+    }
+    function navNext() {
+        if (granularity === 'month') setAnchor(d => addMonths(d, 1))
+        else if (granularity === 'week') setAnchor(d => addWeeks(d, 1))
+        else setAnchor(d => addDays(d, 1))
+    }
+    function isAnchorToday() {
+        if (granularity === 'month') return isSameMonth(anchor, new Date())
+        if (granularity === 'week')  return isSameWeek(anchor, new Date(), { weekStartsOn: 1 })
+        return isToday(anchor)
+    }
+    function getTitle() {
+        if (granularity === 'month') return format(anchor, 'MMMM yyyy')
+        if (granularity === 'week') {
+            const ws = startOfWeek(anchor, { weekStartsOn: 1 })
+            const we = endOfWeek(anchor,   { weekStartsOn: 1 })
+            return isSameMonth(ws, we)
+                ? `${format(ws, 'MMM d')} – ${format(we, 'd, yyyy')}`
+                : `${format(ws, 'MMM d')} – ${format(we, 'MMM d, yyyy')}`
+        }
+        return format(anchor, 'EEEE, MMMM d, yyyy')
+    }
+
+    // ── Month grid ──────────────────────────────────────────────────────────────
+    function MonthGrid() {
+        const monthStart = startOfMonth(anchor)
+        const monthEnd   = endOfMonth(anchor)
+        const calStart   = startOfWeek(monthStart, { weekStartsOn: 1 })
+        const calEnd     = endOfWeek(monthEnd,     { weekStartsOn: 1 })
+        const days       = eachDayOfInterval({ start: calStart, end: calEnd })
+        return (
+            <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 overflow-hidden">
+                <div className="grid grid-cols-7 border-b border-slate-100">
+                    {WEEKDAYS_SHORT.map(d => (
+                        <div key={d} className="py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">{d}</div>
+                    ))}
+                </div>
+                <div className="grid grid-cols-7 gap-px bg-slate-100 p-0.5">
+                    {days.map(day => (
+                        <DayCell
+                            key={day.toISOString()}
+                            date={day}
+                            tasks={getTasksForDay(day)}
+                            currentMonth={anchor}
+                            onTaskClick={onTaskClick}
+                            onToggle={onToggle}
+                        />
+                    ))}
+                </div>
+            </div>
+        )
+    }
+
+    // ── Week grid ───────────────────────────────────────────────────────────────
+    function WeekGrid() {
+        const ws   = startOfWeek(anchor, { weekStartsOn: 1 })
+        const days = eachDayOfInterval({ start: ws, end: addDays(ws, 6) })
+        return (
+            <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 overflow-hidden">
+                <div className="grid grid-cols-7 border-b border-slate-100">
+                    {days.map(day => {
+                        const today = isToday(day)
+                        return (
+                            <div key={day.toISOString()} className={cn(
+                                "py-2.5 text-center border-r last:border-0 border-slate-100",
+                                today && "bg-indigo-50/60"
+                            )}>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{format(day, 'EEE')}</p>
+                                <span className={cn(
+                                    "mt-0.5 text-sm font-black inline-flex items-center justify-center w-7 h-7 rounded-full mx-auto",
+                                    today ? "bg-indigo-600 text-white" : "text-slate-700"
+                                )}>{format(day, 'd')}</span>
+                            </div>
+                        )
+                    })}
+                </div>
+                <div className="grid grid-cols-7 gap-px bg-slate-100 p-0.5">
+                    {days.map(day => {
+                        const dayTasks = getTasksForDay(day)
+                        return (
+                            <div key={day.toISOString()} className={cn(
+                                "min-h-[160px] p-1.5 flex flex-col gap-1 bg-white rounded-lg",
+                                isToday(day) && "bg-indigo-50/30"
+                            )}>
+                                {dayTasks.length === 0
+                                    ? <p className="text-[10px] text-slate-200 text-center mt-6">No tasks</p>
+                                    : dayTasks.map(t => (
+                                        <WeekTaskCard key={t.id} task={t} onTaskClick={onTaskClick} onToggle={onToggle} />
+                                    ))
+                                }
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        )
+    }
+
+    // ── Day view ────────────────────────────────────────────────────────────────
+    function DayView() {
+        const dayTasks = getTasksForDay(anchor)
+        const pending   = dayTasks.filter(t => t.status !== 'completed')
+        const completed = dayTasks.filter(t => t.status === 'completed')
+        return (
+            <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 overflow-hidden">
+                {dayTasks.length === 0 ? (
+                    <div className="py-16 text-center">
+                        <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                            <CalendarDays className="w-6 h-6 text-slate-200" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-400">No tasks for this day</p>
+                        <p className="text-xs text-slate-300 mt-1">Navigate to another day or add a task.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-slate-50">
+                        {pending.length > 0 && (
+                            <div className="p-4 space-y-2">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Pending · {pending.length}</p>
+                                {pending.map(task => {
+                                    const overdue = getIsOverdue(task)
+                                    const pCfg    = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+                                    return (
+                                        <div
+                                            key={task.id}
+                                            onClick={() => onTaskClick(task)}
+                                            className={cn(
+                                                "group/dc flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm",
+                                                overdue ? "bg-red-50 border-red-100" : cn(pCfg.bg, pCfg.border)
+                                            )}
+                                        >
+                                            <button
+                                                onClick={e => { e.stopPropagation(); onToggle(task) }}
+                                                className={cn("shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all hover:scale-110", overdue ? "border-red-400" : pCfg.text.replace('text-', 'border-'))}
+                                            >
+                                                <div className="w-0 h-0 group-hover/dc:w-2.5 group-hover/dc:h-2.5 rounded-full bg-current transition-all" />
+                                            </button>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={cn("text-sm font-semibold truncate", overdue ? "text-red-700" : pCfg.text)}>{task.title}</p>
+                                                {task.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>}
+                                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                    {task.due_time && (
+                                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                            <Clock className="w-3 h-3" />{task.due_time}
+                                                        </span>
+                                                    )}
+                                                    {task.lead && (
+                                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                            <User className="w-3 h-3" />{task.lead.name}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {task.assignee && <UserAvatar user={task.assignee} size={6} />}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                        {completed.length > 0 && (
+                            <div className="p-4 space-y-2">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Completed · {completed.length}</p>
+                                {completed.map(task => (
+                                    <div
+                                        key={task.id}
+                                        onClick={() => onTaskClick(task)}
+                                        className="group/dc flex items-center gap-3 p-3 rounded-xl border border-emerald-100 bg-emerald-50 cursor-pointer hover:shadow-sm transition-all opacity-70"
+                                    >
+                                        <button
+                                            onClick={e => { e.stopPropagation(); onToggle(task) }}
+                                            className="shrink-0"
+                                        >
+                                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                        </button>
+                                        <p className="text-sm font-medium text-emerald-700 line-through truncate flex-1">{task.title}</p>
+                                        {task.assignee && <UserAvatar user={task.assignee} size={6} />}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    // ── Unscheduled ─────────────────────────────────────────────────────────────
+    const unscheduled = tasks.filter(t => !t.due_date && t.status !== 'completed')
+
+    return (
+        <div className="space-y-4">
+            {/* Calendar nav bar */}
+            <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 shadow-sm ring-1 ring-slate-100 gap-3 flex-wrap">
+                {/* Granularity toggle */}
+                <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg shrink-0">
+                    {CAL_GRANULARITIES.map(g => (
+                        <button
+                            key={g.id}
+                            onClick={() => setGranularity(g.id)}
+                            className={cn(
+                                "px-3 py-1 rounded-md text-xs font-semibold transition-all",
+                                granularity === g.id
+                                    ? "bg-white text-slate-800 shadow-sm"
+                                    : "text-slate-400 hover:text-slate-600"
+                            )}
+                        >
+                            {g.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Nav arrows + title */}
+                <div className="flex items-center gap-2 flex-1 justify-center">
+                    <button
+                        onClick={navPrev}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <h2 className="text-sm font-bold text-slate-800 tracking-tight min-w-[160px] text-center">
+                        {getTitle()}
+                    </h2>
+                    <button
+                        onClick={navNext}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                </div>
+
+                {/* Today button */}
+                <button
+                    onClick={() => setAnchor(new Date())}
+                    className={cn(
+                        "shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg border transition-colors",
+                        isAnchorToday()
+                            ? "bg-slate-50 text-slate-300 border-slate-100 cursor-default"
+                            : "bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100 hover:text-indigo-800"
+                    )}
+                    disabled={isAnchorToday()}
+                >
+                    Today
+                </button>
+            </div>
+
+            {/* Grid */}
+            {granularity === 'month' && <MonthGrid />}
+            {granularity === 'week'  && <WeekGrid />}
+            {granularity === 'day'   && <DayView />}
+
+            {/* Unscheduled tasks */}
+            {unscheduled.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-4">
+                    <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                        <ListChecks className="w-3.5 h-3.5" /> No Due Date
+                        <span className="font-medium text-slate-300">({unscheduled.length})</span>
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                        {unscheduled.map(task => {
+                            const pCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+                            return (
+                                <button
+                                    key={task.id}
+                                    onClick={() => onTaskClick(task)}
+                                    className={cn(
+                                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all hover:opacity-80",
+                                        pCfg.bg, pCfg.text, pCfg.border
+                                    )}
+                                >
+                                    <div className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+                                    {task.title}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function TasksPageView() {
     const router = useRouter()
-    const { hasPermission, hasAnyPermission, loading: permLoading } = usePermissions()
+    const { hasPermission, loading: permLoading } = usePermissions()
 
     const [tasks, setTasks]           = useState([])
     const [loading, setLoading]       = useState(true)
@@ -765,6 +1185,11 @@ export default function TasksPageView() {
     const [selectedProjLabel, setProjLabel] = useState(null)
     const [deleteConfirmTask, setDeleteConfirmTask] = useState(null)
     const [deleting, setDeleting]           = useState(false)
+    const [viewMode, setViewMode]           = useState('list')
+    const [filterDateFrom, setFilterDateFrom] = useState('')
+    const [filterDateTo, setFilterDateTo]     = useState('')
+    const [filterLeadId, setFilterLeadId]     = useState('all')
+    const [showAdvFilters, setShowAdvFilters] = useState(false)
 
     const canViewTasks  = !permLoading && hasPermission('view_tasks')
     const canCreate     = !permLoading && hasPermission('create_tasks')
@@ -820,6 +1245,10 @@ export default function TasksPageView() {
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
+    const uniqueLeads = [...new Map(
+        tasks.filter(t => t.lead).map(t => [t.lead.id, t.lead])
+    ).values()].sort((a, b) => a.name.localeCompare(b.name))
+
     const filteredTasks = sortedTasks.filter(t => {
         const matchesPriority = filterPriority === 'all' || t.priority === filterPriority
         const q = searchQuery.toLowerCase()
@@ -827,8 +1256,26 @@ export default function TasksPageView() {
             t.description?.toLowerCase().includes(q) ||
             t.lead?.name?.toLowerCase().includes(q) ||
             t.project?.name?.toLowerCase().includes(q)
-        return matchesPriority && matchesSearch
+        const matchesLead = filterLeadId === 'all' || t.lead_id === filterLeadId
+        const matchesDateFrom = !filterDateFrom || (t.due_date && t.due_date >= filterDateFrom)
+        const matchesDateTo   = !filterDateTo   || (t.due_date && t.due_date <= filterDateTo)
+        return matchesPriority && matchesSearch && matchesLead && matchesDateFrom && matchesDateTo
     })
+
+    const activeFilterCount = [
+        filterPriority !== 'all',
+        filterLeadId !== 'all',
+        !!filterDateFrom,
+        !!filterDateTo,
+    ].filter(Boolean).length
+
+    function clearAllFilters() {
+        setFilterPriority('all')
+        setFilterLeadId('all')
+        setFilterDateFrom('')
+        setFilterDateTo('')
+        setSearchQuery('')
+    }
 
     const groups = [
         { id: 'overdue',  label: 'Overdue',     icon: AlertCircle,  color: 'text-red-600',    bg: 'bg-red-50',      tasks: filteredTasks.filter(t => t.status !== 'completed' && getIsOverdue(t)) },
@@ -965,9 +1412,10 @@ export default function TasksPageView() {
                 </div>
 
                 {/* Filter bar */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-2 rounded-xl shadow-sm ring-1 ring-slate-100">
-                    <div className="flex items-center gap-3 flex-1 min-w-[200px]">
-                        <div className="relative flex-1 max-w-sm group">
+                <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-100 overflow-hidden">
+                    {/* Row 1: search + view toggle + actions */}
+                    <div className="flex items-center gap-2 p-2 flex-wrap">
+                        <div className="relative flex-1 min-w-[180px] max-w-sm group">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                             <Input
                                 placeholder="Search tasks, lead or project..."
@@ -976,31 +1424,155 @@ export default function TasksPageView() {
                                 className="pl-9 h-9 text-xs border-slate-100 bg-slate-50/50 rounded-lg"
                             />
                         </div>
-                        <div className="h-6 w-[1px] bg-slate-100 mx-1 hidden sm:block" />
-                        <Select value={filterPriority} onValueChange={setFilterPriority}>
-                            <SelectTrigger className="w-[140px] h-9 border-slate-100 bg-slate-50/50 rounded-lg text-xs font-semibold">
-                                <div className="flex items-center gap-2">
-                                    <Zap className="w-3 h-3 text-slate-400" />
-                                    <SelectValue placeholder="Priority" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                                <SelectItem value="all">All Priorities</SelectItem>
-                                <SelectItem value="high">High Priority</SelectItem>
-                                <SelectItem value="medium">Medium Priority</SelectItem>
-                                <SelectItem value="low">Low Priority</SelectItem>
-                            </SelectContent>
-                        </Select>
+
+                        {/* Filters toggle button */}
+                        <button
+                            onClick={() => setShowAdvFilters(v => !v)}
+                            className={cn(
+                                "flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-semibold border transition-all",
+                                showAdvFilters || activeFilterCount > 0
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                    : "bg-slate-50 text-slate-500 border-slate-100 hover:text-slate-700"
+                            )}
+                        >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            Filters
+                            {activeFilterCount > 0 && (
+                                <span className="ml-0.5 bg-indigo-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                                    {activeFilterCount}
+                                </span>
+                            )}
+                        </button>
+
+                        <div className="flex-1" />
+
+                        {/* View toggle */}
+                        <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg shrink-0">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={cn(
+                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                                    viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                <LayoutList className="w-3.5 h-3.5" /> List
+                            </button>
+                            <button
+                                onClick={() => setViewMode('calendar')}
+                                className={cn(
+                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                                    viewMode === 'calendar' ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                <CalendarDays className="w-3.5 h-3.5" /> Calendar
+                            </button>
+                        </div>
+
+                        {canCreate && (
+                            <Button onClick={() => setCreateOpen(true)} size="sm" className="h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 font-bold shadow-md shrink-0">
+                                <Plus className="w-4 h-4" /> Add Task
+                            </Button>
+                        )}
                     </div>
-                    {canCreate && (
-                        <Button onClick={() => setCreateOpen(true)} size="sm" className="h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 font-bold shadow-md shrink-0">
-                            <Plus className="w-4 h-4" /> Add Task
-                        </Button>
+
+                    {/* Row 2: advanced filters (collapsible) */}
+                    {showAdvFilters && (
+                        <div className="border-t border-slate-100 px-3 py-3 flex flex-wrap items-end gap-3 bg-white">
+                            {/* Priority */}
+                            <div className="flex flex-col gap-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Priority</Label>
+                                <Select value={filterPriority} onValueChange={setFilterPriority}>
+                                    <SelectTrigger className="w-[140px] h-8 border-slate-200 bg-white rounded-lg text-xs font-semibold">
+                                        <div className="flex items-center gap-2">
+                                            <Zap className="w-3 h-3 text-slate-400" />
+                                            <SelectValue placeholder="Priority" />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                                        <SelectItem value="all">All Priorities</SelectItem>
+                                        <SelectItem value="high">High</SelectItem>
+                                        <SelectItem value="medium">Medium</SelectItem>
+                                        <SelectItem value="low">Low</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Lead */}
+                            <div className="flex flex-col gap-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Lead</Label>
+                                <Select value={filterLeadId} onValueChange={setFilterLeadId}>
+                                    <SelectTrigger className="w-[180px] h-8 border-slate-200 bg-white rounded-lg text-xs font-semibold">
+                                        <div className="flex items-center gap-2">
+                                            <User className="w-3 h-3 text-slate-400" />
+                                            <SelectValue placeholder="All Leads" />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-60">
+                                        <SelectItem value="all">All Leads</SelectItem>
+                                        {uniqueLeads.map(lead => (
+                                            <SelectItem key={lead.id} value={lead.id}>
+                                                {lead.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="h-8 w-px bg-slate-200 hidden sm:block self-end" />
+
+                            {/* Date from */}
+                            <div className="flex flex-col gap-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Due From</Label>
+                                <div className="relative">
+                                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="date"
+                                        value={filterDateFrom}
+                                        onChange={e => setFilterDateFrom(e.target.value)}
+                                        className="h-8 pl-7 pr-2 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Date to */}
+                            <div className="flex flex-col gap-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Due To</Label>
+                                <div className="relative">
+                                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="date"
+                                        value={filterDateTo}
+                                        min={filterDateFrom || undefined}
+                                        onChange={e => setFilterDateTo(e.target.value)}
+                                        className="h-8 pl-7 pr-2 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Clear filters */}
+                            {activeFilterCount > 0 && (
+                                <button
+                                    onClick={clearAllFilters}
+                                    className="self-end flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-100 transition-colors"
+                                >
+                                    <XIcon className="w-3 h-3" /> Clear all
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
 
+                {/* Calendar view */}
+                {viewMode === 'calendar' && (
+                    <TaskCalendarView
+                        tasks={filteredTasks}
+                        onTaskClick={setDetailTask}
+                        onToggle={handleToggle}
+                    />
+                )}
+
                 {/* Task groups */}
-                <div className="space-y-8">
+                {viewMode === 'list' && <div className="space-y-8">
                     {filteredTasks.length === 0 ? (
                         <div className="text-center py-24 bg-white rounded-2xl shadow-sm ring-1 ring-slate-100">
                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1051,7 +1623,7 @@ export default function TasksPageView() {
                             )
                         })
                     )}
-                </div>
+                </div>}
             </div>
 
             {/* Task Detail Sheet */}

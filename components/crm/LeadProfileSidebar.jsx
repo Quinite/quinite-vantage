@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Camera, Mail, Phone, Smartphone, Building, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText } from 'lucide-react'
+import { Camera, Mail, Phone, Smartphone, Building, Building2, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'react-hot-toast'
 
