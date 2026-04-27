@@ -754,18 +754,49 @@ function TaskDetailSheet({ task, open, onClose, onToggle, onUpdated, onDelete, t
 
 // ─── Calendar View ────────────────────────────────────────────────────────────
 
-function DayCell({ date, tasks, currentMonth, onTaskClick, onToggle }) {
+function TaskChip({ task, onTaskClick, onToggle }) {
+    const overdue = getIsOverdue(task)
+    const done    = task.status === 'completed'
+    const pCfg    = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+
+    return (
+        <div
+            onClick={() => onTaskClick(task)}
+            className={cn(
+                "flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:brightness-95 active:scale-[0.98] border",
+                done    ? "bg-emerald-50 text-emerald-700 border-emerald-100 opacity-70" :
+                overdue ? "bg-red-50 text-red-700 border-red-200" :
+                          cn(pCfg.bg, pCfg.text, pCfg.border)
+            )}
+        >
+            {/* Status indicator — always visible */}
+            <button
+                onClick={e => { e.stopPropagation(); onToggle(task) }}
+                className="shrink-0 transition-transform hover:scale-110"
+                title={done ? 'Reopen task' : 'Mark complete'}
+            >
+                {done
+                    ? <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    : overdue
+                        ? <AlertCircle className="w-3 h-3 text-red-500" />
+                        : <div className={cn("w-3 h-3 rounded-full border-[1.5px]", pCfg.text.replace('text-', 'border-'))} />
+                }
+            </button>
+            <span className={cn("truncate leading-tight flex-1", done && "line-through")}>{task.title}</span>
+        </div>
+    )
+}
+
+function DayCell({ date, tasks, currentMonth, onTaskClick, onToggle, onShowMore }) {
     const isCurrentMonth = isSameMonth(date, currentMonth)
     const isCurrentDay   = isToday(date)
-    const MAX_VISIBLE = 3
-    const visible = tasks.slice(0, MAX_VISIBLE)
-    const overflow = tasks.length - MAX_VISIBLE
-    const [showAll, setShowAll] = useState(false)
-    const displayed = showAll ? tasks : visible
+    const MAX_VISIBLE    = 2
+    const visible        = tasks.slice(0, MAX_VISIBLE)
+    const overflow       = tasks.length - MAX_VISIBLE
 
     return (
         <div className={cn(
-            "min-h-[110px] p-1.5 rounded-xl border transition-colors flex flex-col gap-1",
+            "min-h-[120px] p-1.5 rounded-xl border transition-colors flex flex-col gap-1.5",
             isCurrentDay
                 ? "bg-indigo-50/80 border-indigo-200 ring-1 ring-indigo-300"
                 : isCurrentMonth
@@ -773,7 +804,7 @@ function DayCell({ date, tasks, currentMonth, onTaskClick, onToggle }) {
                     : "bg-slate-50/40 border-slate-50"
         )}>
             {/* Day number */}
-            <div className="flex items-center justify-end px-0.5">
+            <div className="flex items-center justify-end px-0.5 pt-0.5">
                 <span className={cn(
                     "text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full",
                     isCurrentDay   ? "bg-indigo-600 text-white" :
@@ -784,49 +815,18 @@ function DayCell({ date, tasks, currentMonth, onTaskClick, onToggle }) {
             </div>
 
             {/* Task chips */}
-            <div className="flex flex-col gap-0.5 flex-1">
-                {displayed.map(task => {
-                    const overdue = getIsOverdue(task)
-                    const done    = task.status === 'completed'
-                    const pCfg    = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
-                    return (
-                        <div
-                            key={task.id}
-                            onClick={() => onTaskClick(task)}
-                            className={cn(
-                                "group/chip flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate cursor-pointer transition-all hover:opacity-80 active:scale-95",
-                                done    ? "bg-emerald-50 text-emerald-700 line-through opacity-70" :
-                                overdue ? "bg-red-50 text-red-700 border border-red-100" :
-                                          cn(pCfg.bg, pCfg.text)
-                            )}
-                        >
-                            <button
-                                onClick={e => { e.stopPropagation(); onToggle(task) }}
-                                className="shrink-0 opacity-0 group-hover/chip:opacity-100 transition-opacity"
-                            >
-                                {done
-                                    ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
-                                    : <div className="w-2.5 h-2.5 rounded-full border border-current" />
-                                }
-                            </button>
-                            <span className="truncate leading-tight">{task.title}</span>
-                        </div>
-                    )
-                })}
-                {!showAll && overflow > 0 && (
+            <div className="flex flex-col gap-1 flex-1">
+                {visible.map(task => (
+                    <TaskChip key={task.id} task={task} onTaskClick={onTaskClick} onToggle={onToggle} />
+                ))}
+
+                {overflow > 0 && (
                     <button
-                        onClick={e => { e.stopPropagation(); setShowAll(true) }}
-                        className="text-[10px] font-semibold text-indigo-500 hover:text-indigo-700 px-1.5 text-left transition-colors"
+                        onClick={e => { e.stopPropagation(); onShowMore(date, tasks) }}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-lg px-2 py-1 transition-colors w-full"
                     >
-                        +{overflow} more
-                    </button>
-                )}
-                {showAll && overflow > 0 && (
-                    <button
-                        onClick={e => { e.stopPropagation(); setShowAll(false) }}
-                        className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 px-1.5 text-left transition-colors"
-                    >
-                        Show less
+                        <Plus className="w-3 h-3" />
+                        {overflow} more task{overflow > 1 ? 's' : ''}
                     </button>
                 )}
             </div>
@@ -849,22 +849,25 @@ function WeekTaskCard({ task, onTaskClick, onToggle }) {
         <div
             onClick={() => onTaskClick(task)}
             className={cn(
-                "group/wc flex items-start gap-1.5 p-2 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:opacity-90 border",
-                done    ? "bg-emerald-50 text-emerald-700 border-emerald-100 line-through opacity-70" :
-                overdue ? "bg-red-50 text-red-700 border-red-100" :
+                "flex items-start gap-1.5 p-2 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:brightness-95 border",
+                done    ? "bg-emerald-50 text-emerald-700 border-emerald-100 opacity-70" :
+                overdue ? "bg-red-50 text-red-700 border-red-200" :
                           cn(pCfg.bg, pCfg.text, pCfg.border)
             )}
         >
             <button
                 onClick={e => { e.stopPropagation(); onToggle(task) }}
-                className="shrink-0 mt-px opacity-0 group-hover/wc:opacity-100 transition-opacity"
+                className="shrink-0 mt-px transition-transform hover:scale-110"
+                title={done ? 'Reopen task' : 'Mark complete'}
             >
                 {done
                     ? <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                    : <div className="w-3 h-3 rounded-full border border-current" />
+                    : overdue
+                        ? <AlertCircle className="w-3 h-3 text-red-500" />
+                        : <div className={cn("w-3 h-3 rounded-full border-[1.5px]", pCfg.text.replace('text-', 'border-'))} />
                 }
             </button>
-            <span className="truncate leading-tight flex-1">{task.title}</span>
+            <span className={cn("truncate leading-tight flex-1", done && "line-through")}>{task.title}</span>
             {task.due_time && (
                 <span className="shrink-0 text-[9px] opacity-60 font-normal">{task.due_time}</span>
             )}
@@ -875,6 +878,7 @@ function WeekTaskCard({ task, onTaskClick, onToggle }) {
 function TaskCalendarView({ tasks, onTaskClick, onToggle }) {
     const [granularity, setGranularity] = useState('month')
     const [anchor, setAnchor]           = useState(new Date())
+    const [dayPopover, setDayPopover]   = useState(null) // { date, tasks }
 
     function getTasksForDay(day) {
         return tasks.filter(t => t.due_date && isSameDay(parseISO(t.due_date), day))
@@ -931,6 +935,7 @@ function TaskCalendarView({ tasks, onTaskClick, onToggle }) {
                             currentMonth={anchor}
                             onTaskClick={onTaskClick}
                             onToggle={onToggle}
+                            onShowMore={(d, t) => setDayPopover({ date: d, tasks: t })}
                         />
                     ))}
                 </div>
@@ -1161,6 +1166,59 @@ function TaskCalendarView({ tasks, onTaskClick, onToggle }) {
                     </div>
                 </div>
             )}
+
+            {/* Day overflow dialog */}
+            <Dialog open={!!dayPopover} onOpenChange={v => { if (!v) setDayPopover(null) }}>
+                <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl">
+                    <DialogHeader className="px-5 pt-5 pb-3 border-b border-slate-100">
+                        <DialogTitle className="text-sm font-bold text-slate-800">
+                            {dayPopover && format(dayPopover.date, 'EEEE, MMMM d')}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-400">
+                            {dayPopover?.tasks.length} task{dayPopover?.tasks.length !== 1 ? 's' : ''} due
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="px-4 py-3 space-y-1.5 max-h-[60vh] overflow-y-auto">
+                        {dayPopover?.tasks.map(task => (
+                            <div
+                                key={task.id}
+                                onClick={() => { onTaskClick(task); setDayPopover(null) }}
+                                className={cn(
+                                    "flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all hover:shadow-sm",
+                                    task.status === 'completed' ? "bg-emerald-50 border-emerald-100 opacity-70" :
+                                    getIsOverdue(task) ? "bg-red-50 border-red-200" :
+                                    cn(PRIORITY_CONFIG[task.priority]?.bg, PRIORITY_CONFIG[task.priority]?.border)
+                                )}
+                            >
+                                <button
+                                    onClick={e => { e.stopPropagation(); onToggle(task) }}
+                                    className="shrink-0 transition-transform hover:scale-110"
+                                >
+                                    {task.status === 'completed'
+                                        ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                        : getIsOverdue(task)
+                                            ? <AlertCircle className="w-4 h-4 text-red-500" />
+                                            : <div className={cn("w-4 h-4 rounded-full border-2", PRIORITY_CONFIG[task.priority]?.text.replace('text-', 'border-'))} />
+                                    }
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                    <p className={cn(
+                                        "text-sm font-medium truncate",
+                                        task.status === 'completed' ? "line-through text-emerald-700" :
+                                        getIsOverdue(task) ? "text-red-700" :
+                                        PRIORITY_CONFIG[task.priority]?.text
+                                    )}>{task.title}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        {task.due_time && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />{task.due_time}</span>}
+                                        {task.lead && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" />{task.lead.name}</span>}
+                                    </div>
+                                </div>
+                                {task.assignee && <UserAvatar user={task.assignee} size={6} />}
+                            </div>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
