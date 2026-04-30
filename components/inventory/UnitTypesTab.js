@@ -316,10 +316,7 @@ export default function UnitTypesTab({ projectId, project }) {
                             onAdd={handleSave}
                             category={(project?.unit_configs?.[0]?.category) || 'residential'}
                             initialData={editingConfig}
-                            warning={editingConfig && (unitCountsByConfigId[editingConfig.id] || 0) > 0
-                                ? `${unitCountsByConfigId[editingConfig.id]} unit${unitCountsByConfigId[editingConfig.id] > 1 ? 's are' : ' is'} already placed using this config. Changes update the template only — existing units keep their current values.`
-                                : null
-                            }
+                            unitsPlacedCount={editingConfig ? (unitCountsByConfigId[editingConfig.id] || 0) : 0}
                         />
                     </div>
                 </DialogContent>

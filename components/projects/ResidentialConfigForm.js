@@ -30,7 +30,7 @@ const TYPE_ICONS = {
     Land:       Building2,
 }
 
-export default function ResidentialConfigForm({ onAdd, onCancel, category = 'residential', initialData = null, warning = null }) {
+export default function ResidentialConfigForm({ onAdd, onCancel, category = 'residential', initialData = null, unitsPlacedCount = 0 }) {
     const [moreFeaturesOpen, setMoreFeaturesOpen] = useState(false)
     const [activeCategory, setActiveCategory] = useState(UNIT_AMENITY_CATEGORIES[0]?.id || '')
     const [config, setConfig] = useState(initialData || {
@@ -72,12 +72,6 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
 
     return (
         <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-blue-50/50">
-            {warning && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-800 font-medium">{warning}</p>
-                </div>
-            )}
             <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                     <Label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Transaction Type</Label>
@@ -464,7 +458,28 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
                 })()}
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 px-1">
+            {initialData && (
+                <div className={cn(
+                    "flex items-start gap-2.5 p-3 rounded-xl border mt-6 mx-1 transition-colors",
+                    unitsPlacedCount > 0 ? "bg-amber-50/50 border-amber-200" : "bg-slate-50 border-slate-200"
+                )}>
+                    <AlertTriangle className={cn("w-3.5 h-3.5 shrink-0 mt-0.5", unitsPlacedCount > 0 ? "text-amber-500" : "text-slate-400")} />
+                    <div className={cn("text-[11px] font-medium leading-relaxed", unitsPlacedCount > 0 ? "text-amber-800" : "text-slate-500")}>
+                        {unitsPlacedCount > 0 && (
+                            <p className="mb-1">
+                                <span className="font-bold underline decoration-amber-200">
+                                    {unitsPlacedCount} unit{unitsPlacedCount > 1 ? 's are' : ' is'} already using this configuration.
+                                </span>
+                            </p>
+                        )}
+                        <p>
+                            Edits will apply to <span className={cn("font-bold", unitsPlacedCount > 0 ? "text-amber-900" : "text-slate-700")}>future units</span> only. Existing units will remain unchanged.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            <div className="flex justify-end gap-3 px-1">
                 <Button
                     type="button"
                     variant="outline"
@@ -476,7 +491,7 @@ export default function ResidentialConfigForm({ onAdd, onCancel, category = 'res
                 <Button
                     type="submit"
                     disabled={!isValid}
-                    className="h-9 px-6 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs uppercase tracking-tight transition-all active:scale-95 shadow-md shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="h-9 px-6 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs uppercase transition-all active:scale-95 shadow-md shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {initialData ? 'Update Configuration' : 'Add Configuration'}
                 </Button>
