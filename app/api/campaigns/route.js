@@ -63,7 +63,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       }, { status: 403 })
     }
 
-    const { project_id, name, description, start_date, end_date, time_start, time_end, metadata, ai_script, call_settings, credit_cap, auto_enroll, lead_ids } = body
+    const { project_id, name, description, start_date, end_date, time_start, time_end, metadata, ai_script, call_settings, credit_cap, dnd_compliance, auto_enroll, lead_ids } = body
 
     if (!project_id || !start_date || !end_date || !time_start || !time_end) {
       return corsJSON({
@@ -85,6 +85,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       ai_script: ai_script || null,
       call_settings: call_settings || { language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 },
       credit_cap: credit_cap != null && credit_cap !== '' ? parseFloat(credit_cap) : null,
+      dnd_compliance: dnd_compliance !== undefined ? Boolean(dnd_compliance) : true,
       created_by: user.id
     }
 

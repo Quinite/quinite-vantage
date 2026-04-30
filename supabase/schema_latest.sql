@@ -72,31 +72,13 @@ CREATE TABLE public.billing_invoices (
   CONSTRAINT billing_invoices_pkey PRIMARY KEY (id),
   CONSTRAINT billing_invoices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
 );
-CREATE TABLE public.billing_plans (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  description text,
-  module_type text NOT NULL CHECK (module_type = ANY (ARRAY['crm'::text, 'inventory'::text, 'analytics'::text, 'all_modules'::text])),
-  base_price_inr numeric NOT NULL DEFAULT 0,
-  per_user_price_inr numeric NOT NULL,
-  discount_percentage numeric DEFAULT 0,
-  features jsonb DEFAULT '{}'::jsonb,
-  max_users integer,
-  is_active boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  max_projects integer,
-  max_leads integer,
-  allowed_modules ARRAY DEFAULT ARRAY['crm'::text],
-  CONSTRAINT billing_plans_pkey PRIMARY KEY (id)
-);
 CREATE TABLE public.call_credits (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL UNIQUE,
   balance numeric NOT NULL DEFAULT 0 CHECK (balance >= 0::numeric),
   total_purchased numeric NOT NULL DEFAULT 0,
   total_consumed numeric NOT NULL DEFAULT 0,
-  low_balance_threshold numeric DEFAULT 10.0,
+  low_balance_threshold numeric DEFAULT 50,
   last_recharged_at timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
@@ -239,7 +221,7 @@ CREATE TABLE public.country_pricing (
 CREATE TABLE public.credit_transactions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL,
-  transaction_type text NOT NULL CHECK (transaction_type = ANY (ARRAY['purchase'::text, 'consumption'::text, 'refund'::text, 'adjustment'::text])),
+  transaction_type text NOT NULL CHECK (transaction_type = ANY (ARRAY['manual_topup'::text, 'consumption'::text, 'refund'::text, 'adjustment'::text])),
   amount numeric NOT NULL,
   balance_before numeric NOT NULL,
   balance_after numeric NOT NULL,
@@ -251,7 +233,36 @@ CREATE TABLE public.credit_transactions (
   CONSTRAINT credit_transactions_pkey PRIMARY KEY (id),
   CONSTRAINT credit_transactions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
 );
-CREATE TABLE public.dashboard_features (
+CREATE TABLE public.deals (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  lead_id uuid NOT NULL,
+  unit_id uuid,
+  organization_id uuid NOT NULL,
+  name text NOT NULL,
+  amount numeric,
+  status text DEFAULT 'interested'::text CHECK (status = ANY (ARRAY['interested'::text, 'negotiation'::text, 'reserved'::text, 'won'::text, 'lost'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  project_id uuid,
+  created_by uuid,
+  updated_by uuid,
+  interest_source text NOT NULL DEFAULT 'manual'::text CHECK (interest_source = ANY (ARRAY['manual'::text, 'site_visit'::text, 'campaign_call'::text, 'inbound_call'::text, 'import'::text])),
+  site_visit_id uuid,
+  lost_reason text,
+  notes text,
+  reserved_at timestamp with time zone,
+  won_at timestamp with time zone,
+  lost_at timestamp with time zone,
+  CONSTRAINT deals_pkey PRIMARY KEY (id),
+  CONSTRAINT deals_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
+  CONSTRAINT deals_property_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id),
+  CONSTRAINT deals_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT deals_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id),
+  CONSTRAINT deals_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT deals_site_visit_id_fkey FOREIGN KEY (site_visit_id) REFERENCES public.site_visits(id),
+  CONSTRAINT deals_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.features (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   feature_key character varying NOT NULL UNIQUE,
   feature_name character varying NOT NULL,
@@ -260,56 +271,7 @@ CREATE TABLE public.dashboard_features (
   is_active boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT dashboard_features_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.dashboard_role_permissions (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  organization_id uuid,
-  role character varying NOT NULL,
-  feature_key character varying,
-  is_enabled boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT dashboard_role_permissions_pkey PRIMARY KEY (id),
-  CONSTRAINT dashboard_role_permissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT dashboard_role_permissions_feature_key_fkey FOREIGN KEY (feature_key) REFERENCES public.dashboard_features(feature_key)
-);
-CREATE TABLE public.dashboard_user_permissions (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  user_id uuid NOT NULL,
-  organization_id uuid NOT NULL,
-  feature_key character varying NOT NULL,
-  is_enabled boolean DEFAULT true,
-  granted_by uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT dashboard_user_permissions_pkey PRIMARY KEY (id),
-  CONSTRAINT dashboard_user_permissions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
-  CONSTRAINT dashboard_user_permissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT dashboard_user_permissions_feature_key_fkey FOREIGN KEY (feature_key) REFERENCES public.dashboard_features(feature_key),
-  CONSTRAINT dashboard_user_permissions_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.profiles(id)
-);
-CREATE TABLE public.deals (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  lead_id uuid NOT NULL,
-  unit_id uuid,
-  organization_id uuid NOT NULL,
-  name text NOT NULL,
-  amount numeric,
-  stage text,
-  probability integer CHECK (probability >= 0 AND probability <= 100),
-  status text DEFAULT 'active'::text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  close_date timestamp with time zone,
-  project_id uuid,
-  created_by uuid,
-  CONSTRAINT deals_pkey PRIMARY KEY (id),
-  CONSTRAINT deals_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
-  CONSTRAINT deals_property_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id),
-  CONSTRAINT deals_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT deals_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
-  CONSTRAINT deals_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
+  CONSTRAINT features_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.impersonation_sessions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -405,31 +367,6 @@ CREATE TABLE public.lead_interactions (
   CONSTRAINT lead_interactions_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
   CONSTRAINT lead_interactions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT lead_interactions_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
-);
-CREATE TABLE public.tasks (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  lead_id uuid,
-  project_id uuid,
-  organization_id uuid NOT NULL,
-  title text NOT NULL,
-  description text,
-  due_date timestamp with time zone,
-  priority text DEFAULT 'medium'::text CHECK (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text])),
-  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'completed'::text, 'overdue'::text])),
-  assigned_to uuid,
-  created_by uuid,
-  updated_by uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  completed_at timestamp with time zone,
-  due_time text,
-  CONSTRAINT tasks_pkey PRIMARY KEY (id),
-  CONSTRAINT tasks_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
-  CONSTRAINT tasks_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL,
-  CONSTRAINT tasks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT tasks_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES auth.users(id),
-  CONSTRAINT tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
-  CONSTRAINT tasks_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.leads (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -536,6 +473,7 @@ CREATE TABLE public.organizations (
   subscription_status text DEFAULT 'active'::text CHECK (subscription_status = ANY (ARRAY['active'::text, 'trialing'::text, 'past_due'::text, 'cancelled'::text, 'suspended'::text])),
   subscription_period_end timestamp with time zone,
   current_plan_id uuid,
+  permission_version integer NOT NULL DEFAULT 1,
   CONSTRAINT organizations_pkey PRIMARY KEY (id),
   CONSTRAINT organizations_current_plan_id_fkey FOREIGN KEY (current_plan_id) REFERENCES public.subscription_plans(id)
 );
@@ -575,16 +513,52 @@ CREATE TABLE public.payment_transactions (
   CONSTRAINT payment_transactions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT payment_transactions_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.billing_invoices(id)
 );
+CREATE TABLE public.pipeline_automations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL,
+  pipeline_id uuid NOT NULL,
+  name text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  trigger_type text NOT NULL CHECK (trigger_type = ANY (ARRAY['stage_enter'::text, 'stage_exit'::text, 'stale_in_stage'::text, 'ai_call_outcome'::text, 'interest_level_change'::text, 'score_threshold'::text, 'task_completed'::text, 'call_logged'::text])),
+  trigger_config jsonb NOT NULL DEFAULT '{}'::jsonb,
+  action_type text NOT NULL CHECK (action_type = ANY (ARRAY['move_stage'::text, 'assign_agent'::text, 'create_task'::text, 'add_tag'::text])),
+  action_config jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pipeline_automations_pkey PRIMARY KEY (id),
+  CONSTRAINT pipeline_automations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT pipeline_automations_pipeline_id_fkey FOREIGN KEY (pipeline_id) REFERENCES public.pipelines(id),
+  CONSTRAINT pipeline_automations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.pipeline_stage_transitions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  lead_id uuid NOT NULL,
+  from_stage_id uuid,
+  to_stage_id uuid NOT NULL,
+  organization_id uuid NOT NULL,
+  moved_by uuid,
+  source text NOT NULL DEFAULT 'manual'::text CHECK (source = ANY (ARRAY['manual'::text, 'automation'::text, 'ai_call'::text, 'import'::text])),
+  automation_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pipeline_stage_transitions_pkey PRIMARY KEY (id),
+  CONSTRAINT stage_transitions_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
+  CONSTRAINT stage_transitions_from_stage_id_fkey FOREIGN KEY (from_stage_id) REFERENCES public.pipeline_stages(id),
+  CONSTRAINT stage_transitions_to_stage_id_fkey FOREIGN KEY (to_stage_id) REFERENCES public.pipeline_stages(id),
+  CONSTRAINT stage_transitions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT stage_transitions_moved_by_fkey FOREIGN KEY (moved_by) REFERENCES public.profiles(id),
+  CONSTRAINT stage_transitions_automation_id_fkey FOREIGN KEY (automation_id) REFERENCES public.pipeline_automations(id)
+);
 CREATE TABLE public.pipeline_stages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   pipeline_id uuid,
   name text NOT NULL,
   order_index integer NOT NULL DEFAULT 0,
   color text DEFAULT '#cbd5e1'::text,
-  is_default boolean DEFAULT false,
-  stale_days integer DEFAULT NULL,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  is_default boolean DEFAULT false,
+  stale_days integer,
   CONSTRAINT pipeline_stages_pkey PRIMARY KEY (id),
   CONSTRAINT pipeline_stages_pipeline_id_fkey FOREIGN KEY (pipeline_id) REFERENCES public.pipelines(id)
 );
@@ -650,6 +624,8 @@ CREATE TABLE public.projects (
   is_archived boolean DEFAULT false,
   rera_number text,
   amenities jsonb NOT NULL DEFAULT '[]'::jsonb,
+  brochure_url text,
+  brochure_path text,
   CONSTRAINT projects_pkey PRIMARY KEY (id),
   CONSTRAINT projects_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT projects_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
@@ -664,6 +640,18 @@ CREATE TABLE public.property_images (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT property_images_pkey PRIMARY KEY (id),
   CONSTRAINT property_images_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.units(id)
+);
+CREATE TABLE public.role_permissions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  organization_id uuid,
+  role character varying NOT NULL,
+  feature_key character varying,
+  is_enabled boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT role_permissions_pkey PRIMARY KEY (id),
+  CONSTRAINT dashboard_role_permissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT dashboard_role_permissions_feature_key_fkey FOREIGN KEY (feature_key) REFERENCES public.features(feature_key)
 );
 CREATE TABLE public.saved_payment_methods (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -681,20 +669,30 @@ CREATE TABLE public.saved_payment_methods (
   CONSTRAINT saved_payment_methods_pkey PRIMARY KEY (id),
   CONSTRAINT saved_payment_methods_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
 );
-CREATE TABLE public.subscription_addons (
+CREATE TABLE public.site_visits (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  description text,
-  addon_type text NOT NULL,
-  price_inr numeric NOT NULL,
-  price_usd numeric NOT NULL,
-  billing_frequency text DEFAULT 'monthly'::text CHECK (billing_frequency = ANY (ARRAY['monthly'::text, 'yearly'::text, 'one_time'::text])),
-  available_for_plans ARRAY DEFAULT ARRAY['pro'::text],
-  features jsonb DEFAULT '{}'::jsonb,
-  is_active boolean DEFAULT true,
+  organization_id uuid NOT NULL,
+  lead_id uuid NOT NULL,
+  project_id uuid,
+  unit_id uuid,
+  scheduled_at timestamp with time zone NOT NULL,
+  status text NOT NULL DEFAULT 'scheduled'::text CHECK (status = ANY (ARRAY['scheduled'::text, 'completed'::text, 'cancelled'::text, 'no_show'::text])),
+  booked_via text NOT NULL DEFAULT 'manual'::text CHECK (booked_via = ANY (ARRAY['ai_call'::text, 'manual'::text, 'self_booking'::text])),
+  assigned_agent_id uuid,
+  visit_notes text,
+  outcome text CHECK (outcome IS NULL OR (outcome = ANY (ARRAY['interested'::text, 'not_interested'::text, 'follow_up_needed'::text]))),
+  pipeline_stage_id uuid,
+  created_by uuid,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT subscription_addons_pkey PRIMARY KEY (id)
+  CONSTRAINT site_visits_pkey PRIMARY KEY (id),
+  CONSTRAINT site_visits_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
+  CONSTRAINT site_visits_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT site_visits_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT site_visits_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id),
+  CONSTRAINT site_visits_assigned_agent_id_fkey FOREIGN KEY (assigned_agent_id) REFERENCES public.profiles(id),
+  CONSTRAINT site_visits_pipeline_stage_id_fkey FOREIGN KEY (pipeline_stage_id) REFERENCES public.pipeline_stages(id),
+  CONSTRAINT site_visits_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.subscription_plans (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -712,21 +710,43 @@ CREATE TABLE public.subscription_plans (
 );
 CREATE TABLE public.subscriptions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  organization_id uuid NOT NULL,
+  organization_id uuid NOT NULL UNIQUE,
   plan_id uuid NOT NULL,
   status USER-DEFINED DEFAULT 'active'::subscription_status,
   billing_cycle USER-DEFINED DEFAULT 'monthly'::billing_cycle,
   current_period_start timestamp with time zone DEFAULT now(),
   current_period_end timestamp with time zone DEFAULT (now() + '1 mon'::interval),
-  cancel_at_period_end boolean DEFAULT false,
-  cancelled_at timestamp with time zone,
-  trial_ends_at timestamp with time zone,
   metadata jsonb DEFAULT '{}'::jsonb,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT subscriptions_pkey PRIMARY KEY (id),
   CONSTRAINT subscriptions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id)
+);
+CREATE TABLE public.tasks (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  lead_id uuid,
+  organization_id uuid NOT NULL,
+  title text NOT NULL,
+  description text,
+  due_date timestamp with time zone,
+  priority text DEFAULT 'medium'::text CHECK (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text])),
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'completed'::text, 'overdue'::text])),
+  assigned_to uuid,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  completed_at timestamp with time zone,
+  due_time text,
+  project_id uuid,
+  updated_by uuid,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT tasks_pkey PRIMARY KEY (id),
+  CONSTRAINT tasks_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
+  CONSTRAINT tasks_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id),
+  CONSTRAINT tasks_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
+  CONSTRAINT tasks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT tasks_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES auth.users(id),
+  CONSTRAINT tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.towers (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -830,6 +850,21 @@ CREATE TABLE public.usage_logs (
   CONSTRAINT usage_logs_pkey PRIMARY KEY (id),
   CONSTRAINT usage_logs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
 );
+CREATE TABLE public.user_permissions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  organization_id uuid NOT NULL,
+  feature_key character varying NOT NULL,
+  is_enabled boolean DEFAULT true,
+  granted_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_permissions_pkey PRIMARY KEY (id),
+  CONSTRAINT dashboard_user_permissions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT dashboard_user_permissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT dashboard_user_permissions_feature_key_fkey FOREIGN KEY (feature_key) REFERENCES public.features(feature_key),
+  CONSTRAINT dashboard_user_permissions_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.profiles(id)
+);
 CREATE TABLE public.website_templates (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL,
@@ -854,58 +889,3 @@ CREATE TABLE public.websocket_servers (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT websocket_servers_pkey PRIMARY KEY (id)
 );
-
--- Pipeline: Stage Transitions (audit log of every lead stage move)
-CREATE TABLE public.stage_transitions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  lead_id uuid NOT NULL,
-  from_stage_id uuid,
-  to_stage_id uuid NOT NULL,
-  organization_id uuid NOT NULL,
-  moved_by uuid,
-  source text NOT NULL DEFAULT 'manual' CHECK (source = ANY (ARRAY['manual'::text, 'automation'::text, 'ai_call'::text, 'import'::text])),
-  automation_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT stage_transitions_pkey PRIMARY KEY (id),
-  CONSTRAINT stage_transitions_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE,
-  CONSTRAINT stage_transitions_from_stage_id_fkey FOREIGN KEY (from_stage_id) REFERENCES public.pipeline_stages(id) ON DELETE SET NULL,
-  CONSTRAINT stage_transitions_to_stage_id_fkey FOREIGN KEY (to_stage_id) REFERENCES public.pipeline_stages(id) ON DELETE CASCADE,
-  CONSTRAINT stage_transitions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
-  CONSTRAINT stage_transitions_moved_by_fkey FOREIGN KEY (moved_by) REFERENCES public.profiles(id) ON DELETE SET NULL
-);
-CREATE INDEX idx_stage_transitions_lead ON public.stage_transitions(lead_id);
-CREATE INDEX idx_stage_transitions_org ON public.stage_transitions(organization_id);
-CREATE INDEX idx_stage_transitions_created ON public.stage_transitions(created_at DESC);
-
--- Pipeline: Automation Rules (trigger → action rules per pipeline)
-CREATE TABLE public.pipeline_automations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  organization_id uuid NOT NULL,
-  pipeline_id uuid NOT NULL,
-  name text NOT NULL,
-  is_active boolean NOT NULL DEFAULT true,
-  trigger_type text NOT NULL CHECK (trigger_type = ANY (ARRAY[
-    'stage_enter'::text, 'stage_exit'::text, 'stale_in_stage'::text,
-    'ai_call_outcome'::text, 'interest_level_change'::text,
-    'score_threshold'::text, 'task_completed'::text, 'call_logged'::text
-  ])),
-  trigger_config jsonb NOT NULL DEFAULT '{}'::jsonb,
-  action_type text NOT NULL CHECK (action_type = ANY (ARRAY[
-    'move_stage'::text, 'assign_agent'::text, 'create_task'::text, 'add_tag'::text
-  ])),
-  action_config jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_by uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT pipeline_automations_pkey PRIMARY KEY (id),
-  CONSTRAINT pipeline_automations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
-  CONSTRAINT pipeline_automations_pipeline_id_fkey FOREIGN KEY (pipeline_id) REFERENCES public.pipelines(id) ON DELETE CASCADE,
-  CONSTRAINT pipeline_automations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL
-);
-CREATE INDEX idx_pipeline_automations_org ON public.pipeline_automations(organization_id);
-CREATE INDEX idx_pipeline_automations_pipeline ON public.pipeline_automations(pipeline_id);
-
--- Add FK from stage_transitions to pipeline_automations (deferred — both tables now exist)
-ALTER TABLE public.stage_transitions
-  ADD CONSTRAINT stage_transitions_automation_id_fkey
-  FOREIGN KEY (automation_id) REFERENCES public.pipeline_automations(id) ON DELETE SET NULL;

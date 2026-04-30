@@ -231,7 +231,7 @@ export class CampaignService {
 
         let leadsQuery = adminClient
             .from('leads')
-            .select('id, phone, archived_at, do_not_call, project_id, project:projects(archived_at)')
+            .select('id, phone, archived_at, do_not_call, project_id, stage:pipeline_stages(name), deals:deals(status), project:projects(archived_at)')
             .eq('organization_id', organizationId)
 
         if (lead_ids?.length > 0) {
@@ -275,6 +275,18 @@ export class CampaignService {
             if (!valid) {
                 skipDetails.invalid_phone = (skipDetails.invalid_phone || 0) + 1
                 toEnroll.push({ campaign_id: campaignId, lead_id: lead.id, organization_id: organizationId, enrolled_by: enrolledBy, status: 'skipped', skip_reason: 'invalid_phone' })
+                continue
+            }
+            const stageName = lead.stage?.name?.toLowerCase()
+            if (stageName === 'won' || stageName === 'lost') {
+                skipDetails.stage_won_or_lost = (skipDetails.stage_won_or_lost || 0) + 1
+                toEnroll.push({ campaign_id: campaignId, lead_id: lead.id, organization_id: organizationId, enrolled_by: enrolledBy, status: 'skipped', skip_reason: 'stage_won_or_lost' })
+                continue
+            }
+            const hasClosedDeal = lead.deals?.some(d => d.status === 'reserved' || d.status === 'won')
+            if (hasClosedDeal) {
+                skipDetails.deal_reserved_or_won = (skipDetails.deal_reserved_or_won || 0) + 1
+                toEnroll.push({ campaign_id: campaignId, lead_id: lead.id, organization_id: organizationId, enrolled_by: enrolledBy, status: 'skipped', skip_reason: 'deal_reserved_or_won' })
                 continue
             }
             toEnroll.push({ campaign_id: campaignId, lead_id: lead.id, organization_id: organizationId, enrolled_by: enrolledBy, status: 'enrolled' })

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -47,13 +48,42 @@ import {
   AlertTriangle,
   Zap,
   Settings,
-  Users
+  Users,
+  Shield,
+  Mic,
+  CreditCard,
+  SlidersHorizontal,
+  Sparkles,
+  ChevronRight,
+  Info
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
 import { toast } from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCampaigns } from '@/hooks/useCampaigns'
+
+// ─── Phone validation (client-side, mirrors server) ──────────────────────────
+function normalizePhone(raw) {
+  if (!raw) return null
+  let p = raw.replace(/[\s-]/g, '')
+  if (p.startsWith('+91')) p = p.slice(3)
+  else if (p.startsWith('91') && p.length === 12) p = p.slice(2)
+  return /^[6-9]\d{9}$/.test(p) ? '+91' + p : null
+}
+function isValidPhone(raw) { return !!normalizePhone(raw) }
+
+const WON_LOST = ['won', 'lost']
+const CLOSED_DEAL = ['reserved', 'won']
+
+function isEligibleLead(lead) {
+  if (lead.archived_at) return false
+  if (lead.do_not_call) return false
+  if (!isValidPhone(lead.phone) && !isValidPhone(lead.mobile)) return false
+  if (lead.stage && WON_LOST.includes(lead.stage.name?.toLowerCase())) return false
+  if (lead.deals?.some(d => CLOSED_DEAL.includes(d.status))) return false
+  return true
+}
 
 // ─── Status Badge ───────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
@@ -338,55 +368,56 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [timeStart, setTimeStart] = useState('')
-  const [timeEnd, setTimeEnd] = useState('')
+  const [timeStart, setTimeStart] = useState('09:00')
+  const [timeEnd, setTimeEnd] = useState('21:00')
+  const [dndCompliance, setDndCompliance] = useState(true)
   const [creditCap, setCreditCap] = useState('')
   const [aiScript, setAiScript] = useState('')
   const [callSettings, setCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
-  const [enrollMode, setEnrollMode] = useState('auto') // 'auto', 'manual', 'none'
+  const [enrollMode, setEnrollMode] = useState('auto') // 'auto' | 'manual'
   const [selectedLeads, setSelectedLeads] = useState(new Set())
   const [leadSearch, setLeadSearch] = useState('')
   const [projectLeads, setProjectLeads] = useState([])
   const [loadingLeads, setLoadingLeads] = useState(false)
   const [creating, setCreating] = useState(false)
   const [touched, setTouched] = useState(false)
-  const [errors, setErrors] = useState({})
+  const [creditBalance, setCreditBalance] = useState(null) // total available minutes
 
   useEffect(() => {
-    if (projectId && enrollMode === 'manual') {
-      fetchProjectLeads(leadSearch)
-    }
-  }, [projectId, enrollMode])
+    if (!open) return
+    fetch('/api/billing/credits')
+      .then(r => r.json())
+      .then(d => setCreditBalance(d.credits?.balance ?? null))
+      .catch(() => setCreditBalance(null))
+  }, [open])
 
-  async function fetchProjectLeads(search = '') {
-    if (!projectId) return
+  useEffect(() => {
+    if (!projectId) { setProjectLeads([]); return }
     setLoadingLeads(true)
-    try {
-      const res = await fetch(`/api/leads?project_id=${projectId}&search=${encodeURIComponent(search)}&limit=100`)
-      const data = await res.json()
-      setProjectLeads(data.leads || [])
-    } catch(e) {} finally {
-      setLoadingLeads(false)
-    }
-  }
+    fetch(`/api/leads?project_id=${projectId}&limit=200&view_mode=active`)
+      .then(r => r.json())
+      .then(d => setProjectLeads(d.leads || []))
+      .catch(() => setProjectLeads([]))
+      .finally(() => setLoadingLeads(false))
+  }, [projectId])
+
+  const eligibleLeads = useMemo(() => projectLeads.filter(isEligibleLead), [projectLeads])
+  const filteredLeads = useMemo(() => {
+    if (!leadSearch.trim()) return projectLeads
+    const q = leadSearch.toLowerCase()
+    return projectLeads.filter(l => l.name?.toLowerCase().includes(q) || l.phone?.includes(q))
+  }, [projectLeads, leadSearch])
 
   function toggleLead(id) {
-    setSelectedLeads(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    setSelectedLeads(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleAllVisible() {
+    const ids = filteredLeads.filter(isEligibleLead).map(l => l.id)
+    const allOn = ids.every(id => selectedLeads.has(id)) && ids.length > 0
+    setSelectedLeads(prev => { const n = new Set(prev); allOn ? ids.forEach(id => n.delete(id)) : ids.forEach(id => n.add(id)); return n })
   }
 
-  function toggleAllLeads() {
-    if (selectedLeads.size === projectLeads.length && projectLeads.length > 0) {
-      setSelectedLeads(new Set())
-    } else {
-      setSelectedLeads(new Set(projectLeads.map(l => l.id)))
-    }
-  }
-
-  function validate() {
+  const errors_ = useMemo(() => {
     const e = {}
     if (!projectId) e.projectId = 'Project is required'
     if (!name.trim()) e.name = 'Campaign name is required'
@@ -397,18 +428,20 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
     if (!timeEnd) e.timeEnd = 'End time is required'
     if (timeStart && timeEnd && timeEnd <= timeStart) e.timeEnd = 'End time must be after start time'
     return e
-  }
+  }, [projectId, name, startDate, endDate, timeStart, timeEnd])
 
-  const errors_ = useMemo(() => validate(), [projectId, name, startDate, endDate, timeStart, timeEnd])
   const isValid = Object.keys(errors_).length === 0
+  const fieldErr = (key) => touched && errors_[key] ? errors_[key] : null
+  const maxCallsHint = creditCap !== '' && !isNaN(parseFloat(creditCap)) && parseFloat(creditCap) > 0
+    ? Math.floor(parseFloat(creditCap) / (callSettings.max_duration / 60)) : null
 
   function handleClose() {
     if (creating) return
     setProjectId(''); setName(''); setDescription(''); setStartDate(''); setEndDate('')
-    setTimeStart(''); setTimeEnd(''); setManualStart(false); setTouched(false)
-    setCreditCap(''); setAiScript(''); setEnrollMode('auto'); setSelectedLeads(new Set()); setLeadSearch('');
+    setTimeStart('09:00'); setTimeEnd('21:00'); setDndCompliance(true); setTouched(false)
+    setCreditCap(''); setAiScript(''); setEnrollMode('auto'); setSelectedLeads(new Set()); setLeadSearch('')
     setCallSettings({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
-    onOpenChange(false)
+    setProjectLeads([]); setCreditBalance(null); onOpenChange(false)
   }
 
   async function handleCreate() {
@@ -417,277 +450,380 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
     setCreating(true)
     try {
       await onCreate({
-        projectId, name, description, startDate, endDate, timeStart, timeEnd,
-        creditCap, aiScript, callSettings,
+        projectId, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance,
+        creditCap: creditCap !== '' ? parseFloat(creditCap) : null,
+        aiScript: aiScript.trim() || null,
+        callSettings: { ...callSettings, max_duration: parseInt(callSettings.max_duration), silence_timeout: parseInt(callSettings.silence_timeout) },
         autoEnroll: enrollMode === 'auto',
         leadIds: enrollMode === 'manual' ? [...selectedLeads] : []
       })
       handleClose()
-    } finally {
-      setCreating(false)
-    }
+    } finally { setCreating(false) }
   }
 
-  const fieldErr = (key) => touched && errors_[key] ? errors_[key] : null
+  // shared input sizing
+  const inputSm = 'h-8 text-sm bg-white dark:bg-zinc-900'
+  const selectSm = 'h-8 text-sm bg-white dark:bg-zinc-900'
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <Radio className="w-5 h-5 text-primary" /> Create New Campaign
-          </DialogTitle>
-          <DialogDescription>Schedule a new outbound call campaign for your project</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
 
-        <div className="space-y-5 py-2">
-          {/* Project + Name */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Building2 className="w-3.5 h-3.5 opacity-70" /> Project *
-              </Label>
-              <select
-                value={projectId}
-                onChange={e => setProjectId(e.target.value)}
-                className={`w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${fieldErr('projectId') ? 'border-destructive ring-1 ring-destructive' : 'border-input'}`}
-              >
-                <option value="">Select a project</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+        {/* ── Sticky Header ── */}
+        <div className="sticky top-0 z-10 bg-background border-b border-border px-6 pt-5 pb-4">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+            <div className="p-1.5 bg-primary/10 rounded-md shrink-0">
+              <Radio className="w-3.5 h-3.5 text-primary" />
+            </div>
+            Create New Campaign
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground mt-1">
+            Schedule an outbound AI call campaign for your project
+          </DialogDescription>
+        </div>
+
+        <div className="px-6 py-4 space-y-5">
+
+          {/* ── Basic Info ── */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground">Project <span className="text-destructive">*</span></Label>
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger className={`${selectSm} w-full ${fieldErr('projectId') ? 'border-destructive' : ''}`}>
+                  <SelectValue placeholder="Select a project…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
               {fieldErr('projectId') && <p className="text-xs text-destructive">{fieldErr('projectId')}</p>}
             </div>
-
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Megaphone className="w-3.5 h-3.5 opacity-70" /> Campaign Name *
-              </Label>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground">Campaign Name <span className="text-destructive">*</span></Label>
               <Input
-                placeholder="e.g., Summer Promotion"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className={fieldErr('name') ? 'border-destructive ring-1 ring-destructive' : ''}
+                className={`${inputSm} ${fieldErr('name') ? 'border-destructive' : ''}`}
+                placeholder="e.g., Summer 2025 Outreach"
+                value={name} onChange={e => setName(e.target.value)}
               />
               {fieldErr('name') && <p className="text-xs text-destructive">{fieldErr('name')}</p>}
             </div>
           </div>
 
-          {/* Description */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Description</Label>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium text-muted-foreground">Description <span className="text-muted-foreground/60 font-normal">(optional)</span></Label>
             <Textarea
-              placeholder="Describe the purpose of this campaign..."
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={3}
+              className="text-sm bg-white dark:bg-zinc-900 resize-none"
+              placeholder="Briefly describe the goal of this campaign…"
+              value={description} onChange={e => setDescription(e.target.value)} rows={2}
             />
           </div>
 
-          {/* Campaign Schedule */}
-          <div className="p-4 bg-muted/30 rounded-lg border border-border/50 space-y-4">
-            <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
-              <Calendar className="w-3.5 h-3.5 text-primary" /> Campaign Schedule
-            </h4>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Start Date *</Label>
-                <Input
-                  type="date"
-                  value={startDate}
-                  min={today}
-                  onChange={e => setStartDate(e.target.value)}
-                  className={fieldErr('startDate') ? 'border-destructive ring-1 ring-destructive' : ''}
-                />
-                {fieldErr('startDate') && <p className="text-xs text-destructive">{fieldErr('startDate')}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">End Date *</Label>
-                <Input
-                  type="date"
-                  value={endDate}
-                  min={startDate || today}
-                  onChange={e => setEndDate(e.target.value)}
-                  className={fieldErr('endDate') ? 'border-destructive ring-1 ring-destructive' : ''}
-                />
-                {fieldErr('endDate') && <p className="text-xs text-destructive">{fieldErr('endDate')}</p>}
-              </div>
+          {/* ── Schedule ── */}
+          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Calendar className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Schedule</span>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <Clock className="w-3.5 h-3.5 opacity-70" /> Start Time *
-                </Label>
-                <Input
-                  type="time"
-                  value={timeStart}
-                  onChange={e => setTimeStart(e.target.value)}
-                  className={fieldErr('timeStart') ? 'border-destructive ring-1 ring-destructive' : ''}
-                />
+            <div className="grid gap-3 grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Start Date <span className="text-destructive">*</span></Label>
+                <Input type="date" className={`${inputSm} ${fieldErr('startDate') ? 'border-destructive' : ''}`}
+                  value={startDate} min={today} onChange={e => setStartDate(e.target.value)} />
+                {fieldErr('startDate') && <p className="text-xs text-destructive">{fieldErr('startDate')}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">End Date <span className="text-destructive">*</span></Label>
+                <Input type="date" className={`${inputSm} ${fieldErr('endDate') ? 'border-destructive' : ''}`}
+                  value={endDate} min={startDate || today} onChange={e => setEndDate(e.target.value)} />
+                {fieldErr('endDate') && <p className="text-xs text-destructive">{fieldErr('endDate')}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Daily Start <span className="text-destructive">*</span></Label>
+                <Input type="time" className={`${inputSm} ${fieldErr('timeStart') ? 'border-destructive' : ''}`}
+                  value={timeStart} onChange={e => setTimeStart(e.target.value)} />
                 {fieldErr('timeStart') && <p className="text-xs text-destructive">{fieldErr('timeStart')}</p>}
               </div>
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <Clock className="w-3.5 h-3.5 opacity-70" /> End Time *
-                </Label>
-                <Input
-                  type="time"
-                  value={timeEnd}
-                  onChange={e => setTimeEnd(e.target.value)}
-                  className={fieldErr('timeEnd') ? 'border-destructive ring-1 ring-destructive' : ''}
-                />
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Daily End <span className="text-destructive">*</span></Label>
+                <Input type="time" className={`${inputSm} ${fieldErr('timeEnd') ? 'border-destructive' : ''}`}
+                  value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
                 {fieldErr('timeEnd') && <p className="text-xs text-destructive">{fieldErr('timeEnd')}</p>}
               </div>
             </div>
-          </div>
 
-          {/* AI Settings & Credit Cap */}
-          <div className="p-4 bg-muted/30 rounded-lg border border-border/50 space-y-4">
-            <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
-              <Settings className="w-3.5 h-3.5 text-primary" /> AI Settings & Budget
-            </h4>
-            
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Credit Cap (₹) — Leave blank for unlimited</Label>
-              <Input type="number" min={0} step={0.5} placeholder="e.g. 100" value={creditCap} onChange={e => setCreditCap(e.target.value)} />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground mb-1 block">Language</Label>
-                <select
-                  value={callSettings.language || 'hinglish'}
-                  onChange={e => setCallSettings(s => ({ ...s, language: e.target.value }))}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="hinglish">Hinglish</option>
-                  <option value="hindi">Hindi</option>
-                  <option value="english">English</option>
-                  <option value="gujarati">Gujarati</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground mb-1 block">AI Voice</Label>
-                <select
-                  value={callSettings.voice_id || 'shimmer'}
-                  onChange={e => setCallSettings(s => ({ ...s, voice_id: e.target.value }))}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="shimmer">Shimmer (Female)</option>
-                  <option value="alloy">Alloy (Neutral)</option>
-                  <option value="echo">Echo (Male)</option>
-                  <option value="nova">Nova (Female)</option>
-                  <option value="onyx">Onyx (Male)</option>
-                </select>
-              </div>
-            </div>
-            
-            <div className="space-y-1.5 block">
-              <Label className="text-xs text-muted-foreground block">AI Script / Custom Instructions</Label>
-              <Textarea
-                value={aiScript}
-                onChange={e => setAiScript(e.target.value)}
-                rows={3}
-                placeholder="Custom instructions for this campaign..."
-                className="text-sm"
-              />
-            </div>
-          </div>
-
-          {/* Lead Enrollment */}
-          <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
-            <h4 className="font-medium text-foreground flex items-center gap-2 text-sm mb-3">
-              <Users className="w-3.5 h-3.5 text-primary" /> Lead Enrollment
-            </h4>
-            
-            <div className="flex gap-2 bg-background p-1 rounded-md border border-border mb-3">
-              <button
-                type="button"
-                onClick={() => setEnrollMode('auto')}
-                className={`flex-1 text-xs py-1.5 rounded disabled:opacity-50 transition-colors ${enrollMode === 'auto' ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground'}`}
-                disabled={!projectId}
-              >
-                Auto Enroll All Eligible
-              </button>
-              <button
-                type="button"
-                onClick={() => setEnrollMode('manual')}
-                className={`flex-1 text-xs py-1.5 rounded disabled:opacity-50 transition-colors ${enrollMode === 'manual' ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground'}`}
-                disabled={!projectId}
-              >
-                Select Leads Manually
-              </button>
-              <button
-                type="button"
-                onClick={() => setEnrollMode('none')}
-                className={`flex-1 text-xs py-1.5 rounded disabled:opacity-50 transition-colors ${enrollMode === 'none' ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground'}`}
-              >
-                Do Not Enroll Yet
-              </button>
-            </div>
-            
-            {!projectId && <p className="text-xs text-muted-foreground">Select a project first to enroll leads.</p>}
-
-            {projectId && enrollMode === 'auto' && (
-              <p className="text-xs text-muted-foreground">All eligible (valid phone, not opted out, not archived) leads from the selected project will be automatically added to the queue.</p>
-            )}
-
-            {projectId && enrollMode === 'manual' && (
-              <div className="space-y-3 mt-2 border border-border rounded-lg bg-background p-2 max-h-[220px] overflow-y-auto">
-                <div className="flex gap-2 sticky top-0 bg-background/95 pb-2 pt-1 z-10 px-1">
-                  <Input 
-                    placeholder="Search leads..." 
-                    className="h-8 text-xs" 
-                    value={leadSearch} 
-                    onChange={e => { setLeadSearch(e.target.value); fetchProjectLeads(e.target.value) }} 
-                  />
-                  <Button type="button" size="sm" variant="outline" className="h-8 text-xs px-2" onClick={toggleAllLeads}>
-                    {selectedLeads.size === projectLeads.length && projectLeads.length > 0 ? 'Deselect All' : 'Select All'}
-                  </Button>
+            <div className="flex items-center justify-between pt-1 px-1">
+              <div className="flex items-center gap-2">
+                <Shield className="w-3.5 h-3.5 text-emerald-600" />
+                <div>
+                  <p className="text-xs font-medium text-foreground">DND Compliance</p>
+                  <p className="text-[11px] text-muted-foreground">Enforce TRAI 9am–9pm rules</p>
                 </div>
-                {loadingLeads ? (
-                   <div className="py-4 text-center"><Loader2 className="w-4 h-4 animate-spin mx-auto text-muted-foreground" /></div>
-                ) : projectLeads.length === 0 ? (
-                   <div className="py-4 text-center text-xs text-muted-foreground">No leads found in this project.</div>
-                ) : (
-                  <div className="space-y-1">
-                    {projectLeads.map(lead => (
-                      <label key={lead.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer">
-                        <input type="checkbox" checked={selectedLeads.has(lead.id)} onChange={() => toggleLead(lead.id)} className="rounded text-primary" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm truncate font-medium">{lead.name}</div>
-                          <div className="text-xs text-muted-foreground">{lead.phone || 'No phone'}</div>
-                        </div>
-                      </label>
-                    ))}
+              </div>
+              <Switch checked={dndCompliance} onCheckedChange={setDndCompliance} />
+            </div>
+          </div>
+
+          {/* ── Call Settings ── */}
+          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-violet-500" />
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Call Settings</span>
+            </div>
+
+            <div className="grid gap-3 grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Language</Label>
+                <Select value={callSettings.language} onValueChange={v => setCallSettings(s => ({ ...s, language: v }))}>
+                  <SelectTrigger className={`${selectSm} w-full`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hinglish">Hinglish</SelectItem>
+                    <SelectItem value="hindi">Hindi</SelectItem>
+                    <SelectItem value="english">English</SelectItem>
+                    <SelectItem value="gujarati">Gujarati</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">AI Voice</Label>
+                <Select value={callSettings.voice_id} onValueChange={v => setCallSettings(s => ({ ...s, voice_id: v }))}>
+                  <SelectTrigger className={`${selectSm} w-full`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="shimmer">Shimmer — Female</SelectItem>
+                    <SelectItem value="alloy">Alloy — Neutral</SelectItem>
+                    <SelectItem value="echo">Echo — Male</SelectItem>
+                    <SelectItem value="fable">Fable — Male</SelectItem>
+                    <SelectItem value="nova">Nova — Female</SelectItem>
+                    <SelectItem value="onyx">Onyx — Male (Deep)</SelectItem>
+                    <SelectItem value="sage">Sage — Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Max Duration</Label>
+                <div className="relative">
+                  <Input type="number" min={60} max={3600} step={30}
+                    className={`${inputSm} pr-9`}
+                    value={callSettings.max_duration}
+                    onChange={e => setCallSettings(s => ({ ...s, max_duration: e.target.value }))} />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">sec</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">{Math.floor(callSettings.max_duration / 60)} min / call</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Silence Timeout</Label>
+                <div className="relative">
+                  <Input type="number" min={5} max={120}
+                    className={`${inputSm} pr-9`}
+                    value={callSettings.silence_timeout}
+                    onChange={e => setCallSettings(s => ({ ...s, silence_timeout: e.target.value }))} />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">sec</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Hang up after silence</p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Credit Cap <span className="font-normal text-muted-foreground/60">(optional)</span>
+                </Label>
+                {creditBalance !== null && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground">
+                      Balance: <span className="font-semibold text-foreground">{creditBalance} min</span>
+                    </span>
+                    {creditCap === '' && (
+                      <button type="button"
+                        onClick={() => setCreditCap(String(creditBalance))}
+                        className="text-[11px] text-primary hover:underline font-medium">
+                        Use all
+                      </button>
+                    )}
+                    {creditCap !== '' && (
+                      <button type="button"
+                        onClick={() => setCreditCap('')}
+                        className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">
+                        Clear
+                      </button>
+                    )}
                   </div>
                 )}
-                {selectedLeads.size > 0 && <div className="text-xs text-primary font-medium px-1.5 pt-1 border-t">{selectedLeads.size} selected</div>}
+              </div>
+              <div className="relative">
+                <Input type="number" min={1} max={creditBalance ?? undefined} step={5}
+                  placeholder={creditBalance !== null ? `Empty = use all ${creditBalance} min` : 'No limit (use full balance)'}
+                  className={`${inputSm} pr-10`}
+                  value={creditCap} onChange={e => setCreditCap(e.target.value)} />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">min</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {maxCallsHint
+                  ? <>≈ {maxCallsHint} calls at {Math.round(callSettings.max_duration / 60)} min/call max · {creditBalance !== null && creditCap !== '' && parseFloat(creditCap) > creditBalance ? <span className="text-amber-600 font-medium">exceeds balance</span> : null}</>
+                  : 'Leave empty to use your full credit balance for this campaign'
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* ── AI Instructions ── */}
+          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wide">AI Instructions</span>
+              <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Optional</Badge>
+            </div>
+            <Textarea
+              className="text-sm bg-white dark:bg-zinc-900 resize-none"
+              placeholder="e.g., Focus on 2BHK units. Mention the monsoon offer — 5% off for bookings this week. Always ask for a site visit."
+              value={aiScript} onChange={e => setAiScript(e.target.value)} rows={2}
+            />
+            <p className="text-[11px] text-muted-foreground">Appended to the auto-generated AI system prompt.</p>
+          </div>
+
+          {/* ── Lead Enrollment ── */}
+          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Users className="w-3.5 h-3.5 text-green-600" />
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Lead Enrollment</span>
+            </div>
+
+            {/* 2-option toggle */}
+            <div className="flex gap-1 p-1 bg-background rounded-md border border-border">
+              {[
+                { key: 'auto', label: 'Auto — All Eligible' },
+                { key: 'manual', label: 'Pick Manually' },
+              ].map(m => (
+                <button key={m.key} type="button"
+                  disabled={!projectId}
+                  onClick={() => setEnrollMode(m.key)}
+                  className={`flex-1 text-xs py-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium
+                    ${enrollMode === m.key ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {!projectId && (
+              <p className="text-xs text-muted-foreground text-center py-1">Select a project to manage lead enrollment</p>
+            )}
+
+            {/* Auto preview */}
+            {projectId && enrollMode === 'auto' && (
+              <div className="rounded-md border border-border bg-background overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border/60">
+                  <span className="text-xs text-muted-foreground">Eligible leads</span>
+                  {loadingLeads
+                    ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" />Loading…</span>
+                    : <span className="text-xs font-semibold text-foreground">{eligibleLeads.length} will enroll</span>
+                  }
+                </div>
+                <div className="max-h-40 overflow-y-auto divide-y divide-border/40">
+                  {loadingLeads
+                    ? <div className="p-3 space-y-1.5">{[1,2,3].map(i => <Skeleton key={i} className="h-6 w-full" />)}</div>
+                    : eligibleLeads.length === 0
+                      ? <p className="text-xs text-muted-foreground text-center py-5">No eligible leads in this project</p>
+                      : eligibleLeads.map(lead => (
+                          <div key={lead.id} className="flex items-center gap-2.5 px-3 py-1.5">
+                            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <span className="text-[9px] font-bold text-primary">{lead.name?.[0]?.toUpperCase()}</span>
+                            </div>
+                            <span className="text-xs text-foreground flex-1 truncate">{lead.name}</span>
+                            <span className="text-[11px] text-muted-foreground shrink-0">{lead.phone || lead.mobile}</span>
+                            {lead.stage && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 h-4" style={{ borderColor: lead.stage.color, color: lead.stage.color }}>
+                                {lead.stage.name}
+                              </Badge>
+                            )}
+                          </div>
+                        ))
+                  }
+                </div>
+                {!loadingLeads && projectLeads.length > eligibleLeads.length && (
+                  <p className="text-[11px] text-muted-foreground px-3 py-1.5 border-t border-border/40 bg-muted/20">
+                    {projectLeads.length - eligibleLeads.length} skipped (Won/Lost, closed deal, no phone, DNC)
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Manual selection */}
+            {projectId && enrollMode === 'manual' && (
+              <div className="rounded-md border border-border bg-background overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border/60">
+                  <Input placeholder="Search leads…"
+                    className="h-6 text-xs border-0 bg-transparent p-0 focus-visible:ring-0 flex-1 shadow-none"
+                    value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
+                  <button type="button" onClick={toggleAllVisible}
+                    className="text-[11px] text-primary font-medium whitespace-nowrap hover:underline shrink-0">
+                    {filteredLeads.filter(isEligibleLead).every(l => selectedLeads.has(l.id)) && filteredLeads.filter(isEligibleLead).length > 0 ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto divide-y divide-border/40">
+                  {loadingLeads
+                    ? <div className="p-3 space-y-1.5">{[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
+                    : filteredLeads.length === 0
+                      ? <p className="text-xs text-muted-foreground text-center py-5">No leads found</p>
+                      : filteredLeads.map(lead => {
+                          const eligible = isEligibleLead(lead)
+                          const checked = selectedLeads.has(lead.id)
+                          return (
+                            <label key={lead.id}
+                              className={`flex items-center gap-2.5 px-3 py-2 transition-colors
+                                ${eligible ? 'cursor-pointer hover:bg-muted/30' : 'opacity-40 cursor-not-allowed'}`}
+                            >
+                              <input type="checkbox" checked={checked} disabled={!eligible}
+                                onChange={() => eligible && toggleLead(lead.id)}
+                                className="rounded accent-primary shrink-0 w-3.5 h-3.5" />
+                              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+                                <span className="text-[9px] font-semibold text-muted-foreground">{lead.name?.[0]?.toUpperCase()}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-foreground truncate">{lead.name}</p>
+                                <p className="text-[11px] text-muted-foreground">{lead.phone || lead.mobile || 'No phone'}</p>
+                              </div>
+                              {lead.stage && (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0" style={{ borderColor: lead.stage.color, color: lead.stage.color }}>
+                                  {lead.stage.name}
+                                </Badge>
+                              )}
+                            </label>
+                          )
+                        })
+                  }
+                </div>
+                {selectedLeads.size > 0 && (
+                  <p className="text-xs font-semibold text-primary px-3 py-1.5 border-t border-border/40 bg-primary/5">
+                    {selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected
+                  </p>
+                )}
               </div>
             )}
           </div>
 
-          {/* Validation banner */}
+          {/* ── Validation ── */}
           {touched && !isValid && (
-            <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              Please fill in all required fields correctly before creating the campaign.
+            <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+              <ul className="text-xs text-destructive space-y-0.5">
+                {Object.values(errors_).map((msg, i) => <li key={i}>{msg}</li>)}
+              </ul>
             </div>
           )}
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={handleClose} disabled={creating}>Cancel</Button>
-          <Button
-            onClick={handleCreate}
-            disabled={creating || (touched && !isValid)}
-            title={!isValid ? 'Fill all required fields to enable' : undefined}
-          >
-            {creating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : <><Plus className="w-4 h-4 mr-2" /> Create Campaign</>}
+        {/* ── Sticky Footer ── */}
+        <div className="sticky bottom-0 z-10 bg-background border-t border-border px-6 py-3 flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={creating}>Cancel</Button>
+          <Button size="sm" onClick={handleCreate} disabled={creating || !isValid} className="min-w-[130px]">
+            {creating ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Creating…</> : <><Plus className="w-3.5 h-3.5 mr-1.5" />Create Campaign</>}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -814,7 +950,7 @@ export default function CampaignsPage() {
     }
   }
 
-  async function handleCreate({ projectId, name, description, startDate, endDate, timeStart, timeEnd, creditCap, aiScript, callSettings, autoEnroll, leadIds }) {
+  async function handleCreate({ projectId, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, creditCap, aiScript, callSettings, autoEnroll, leadIds }) {
     if (!canCreate) { toast.error("You do not have permission to create campaigns"); return }
     const res = await fetch('/api/campaigns', {
       method: 'POST',
@@ -823,6 +959,7 @@ export default function CampaignsPage() {
         project_id: projectId, name, description,
         start_date: startDate, end_date: endDate,
         time_start: timeStart, time_end: timeEnd,
+        dnd_compliance: dndCompliance,
         credit_cap: creditCap,
         ai_script: aiScript,
         call_settings: callSettings,

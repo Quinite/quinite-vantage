@@ -5,16 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Clock, Wallet, Zap, AlertTriangle, RefreshCw, Mail, MessageCircle } from 'lucide-react'
+import { Wallet, Zap, AlertTriangle, RefreshCw, Mail, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
-
-function formatDate(dateStr) {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-    })
-}
 
 function formatDateTime(dateStr) {
     const d = new Date(dateStr)
@@ -27,6 +19,8 @@ function getTransactionMeta(type) {
     switch (type) {
         case 'manual_topup':
             return { badge: '+', badgeClass: 'bg-green-100 text-green-800', label: 'Added by admin', positive: true }
+        case 'plan_allocation':
+            return { badge: '+', badgeClass: 'bg-blue-100 text-blue-800', label: 'Plan allocation', positive: true }
         case 'consumption':
             return { badge: '-', badgeClass: 'bg-red-100 text-red-800', label: 'Call usage', positive: false }
         case 'refund':
@@ -138,15 +132,6 @@ export default function CreditBalance() {
     }
 
     const { credits, transactions = [] } = data || {}
-    const usagePercent = credits?.monthly_included > 0
-        ? (credits.monthly_used / credits.monthly_included) * 100
-        : 0
-
-    const progressColor =
-        usagePercent >= 95 ? 'bg-red-500' :
-        usagePercent >= 80 ? 'bg-amber-500' :
-        'bg-green-500'
-
     const recentTransactions = transactions.slice(0, 20)
 
     return (
@@ -179,65 +164,33 @@ export default function CreditBalance() {
             )}
 
             {/* Stat cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Monthly Minutes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* AI Call Credits */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Monthly Minutes</CardTitle>
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div>
-                            <p className="text-3xl font-bold text-gray-900">{credits?.monthly_balance ?? 0}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                of {credits?.monthly_included ?? 0} included
-                            </p>
-                        </div>
-                        <div>
-                            <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-2 rounded-full transition-all duration-300 ${progressColor}`}
-                                    style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                                />
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                {credits?.monthly_used ?? 0} used ({Math.round(usagePercent)}%)
-                            </p>
-                        </div>
-                        {credits?.monthly_reset_at && (
-                            <p className="text-xs text-muted-foreground border-t pt-2">
-                                Resets: {formatDate(credits.monthly_reset_at)}
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Purchased Minutes */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Purchased Minutes</CardTitle>
-                        <Wallet className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                        <p className="text-3xl font-bold text-gray-900">{credits?.purchased_balance ?? 0}</p>
-                        <p className="text-xs text-muted-foreground">never expire</p>
-                    </CardContent>
-                </Card>
-
-                {/* Total Available */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Available</CardTitle>
+                        <CardTitle className="text-sm font-medium">AI Call Credits</CardTitle>
                         <Zap className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent className="space-y-2">
                         <div className="flex items-start gap-2">
-                            <p className="text-3xl font-bold text-gray-900">{credits?.total_balance ?? 0}</p>
+                            <p className="text-3xl font-bold text-gray-900">{credits?.balance ?? 0}</p>
                             {credits?.low_balance && (
                                 <Badge className="bg-amber-100 text-amber-800 mt-1 text-xs">Low balance</Badge>
                             )}
                         </div>
-                        <p className="text-xs text-muted-foreground">monthly + purchased</p>
+                        <p className="text-xs text-muted-foreground">minutes available</p>
+                    </CardContent>
+                </Card>
+
+                {/* Total Consumed */}
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Consumed</CardTitle>
+                        <Wallet className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                        <p className="text-3xl font-bold text-gray-900">{credits?.total_consumed ?? 0}</p>
+                        <p className="text-xs text-muted-foreground">minutes used all time</p>
                     </CardContent>
                 </Card>
             </div>

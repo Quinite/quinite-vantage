@@ -1,12 +1,13 @@
 'use client'
 
 import { useRouter, useParams } from 'next/navigation'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
     Dialog,
     DialogContent,
@@ -37,9 +38,41 @@ import {
     AlertTriangle,
     Zap,
     RefreshCw,
-    Lock
+    Lock,
+    Users,
+    Shield,
+    Mic,
+    CreditCard,
+    SlidersHorizontal,
+    Sparkles,
+    CheckSquare,
+    Square
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+
+// ─── Phone validation (mirrors server-side logic) ─────────────────────────────
+function normalizePhone(raw) {
+    if (!raw) return null
+    let p = raw.replace(/\s+/g, '').replace(/-/g, '')
+    if (p.startsWith('+91')) p = p.slice(3)
+    else if (p.startsWith('91') && p.length === 12) p = p.slice(2)
+    if (/^[6-9]\d{9}$/.test(p)) return '+91' + p
+    return null
+}
+function isValidPhone(raw) { return !!normalizePhone(raw) }
+
+// ─── Eligibility check for a lead ────────────────────────────────────────────
+const WON_LOST_STAGES = ['won', 'lost']
+const CLOSED_DEAL_STATUSES = ['reserved', 'won']
+
+function isEligibleLead(lead) {
+    if (lead.archived_at) return false
+    if (lead.do_not_call) return false
+    if (!isValidPhone(lead.phone) && !isValidPhone(lead.mobile)) return false
+    if (lead.stage && WON_LOST_STAGES.includes(lead.stage.name?.toLowerCase())) return false
+    if (lead.deals?.some(d => CLOSED_DEAL_STATUSES.includes(d.status))) return false
+    return true
+}
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
@@ -269,16 +302,51 @@ function CampaignCard({
 }
 
 // ─── Create Campaign Dialog ───────────────────────────────────────────────────
-function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
+function CreateCampaignDialog({ open, onOpenChange, projectId, projectName, onCreate }) {
     const today = getTodayString()
+
+    // Basic info
     const [name, setName] = useState('')
     const [description, setDescription] = useState('')
+
+    // Schedule
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
-    const [timeStart, setTimeStart] = useState('')
-    const [timeEnd, setTimeEnd] = useState('')
+    const [timeStart, setTimeStart] = useState('09:00')
+    const [timeEnd, setTimeEnd] = useState('21:00')
+    const [dndCompliance, setDndCompliance] = useState(true)
+
+    // Call settings
+    const [language, setLanguage] = useState('hinglish')
+    const [voiceId, setVoiceId] = useState('shimmer')
+    const [maxDuration, setMaxDuration] = useState(600)
+    const [silenceTimeout, setSilenceTimeout] = useState(30)
+    const [creditCap, setCreditCap] = useState('')
+
+    // AI instructions
+    const [aiScript, setAiScript] = useState('')
+
+    // Lead enrollment
+    const [enrollAll, setEnrollAll] = useState(false)
+    const [leadIds, setLeadIds] = useState([])
+    const [allLeads, setAllLeads] = useState([])
+    const [leadsLoading, setLeadsLoading] = useState(false)
+
     const [creating, setCreating] = useState(false)
     const [touched, setTouched] = useState(false)
+
+    // Fetch project leads when dialog opens
+    useEffect(() => {
+        if (!open || !projectId) return
+        setLeadsLoading(true)
+        fetch(`/api/leads?project_id=${projectId}&limit=200&view_mode=active`)
+            .then(r => r.json())
+            .then(d => setAllLeads(d.leads || []))
+            .catch(() => setAllLeads([]))
+            .finally(() => setLeadsLoading(false))
+    }, [open, projectId])
+
+    const eligibleLeads = useMemo(() => allLeads.filter(isEligibleLead), [allLeads])
 
     const errors_ = useMemo(() => {
         const e = {}
@@ -289,16 +357,24 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
         if (!timeStart) e.timeStart = 'Start time is required'
         if (!timeEnd) e.timeEnd = 'End time is required'
         if (timeStart && timeEnd && timeEnd <= timeStart) e.timeEnd = 'End time must be after start time'
+        if (!enrollAll && leadIds.length === 0) e.leads = 'Select at least one lead or enable Enroll All Eligible'
         return e
-    }, [name, startDate, endDate, timeStart, timeEnd])
+    }, [name, startDate, endDate, timeStart, timeEnd, enrollAll, leadIds])
 
     const isValid = Object.keys(errors_).length === 0
 
     function handleClose() {
         if (creating) return
         setName(''); setDescription(''); setStartDate(''); setEndDate('')
-        setTimeStart(''); setTimeEnd(''); setManualStart(false); setTouched(false)
+        setTimeStart('09:00'); setTimeEnd('21:00'); setDndCompliance(true)
+        setLanguage('hinglish'); setVoiceId('shimmer'); setMaxDuration(600); setSilenceTimeout(30)
+        setCreditCap(''); setAiScript(''); setEnrollAll(false); setLeadIds([])
+        setAllLeads([]); setTouched(false)
         onOpenChange(false)
+    }
+
+    function toggleLead(id) {
+        setLeadIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
     }
 
     async function handleCreate() {
@@ -306,7 +382,16 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
         if (!isValid) return
         setCreating(true)
         try {
-            await onCreate({ name, description, startDate, endDate, timeStart, timeEnd })
+            await onCreate({
+                name, description,
+                startDate, endDate, timeStart, timeEnd,
+                dndCompliance,
+                language, voiceId, maxDuration: parseInt(maxDuration), silenceTimeout: parseInt(silenceTimeout),
+                creditCap: creditCap !== '' ? parseFloat(creditCap) : null,
+                aiScript: aiScript.trim() || null,
+                enrollAll,
+                leadIds: enrollAll ? [] : leadIds,
+            })
             handleClose()
         } finally {
             setCreating(false)
@@ -314,6 +399,10 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
     }
 
     const fieldErr = (key) => touched && errors_[key] ? errors_[key] : null
+
+    const maxCallsHint = creditCap !== '' && !isNaN(parseFloat(creditCap)) && parseFloat(creditCap) > 0
+        ? `≈ ${Math.floor(parseFloat(creditCap) / 2)} max calls`
+        : null
 
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
@@ -328,7 +417,7 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
                 </DialogHeader>
 
                 <div className="space-y-5 py-2">
-                    {/* Name */}
+                    {/* ── Basic Info ── */}
                     <div className="space-y-1.5">
                         <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <Megaphone className="w-3.5 h-3.5 opacity-70" /> Campaign Name *
@@ -342,18 +431,17 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
                         {fieldErr('name') && <p className="text-xs text-destructive">{fieldErr('name')}</p>}
                     </div>
 
-                    {/* Description */}
                     <div className="space-y-1.5">
                         <Label className="text-xs font-medium text-muted-foreground">Description</Label>
                         <Textarea
                             placeholder="Describe the purpose of this campaign..."
                             value={description}
                             onChange={e => setDescription(e.target.value)}
-                            rows={3}
+                            rows={2}
                         />
                     </div>
 
-                    {/* Campaign Schedule */}
+                    {/* ── Schedule ── */}
                     <div className="p-4 bg-muted/30 rounded-lg border border-border/50 space-y-4">
                         <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
                             <Calendar className="w-3.5 h-3.5 text-primary" /> Campaign Schedule
@@ -362,24 +450,16 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-medium text-muted-foreground">Start Date *</Label>
-                                <Input
-                                    type="date"
-                                    value={startDate}
-                                    min={today}
+                                <Input type="date" value={startDate} min={today}
                                     onChange={e => setStartDate(e.target.value)}
-                                    className={fieldErr('startDate') ? 'border-destructive ring-1 ring-destructive' : ''}
-                                />
+                                    className={fieldErr('startDate') ? 'border-destructive ring-1 ring-destructive' : ''} />
                                 {fieldErr('startDate') && <p className="text-xs text-destructive">{fieldErr('startDate')}</p>}
                             </div>
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-medium text-muted-foreground">End Date *</Label>
-                                <Input
-                                    type="date"
-                                    value={endDate}
-                                    min={startDate || today}
+                                <Input type="date" value={endDate} min={startDate || today}
                                     onChange={e => setEndDate(e.target.value)}
-                                    className={fieldErr('endDate') ? 'border-destructive ring-1 ring-destructive' : ''}
-                                />
+                                    className={fieldErr('endDate') ? 'border-destructive ring-1 ring-destructive' : ''} />
                                 {fieldErr('endDate') && <p className="text-xs text-destructive">{fieldErr('endDate')}</p>}
                             </div>
                         </div>
@@ -387,32 +467,216 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-1.5">
                                 <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                                    <Clock className="w-3.5 h-3.5 opacity-70" /> Start Time *
+                                    <Clock className="w-3.5 h-3.5 opacity-70" /> Daily Start Time *
                                 </Label>
-                                <Input
-                                    type="time"
-                                    value={timeStart}
-                                    onChange={e => setTimeStart(e.target.value)}
-                                    className={fieldErr('timeStart') ? 'border-destructive ring-1 ring-destructive' : ''}
-                                />
+                                <Input type="time" value={timeStart} onChange={e => setTimeStart(e.target.value)}
+                                    className={fieldErr('timeStart') ? 'border-destructive ring-1 ring-destructive' : ''} />
                                 {fieldErr('timeStart') && <p className="text-xs text-destructive">{fieldErr('timeStart')}</p>}
                             </div>
                             <div className="space-y-1.5">
                                 <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                                    <Clock className="w-3.5 h-3.5 opacity-70" /> End Time *
+                                    <Clock className="w-3.5 h-3.5 opacity-70" /> Daily End Time *
                                 </Label>
-                                <Input
-                                    type="time"
-                                    value={timeEnd}
-                                    onChange={e => setTimeEnd(e.target.value)}
-                                    className={fieldErr('timeEnd') ? 'border-destructive ring-1 ring-destructive' : ''}
-                                />
+                                <Input type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)}
+                                    className={fieldErr('timeEnd') ? 'border-destructive ring-1 ring-destructive' : ''} />
                                 {fieldErr('timeEnd') && <p className="text-xs text-destructive">{fieldErr('timeEnd')}</p>}
                             </div>
                         </div>
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                                    <Shield className="w-3.5 h-3.5 text-primary" /> DND Compliance
+                                </p>
+                                <p className="text-xs text-muted-foreground">Enforce 9am–9pm TRAI rules (recommended)</p>
+                            </div>
+                            <Switch checked={dndCompliance} onCheckedChange={setDndCompliance} />
+                        </div>
                     </div>
 
-                    {/* Validation banner */}
+                    {/* ── Call Settings ── */}
+                    <div className="p-4 bg-muted/30 rounded-lg border border-border/50 space-y-4">
+                        <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-primary" /> Call Settings
+                        </h4>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-medium text-muted-foreground">Language</Label>
+                                <select
+                                    value={language}
+                                    onChange={e => setLanguage(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    <option value="hinglish">Hinglish</option>
+                                    <option value="english">English</option>
+                                    <option value="gujarati">Gujarati</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                    <Mic className="w-3.5 h-3.5 opacity-70" /> AI Voice
+                                </Label>
+                                <select
+                                    value={voiceId}
+                                    onChange={e => setVoiceId(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    {['shimmer', 'alloy', 'echo', 'fable', 'onyx', 'nova', 'sage'].map(v => (
+                                        <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-medium text-muted-foreground">Max Call Duration (seconds)</Label>
+                                <Input
+                                    type="number" min={60} max={3600} step={30}
+                                    value={maxDuration}
+                                    onChange={e => setMaxDuration(e.target.value)}
+                                />
+                                <p className="text-xs text-muted-foreground">{Math.floor(maxDuration / 60)} min per call</p>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-medium text-muted-foreground">Silence Timeout (seconds)</Label>
+                                <Input
+                                    type="number" min={5} max={120}
+                                    value={silenceTimeout}
+                                    onChange={e => setSilenceTimeout(e.target.value)}
+                                />
+                                <p className="text-xs text-muted-foreground">Auto-hang up after silence</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                <CreditCard className="w-3.5 h-3.5 opacity-70" /> Credit Cap (₹) — optional
+                            </Label>
+                            <Input
+                                type="number" min={0} step={10}
+                                placeholder="No limit"
+                                value={creditCap}
+                                onChange={e => setCreditCap(e.target.value)}
+                            />
+                            {maxCallsHint && <p className="text-xs text-muted-foreground">{maxCallsHint}</p>}
+                        </div>
+                    </div>
+
+                    {/* ── AI Instructions ── */}
+                    <div className="p-4 bg-muted/30 rounded-lg border border-border/50 space-y-3">
+                        <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
+                            <Sparkles className="w-3.5 h-3.5 text-primary" /> Additional AI Instructions
+                        </h4>
+                        <Textarea
+                            placeholder="e.g., Focus on 2BHK units, mention the monsoon offer. This is appended to the auto-generated AI prompt."
+                            value={aiScript}
+                            onChange={e => setAiScript(e.target.value)}
+                            rows={3}
+                        />
+                        <p className="text-xs text-muted-foreground">Optional — appended to the auto-generated system prompt.</p>
+                    </div>
+
+                    {/* ── Lead Enrollment ── */}
+                    <div className="p-4 bg-muted/30 rounded-lg border border-border/50 space-y-4">
+                        <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
+                            <Users className="w-3.5 h-3.5 text-primary" /> Lead Enrollment
+                        </h4>
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium text-foreground">Enroll All Eligible</p>
+                                <p className="text-xs text-muted-foreground">Skips Won/Lost stages and closed deals</p>
+                            </div>
+                            <Switch checked={enrollAll} onCheckedChange={v => { setEnrollAll(v); if (v) setLeadIds([]) }} />
+                        </div>
+
+                        {enrollAll ? (
+                            <div className="rounded-md border border-border bg-background">
+                                <div className="px-3 py-2 border-b border-border/50 flex items-center justify-between">
+                                    <span className="text-xs font-medium text-muted-foreground">Preview</span>
+                                    {leadsLoading
+                                        ? <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</span>
+                                        : <span className="text-xs font-semibold text-foreground">{eligibleLeads.length} leads will be enrolled</span>
+                                    }
+                                </div>
+                                <div className="max-h-48 overflow-y-auto divide-y divide-border/50">
+                                    {leadsLoading ? (
+                                        <div className="p-3 space-y-2">
+                                            {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+                                        </div>
+                                    ) : eligibleLeads.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground text-center py-6">No eligible leads in this project</p>
+                                    ) : (
+                                        eligibleLeads.map(lead => (
+                                            <div key={lead.id} className="flex items-center justify-between px-3 py-2">
+                                                <span className="text-sm text-foreground truncate max-w-[60%]">{lead.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-muted-foreground">{lead.phone || lead.mobile}</span>
+                                                    {lead.stage && (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: lead.stage.color, color: lead.stage.color }}>
+                                                            {lead.stage.name}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="rounded-md border border-border bg-background">
+                                <div className="px-3 py-2 border-b border-border/50 flex items-center justify-between">
+                                    <span className="text-xs font-medium text-muted-foreground">Select leads</span>
+                                    {leadsLoading
+                                        ? <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</span>
+                                        : <span className="text-xs text-foreground">{leadIds.length} selected</span>
+                                    }
+                                </div>
+                                <div className="max-h-48 overflow-y-auto divide-y divide-border/50">
+                                    {leadsLoading ? (
+                                        <div className="p-3 space-y-2">
+                                            {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+                                        </div>
+                                    ) : allLeads.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground text-center py-6">No leads in this project</p>
+                                    ) : (
+                                        allLeads.map(lead => {
+                                            const eligible = isEligibleLead(lead)
+                                            const checked = leadIds.includes(lead.id)
+                                            return (
+                                                <button
+                                                    key={lead.id}
+                                                    type="button"
+                                                    disabled={!eligible}
+                                                    onClick={() => eligible && toggleLead(lead.id)}
+                                                    className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${eligible ? 'hover:bg-muted/50 cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
+                                                >
+                                                    {checked
+                                                        ? <CheckSquare className="w-4 h-4 text-primary flex-shrink-0" />
+                                                        : <Square className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                    }
+                                                    <span className="text-sm text-foreground truncate flex-1">{lead.name}</span>
+                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                        <span className="text-xs text-muted-foreground">{lead.phone || lead.mobile}</span>
+                                                        {lead.stage && (
+                                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: lead.stage.color, color: lead.stage.color }}>
+                                                                {lead.stage.name}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            )
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        {fieldErr('leads') && <p className="text-xs text-destructive">{fieldErr('leads')}</p>}
+                    </div>
+
+                    {/* ── Validation banner ── */}
                     {touched && !isValid && (
                         <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -423,10 +687,7 @@ function CreateCampaignDialog({ open, onOpenChange, projectName, onCreate }) {
 
                 <DialogFooter className="gap-2">
                     <Button variant="outline" onClick={handleClose} disabled={creating}>Cancel</Button>
-                    <Button
-                        onClick={handleCreate}
-                        disabled={creating || (touched && !isValid)}
-                    >
+                    <Button onClick={handleCreate} disabled={creating || (touched && !isValid)}>
                         {creating
                             ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
                             : <><Plus className="w-4 h-4 mr-2" /> Create Campaign</>
@@ -521,7 +782,7 @@ export default function ProjectCampaignsPage() {
         }
     }
 
-    async function handleCreate({ name, description, startDate, endDate, timeStart, timeEnd }) {
+    async function handleCreate({ name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, language, voiceId, maxDuration, silenceTimeout, creditCap, aiScript, enrollAll, leadIds }) {
         const res = await fetch('/api/campaigns', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -529,6 +790,12 @@ export default function ProjectCampaignsPage() {
                 project_id: projectId, name, description,
                 start_date: startDate, end_date: endDate,
                 time_start: timeStart, time_end: timeEnd,
+                dnd_compliance: dndCompliance,
+                ai_script: aiScript || null,
+                credit_cap: creditCap != null ? creditCap : null,
+                call_settings: { language, voice_id: voiceId, max_duration: maxDuration, silence_timeout: silenceTimeout },
+                auto_enroll: enrollAll,
+                lead_ids: enrollAll ? [] : leadIds,
             })
         })
         if (!res.ok) {
@@ -754,6 +1021,7 @@ export default function ProjectCampaignsPage() {
             <CreateCampaignDialog
                 open={showCreateDialog}
                 onOpenChange={setShowCreateDialog}
+                projectId={projectId}
                 projectName={project?.name}
                 onCreate={handleCreate}
             />

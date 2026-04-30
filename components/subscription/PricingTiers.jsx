@@ -60,9 +60,9 @@ function buildFeatureList(f = {}) {
         {
             icon: Clock,
             text:
-                f.monthly_minutes_included === -1
-                    ? 'Unlimited AI min/month'
-                    : `${fmt(f.monthly_minutes_included)} AI min/month`,
+                (f.ai_minutes_included ?? f.monthly_minutes_included) === -1
+                    ? 'Unlimited AI min included'
+                    : `${fmt(f.ai_minutes_included ?? f.monthly_minutes_included)} AI min included`,
             included: true,
         },
         {
@@ -133,7 +133,7 @@ function PriceDisplay({ plan }) {
         return (
             <div className="mt-4 mb-2">
                 <p className="text-3xl font-bold text-gray-900">Free</p>
-                <p className="text-sm text-gray-500 mt-1">Free forever</p>
+                <p className="text-sm text-gray-500 mt-1">Valid for 6 months</p>
             </div>
         );
     }
