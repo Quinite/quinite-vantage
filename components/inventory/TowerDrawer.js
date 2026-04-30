@@ -23,7 +23,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
-import { Building2, Save, Trash2, LayoutGrid, Layers } from 'lucide-react';
+import { Building2, Save, Trash2, LayoutGrid, Layers, FlipHorizontal } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { autoNameTower } from '@/lib/inventory';
 import { cn } from '@/lib/utils';
 
@@ -44,6 +45,7 @@ export default function TowerDrawer({
     units_per_floor: '',
     description: '',
     order_index: 0,
+    has_ground_floor: true,
   });
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -61,6 +63,7 @@ export default function TowerDrawer({
         units_per_floor: tower.units_per_floor || '',
         description: tower.description || '',
         order_index: tower.order_index || 0,
+        has_ground_floor: tower.metadata?.has_ground_floor ?? true,
       });
     } else if (mode === 'add') {
       const defaultName = autoNameTower(existingTowers || []);
@@ -70,6 +73,7 @@ export default function TowerDrawer({
         units_per_floor: 4,
         description: '',
         order_index: existingTowers.length,
+        has_ground_floor: true,
       });
     }
   }, [mode, tower, existingTowers, open]);
@@ -84,7 +88,8 @@ export default function TowerDrawer({
         total_floors: Number(formData.total_floors),
         units_per_floor: Number(formData.units_per_floor),
         project_id: projectId,
-        organization_id: organizationId
+        organization_id: organizationId,
+        metadata: { has_ground_floor: formData.has_ground_floor },
       });
       onClose();
     } catch (error) {
@@ -170,7 +175,6 @@ export default function TowerDrawer({
                     id="units_per_floor"
                     type="number"
                     min="1"
-                    max="20"
                     placeholder="4"
                     className="h-11 bg-white rounded-lg border-slate-200 shadow-sm"
                     value={formData.units_per_floor}
@@ -178,6 +182,35 @@ export default function TowerDrawer({
                     required
                   />
                 </div>
+              </div>
+
+              {/* Ground Floor Toggle */}
+              <div className={cn(
+                "flex items-center justify-between p-4 rounded-2xl border transition-all",
+                formData.has_ground_floor
+                  ? "bg-slate-900 border-slate-900"
+                  : "bg-white border-slate-200"
+              )}>
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
+                    formData.has_ground_floor ? "bg-white/10 text-white" : "bg-slate-100 text-slate-400"
+                  )}>
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className={cn("text-xs font-bold", formData.has_ground_floor ? "text-white" : "text-slate-700")}>
+                      Includes Ground Floor
+                    </p>
+                    <p className={cn("text-[10px] font-medium mt-0.5", formData.has_ground_floor ? "text-slate-300" : "text-slate-400")}>
+                      {formData.has_ground_floor ? 'Floor G (0) will appear at the bottom' : 'Grid starts from Floor 1'}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={formData.has_ground_floor}
+                  onCheckedChange={(v) => setFormData(p => ({ ...p, has_ground_floor: v }))}
+                />
               </div>
 
               <div className="space-y-2">
@@ -201,7 +234,7 @@ export default function TowerDrawer({
                </div>
                <div>
                  <p className="font-bold text-blue-900 mb-1">Tower Initialization Ready</p>
-                 <p className="opacity-80 text-xs leading-relaxed">Defining this structure will generate a mapping for {formData.total_floors * formData.units_per_floor} unique unit slots. <span className="font-bold text-blue-600">You can add units on any floor later.</span></p>
+                 <p className="opacity-80 text-xs leading-relaxed">Defining this structure will generate a mapping for {(formData.has_ground_floor ? Number(formData.total_floors) + 1 : Number(formData.total_floors)) * formData.units_per_floor} unique unit slots. <span className="font-bold text-blue-600">You can add units on any floor later.</span></p>
                </div>
             </div>
           </div>

@@ -12,10 +12,10 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { CalendarIcon, Search, User, UserPlus, ChevronRight, X } from 'lucide-react'
+import { CalendarIcon, Search, User, UserPlus, ChevronRight, X, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLeads } from '@/hooks/useLeads'
-import { format } from 'date-fns'
+import { format, differenceInYears, differenceInMonths } from 'date-fns'
 
 const CONSTRUCTION_OPTIONS = [
   {
@@ -47,7 +47,7 @@ function DatePicker({ label, value, onChange }) {
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">{label}</Label>
+      {label && <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">{label}</Label>}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
@@ -96,7 +96,23 @@ export default function ConstructionSection({ formData, setFormData }) {
   const selectedLead = leads.find(l => l.id === formData.lead_id) ||
     (formData.lead_id ? { id: formData.lead_id, name: formData._lead_name || 'Linked Lead', phone: formData._lead_phone || '' } : null)
 
-  const showDates = formData.construction_status !== 'completed'
+  const isCompleted = formData.construction_status === 'completed'
+  const showPossessionDate = formData.construction_status === 'under_construction'
+  const showCompletionDate = formData.construction_status !== 'under_construction'
+
+  const unitAge = (() => {
+    if (!isCompleted || !formData.completion_date) return null;
+    const completedOn = new Date(formData.completion_date);
+    const now = new Date();
+    if (now < completedOn) return null;
+    const years = differenceInYears(now, completedOn);
+    const months = differenceInMonths(now, completedOn) % 12;
+    if (years === 0 && months === 0) return 'Less than a month old';
+    const parts = [];
+    if (years > 0) parts.push(`${years} yr${years !== 1 ? 's' : ''}`);
+    if (months > 0) parts.push(`${months} mo`);
+    return parts.join(' ') + ' old';
+  })();
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
@@ -149,19 +165,38 @@ export default function ConstructionSection({ formData, setFormData }) {
         </div>
       </div>
 
-      {/* Date pickers — hidden when completed */}
-      {showDates && (
-        <div className="grid grid-cols-2 gap-3">
-          <DatePicker
-            label="Possession Date"
-            value={formData.possession_date}
-            onChange={(v) => setFormData(p => ({ ...p, possession_date: v }))}
-          />
-          <DatePicker
-            label="Completion Date"
-            value={formData.completion_date}
-            onChange={(v) => setFormData(p => ({ ...p, completion_date: v }))}
-          />
+      {/* Date pickers */}
+      {(showPossessionDate || showCompletionDate) && (
+        <div className={cn("gap-3", isCompleted ? "flex flex-col" : "grid grid-cols-2")}>
+          {showPossessionDate && (
+            <DatePicker
+              label="Possession Date"
+              value={formData.possession_date}
+              onChange={(v) => setFormData(p => ({ ...p, possession_date: v }))}
+            />
+          )}
+          {showCompletionDate && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Completion Date</Label>
+                {isCompleted && (
+                  unitAge ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold border border-blue-200">
+                      <Clock className="w-2.5 h-2.5" />{unitAge}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px] font-semibold border border-slate-200">
+                      <Clock className="w-2.5 h-2.5" />Age unknown
+                    </span>
+                  )
+                )}
+              </div>
+              <DatePicker
+                value={formData.completion_date}
+                onChange={(v) => setFormData(p => ({ ...p, completion_date: v }))}
+              />
+            </div>
+          )}
         </div>
       )}
 
