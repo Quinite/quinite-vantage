@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -90,7 +91,7 @@ function buildFeatureList(f = {}) {
                     : f.lead_source_integrations === 0
                     ? 'No integrations'
                     : `${f.lead_source_integrations} integration${f.lead_source_integrations !== 1 ? 's' : ''}`,
-            included: (f.lead_source_integrations ?? 0) > 0,
+            included: (f.lead_source_integrations ?? 0) !== 0,
         },
         {
             icon: GitBranch,
@@ -169,7 +170,7 @@ function FeatureRow({ icon: Icon, text, included }) {
     );
 }
 
-function PlanCTA({ plan, isCurrentPlan }) {
+function PlanCTA({ plan, isCurrentPlan, currentSortOrder }) {
     if (isCurrentPlan) {
         return (
             <Button className="w-full" variant="secondary" disabled>
@@ -177,6 +178,9 @@ function PlanCTA({ plan, isCurrentPlan }) {
             </Button>
         );
     }
+
+    const isDowngrade = currentSortOrder > 0 && plan.sort_order < currentSortOrder;
+    const actionLabel = isDowngrade ? 'Downgrade' : 'Upgrade';
 
     if (plan.slug === 'enterprise') {
         return (
@@ -195,13 +199,17 @@ function PlanCTA({ plan, isCurrentPlan }) {
 
     return (
         <Button
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            className={cn(
+                'w-full transition-all',
+                !isDowngrade && 'bg-blue-600 hover:bg-blue-700 text-white'
+            )}
+            variant={isDowngrade ? 'outline' : 'default'}
             onClick={() => {
                 window.location.href =
-                    `mailto:support@quinite.in?subject=Upgrade%20to%20${encodeURIComponent(plan.name)}%20Plan`;
+                    `mailto:support@quinite.in?subject=${actionLabel}%20to%20${encodeURIComponent(plan.name)}%20Plan`;
             }}
         >
-            Contact us to upgrade
+            Contact us to {actionLabel.toLowerCase()}
         </Button>
     );
 }
@@ -276,14 +284,18 @@ export default function PricingTiers({ currentPlanSlug }) {
     return (
         <div className="w-full">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 items-start">
-                {plans.map((plan) => {
-                    const isHighlighted = plan.slug === 'pro';
-                    const isCurrentPlan =
-                        currentPlanSlug?.toLowerCase() === plan.slug?.toLowerCase();
-                    const Icon = PLAN_ICONS[plan.slug] ?? Rocket;
-                    const features = buildFeatureList(plan.features ?? {});
+                {(() => {
+                    const currentPlanObj = plans.find(p => p.slug?.toLowerCase() === currentPlanSlug?.toLowerCase());
+                    const currentSortOrder = currentPlanObj?.sort_order || 0;
 
-                    return (
+                    return plans.map((plan) => {
+                        const isHighlighted = plan.slug === 'pro';
+                        const isCurrentPlan =
+                            currentPlanSlug?.toLowerCase() === plan.slug?.toLowerCase();
+                        const Icon = PLAN_ICONS[plan.slug] ?? Rocket;
+                        const features = buildFeatureList(plan.features ?? {});
+
+                        return (
                         <Card
                             key={plan.id}
                             className={`relative flex flex-col rounded-2xl shadow-sm transition-shadow hover:shadow-md ${
@@ -347,11 +359,12 @@ export default function PricingTiers({ currentPlanSlug }) {
                                 </div>
 
                                 {/* CTA */}
-                                <PlanCTA plan={plan} isCurrentPlan={isCurrentPlan} />
+                                <PlanCTA plan={plan} isCurrentPlan={isCurrentPlan} currentSortOrder={currentSortOrder} />
                             </CardContent>
                         </Card>
                     );
-                })}
+                    });
+                })()}
             </div>
         </div>
     );

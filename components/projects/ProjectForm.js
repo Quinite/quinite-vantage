@@ -30,7 +30,8 @@ import {
     Factory,
     Plus,
     Trash2,
-    Edit
+    Edit,
+    Copy
 } from 'lucide-react'
 import {
     Dialog,
@@ -94,6 +95,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
     const [completedSteps, setCompletedSteps] = useState(new Set())
 
     const [showAddConfig, setShowAddConfig] = useState(false)
+    const [editingUnitTypeIndex, setEditingUnitTypeIndex] = useState(null)
     const [openCountry, setOpenCountry] = useState(false)
     const [openState, setOpenState] = useState(false)
     const [openCity, setOpenCity] = useState(false)
@@ -846,7 +848,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                             <PopoverContent className="w-[300px] p-0" align="start">
                                                 <Command>
                                                     <CommandInput placeholder="Search country..." className="text-xs sm:text-sm" />
-                                                    <CommandList>
+                                                    <CommandList className="max-h-60 overflow-y-auto" onWheel={e => e.stopPropagation()}>
                                                         <CommandEmpty>No country found.</CommandEmpty>
                                                         <CommandGroup>
                                                             {countries.map((c) => (
@@ -887,7 +889,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                             <PopoverContent className="w-[300px] p-0" align="start">
                                                 <Command>
                                                     <CommandInput placeholder="Search state..." className="text-xs sm:text-sm" />
-                                                    <CommandList>
+                                                    <CommandList className="max-h-60 overflow-y-auto" onWheel={e => e.stopPropagation()}>
                                                         <CommandEmpty>No state found.</CommandEmpty>
                                                         <CommandGroup>
                                                             {states.map((s) => (
@@ -928,7 +930,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                 <PopoverContent className="w-[300px] p-0" align="start">
                                                     <Command>
                                                         <CommandInput placeholder="Search city..." className="text-xs sm:text-sm" />
-                                                        <CommandList>
+                                                        <CommandList className="max-h-60 overflow-y-auto" onWheel={e => e.stopPropagation()}>
                                                             <CommandEmpty>No city found.</CommandEmpty>
                                                             <CommandGroup>
                                                                 {cities.map((c) => (
@@ -1043,7 +1045,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => setShowAddConfig(true)}
+                                                onClick={() => { setEditingUnitTypeIndex(null); setShowAddConfig(true) }}
                                                 className="bg-white"
                                             >
                                                 <Plus className="w-3 h-3 mr-1" /> Add Config
@@ -1051,22 +1053,34 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                         )}
                                     </div>
 
-                                    {/* Modal for adding configuration */}
-                                    <Dialog open={showAddConfig} onOpenChange={setShowAddConfig}>
+                                    {/* Modal for adding/editing configuration */}
+                                    <Dialog open={showAddConfig} onOpenChange={(open) => { if (!open) { setShowAddConfig(false); setEditingUnitTypeIndex(null) } }}>
                                         <DialogContent className="max-w-2xl p-0 overflow-hidden shadow-2xl border-none gap-0">
                                             <div className="px-6 py-4 border-b bg-slate-50/50">
-                                                <DialogTitle className="text-sm font-bold text-slate-900 uppercase tracking-tight">Add New Unit Config</DialogTitle>
+                                                <DialogTitle className="text-sm font-bold text-slate-900 uppercase tracking-tight">
+                                                    {editingUnitTypeIndex !== null ? 'Edit Unit Config' : 'Add New Unit Config'}
+                                                </DialogTitle>
                                             </div>
                                             <div className="p-6">
                                             <ResidentialConfigForm
-                                                onCancel={() => setShowAddConfig(false)}
+                                                onCancel={() => { setShowAddConfig(false); setEditingUnitTypeIndex(null) }}
                                                 category={formData.propertyCategory}
+                                                initialData={editingUnitTypeIndex !== null ? formData.unitTypes[editingUnitTypeIndex] : null}
                                                 onAdd={(newConfig) => {
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        unitTypes: [...prev.unitTypes, newConfig]
-                                                    }))
+                                                    if (editingUnitTypeIndex !== null) {
+                                                        setFormData(prev => {
+                                                            const updated = [...prev.unitTypes]
+                                                            updated[editingUnitTypeIndex] = newConfig
+                                                            return { ...prev, unitTypes: updated }
+                                                        })
+                                                    } else {
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            unitTypes: [...prev.unitTypes, newConfig]
+                                                        }))
+                                                    }
                                                     setShowAddConfig(false)
+                                                    setEditingUnitTypeIndex(null)
                                                 }}
                                             />
                                             </div>
@@ -1091,7 +1105,26 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                         )}
                                                     </div>
 
-                                                    <div className="flex items-center gap-3">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setEditingUnitTypeIndex(index); setShowAddConfig(true) }}
+                                                            className="text-slate-400 hover:text-blue-500 transition-colors p-1.5 rounded-full hover:bg-blue-50"
+                                                            title="Edit"
+                                                        >
+                                                            <Edit className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const { id, ...rest } = ut
+                                                                setFormData(prev => ({ ...prev, unitTypes: [...prev.unitTypes, { ...rest }] }))
+                                                            }}
+                                                            className="text-slate-400 hover:text-green-500 transition-colors p-1.5 rounded-full hover:bg-green-50"
+                                                            title="Duplicate"
+                                                        >
+                                                            <Copy className="w-3.5 h-3.5" />
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => {
@@ -1103,7 +1136,7 @@ export default function ProjectForm({ initialData, onSubmit, onCancel, isSubmitt
                                                             className="text-slate-400 hover:text-red-500 transition-colors p-1.5 rounded-full hover:bg-red-50"
                                                             title="Remove"
                                                         >
-                                                            <Trash2 className="w-4 h-4" />
+                                                            <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
                                                 </div>

@@ -8,6 +8,7 @@ import {
     Plus,
     Edit,
     Trash2,
+    Copy,
     Layers,
     Home,
     Building2,
@@ -92,6 +93,21 @@ export default function UnitTypesTab({ projectId, project }) {
         } catch (error) {
             console.error('Save unit type error:', error)
             toast.error('Failed to save configuration')
+        }
+    }
+
+    const handleDuplicate = async (config) => {
+        try {
+            const { id, created_at, created_by, updated_at, updated_by, ...rest } = config
+            await saveUnitConfig({
+                ...rest,
+                project_id: projectId,
+                organization_id: project?.organization_id
+            })
+            toast.success('Configuration duplicated')
+        } catch (error) {
+            console.error('Duplicate error:', error)
+            toast.error('Failed to duplicate configuration')
         }
     }
 
@@ -198,6 +214,14 @@ export default function UnitTypesTab({ projectId, project }) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
+                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50"
+                                        onClick={() => handleDuplicate(config)}
+                                    >
+                                        <Copy className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
                                         className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                                         onClick={() => handleDelete(config)}
                                     >
@@ -292,6 +316,10 @@ export default function UnitTypesTab({ projectId, project }) {
                             onAdd={handleSave}
                             category={(project?.unit_configs?.[0]?.category) || 'residential'}
                             initialData={editingConfig}
+                            warning={editingConfig && (unitCountsByConfigId[editingConfig.id] || 0) > 0
+                                ? `${unitCountsByConfigId[editingConfig.id]} unit${unitCountsByConfigId[editingConfig.id] > 1 ? 's are' : ' is'} already placed using this config. Changes update the template only — existing units keep their current values.`
+                                : null
+                            }
                         />
                     </div>
                 </DialogContent>

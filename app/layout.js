@@ -66,6 +66,11 @@ export const metadata = {
     index: true,
     follow: true,
   },
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 }
 
 export const viewport = {

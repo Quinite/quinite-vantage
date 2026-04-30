@@ -1,7 +1,7 @@
 'use client'
 
 import { Label } from '@/components/ui/label'
-import { IndianRupee, TrendingUp } from 'lucide-react'
+import { IndianRupee, TrendingUp, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatINR } from '@/lib/inventory'
 
@@ -93,13 +93,37 @@ export default function PricingSection({
 
       {/* Price row */}
       <div className="grid grid-cols-3 gap-3">
-        <NumInput
-          label="Base Price"
-          value={formData.base_price}
-          onChange={set('base_price')}
-          placeholder="0"
-          hint="Per unit base"
-        />
+        <div className="space-y-1.5">
+          <NumInput
+            label="Base Price"
+            value={formData.base_price}
+            onChange={set('base_price')}
+            placeholder="0"
+            hint="Per unit base"
+          />
+          <button
+            type="button"
+            onClick={() => setFormData(p => ({ ...p, price_undisclosed: !p.price_undisclosed }))}
+            className={cn(
+              "flex items-center gap-1.5 w-full px-2 py-1.5 rounded-lg border text-[10px] font-semibold transition-all duration-150",
+              formData.price_undisclosed
+                ? "bg-amber-50 border-amber-300 text-amber-700"
+                : "bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+            )}
+          >
+            <span className={cn(
+              "relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full border transition-colors",
+              formData.price_undisclosed ? "bg-amber-400 border-amber-400" : "bg-slate-200 border-slate-200"
+            )}>
+              <span className={cn(
+                "inline-block h-2.5 w-2.5 rounded-full bg-white shadow transition-transform",
+                formData.price_undisclosed ? "translate-x-2.5" : "translate-x-0.5"
+              )} />
+            </span>
+            <EyeOff className="w-2.5 h-2.5 shrink-0" />
+            Do not disclose on AI calls
+          </button>
+        </div>
         <NumInput
           label="Floor Rise"
           value={formData.floor_rise_price}
