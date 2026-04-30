@@ -55,7 +55,8 @@ import {
   SlidersHorizontal,
   Sparkles,
   ChevronRight,
-  Info
+  Info,
+  X
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
@@ -470,16 +471,26 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
 
         {/* ── Sticky Header ── */}
-        <div className="sticky top-0 z-10 bg-background border-b border-border px-6 pt-5 pb-4">
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-            <div className="p-1.5 bg-primary/10 rounded-md shrink-0">
-              <Radio className="w-3.5 h-3.5 text-primary" />
-            </div>
-            Create New Campaign
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground mt-1">
-            Schedule an outbound AI call campaign for your project
-          </DialogDescription>
+        <div className="sticky top-0 z-10 bg-background border-b border-border px-6 pt-5 pb-4 flex items-center justify-between">
+          <div>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <div className="p-1.5 bg-primary/10 rounded-md shrink-0">
+                <Radio className="w-5 h-5 text-primary animate-pulse" />
+              </div>
+              Create New Campaign
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground mt-1">
+              Schedule an outbound AI call campaign for your project
+            </DialogDescription>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleClose}
+            className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+          >
+            <X className="w-5 h-5 text-muted-foreground" />
+          </Button>
         </div>
 
         <div className="px-6 py-4 space-y-5">
@@ -833,14 +844,25 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
 function DeleteConfirmDialog({ open, campaign, onConfirm, onCancel, deleting }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v && !deleting) onCancel() }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="w-5 h-5" /> Delete Campaign
-          </DialogTitle>
-          <DialogDescription className="!mt-4">
-            This action cannot be undone. The campaign and all associated call logs will be permanently deleted.
-          </DialogDescription>
+      <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b border-border flex flex-row items-center justify-between">
+          <div className="space-y-1">
+            <DialogTitle className="flex items-center gap-2 text-destructive text-lg font-bold">
+              <AlertTriangle className="w-5 h-5" /> Delete Campaign
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              This action is permanent and cannot be undone.
+            </DialogDescription>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onCancel}
+            disabled={deleting}
+            className="h-8 w-8 rounded-full hover:bg-muted transition-colors"
+          >
+            <X className="w-4 h-4 text-muted-foreground" />
+          </Button>
         </DialogHeader>
         <div className="py-2">
           <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-lg text-sm">
@@ -1306,11 +1328,24 @@ export default function CampaignsPage() {
 
       {/* Edit Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit className="w-5 h-5 text-purple-600" /> Edit Campaign
-            </DialogTitle>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="sticky top-0 z-10 bg-background border-b border-border px-6 py-4 flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                <Edit className="w-6 h-6 text-purple-600" /> Edit Campaign
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground mt-1">
+                Modify the details and schedule of your campaign
+              </DialogDescription>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setEditModalOpen(false)}
+              className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+            >
+              <X className="w-5 h-5 text-muted-foreground" />
+            </Button>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -1470,11 +1505,24 @@ export default function CampaignsPage() {
 
       {/* Results Dialog */}
       <Dialog open={resultsDialogOpen} onOpenChange={setResultsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-6 h-6 text-green-600" /> Campaign Completed
-            </DialogTitle>
+        <DialogContent className="max-w-2xl p-0">
+          <DialogHeader className="px-6 py-4 border-b border-border flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                <CheckCircle2 className="w-6 h-6 text-green-600" /> Campaign Completed
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Overview of the campaign results and call outcomes
+              </DialogDescription>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setResultsDialogOpen(false)}
+              className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+            >
+              <X className="w-5 h-5 text-muted-foreground" />
+            </Button>
           </DialogHeader>
           {campaignResults && (
             <div className="space-y-4">

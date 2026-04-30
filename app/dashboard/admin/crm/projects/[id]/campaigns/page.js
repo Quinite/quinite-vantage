@@ -46,7 +46,8 @@ import {
     SlidersHorizontal,
     Sparkles,
     CheckSquare,
-    Square
+    Square,
+    X
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
@@ -407,13 +408,23 @@ function CreateCampaignDialog({ open, onOpenChange, projectId, projectName, onCr
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
             <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-lg">
-                        <Radio className="w-5 h-5 text-primary" /> Create New Campaign
-                    </DialogTitle>
-                    <DialogDescription>
-                        Schedule a new outbound call campaign{projectName ? ` for ${projectName}` : ''}
-                    </DialogDescription>
+                <DialogHeader className="flex flex-row items-center justify-between border-b pb-4 mb-2">
+                    <div className="space-y-1">
+                        <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                            <Radio className="w-6 h-6 text-primary animate-pulse" /> Create New Campaign
+                        </DialogTitle>
+                        <DialogDescription className="text-sm text-muted-foreground">
+                            Schedule a new outbound call campaign{projectName ? ` for ${projectName}` : ''}
+                        </DialogDescription>
+                    </div>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={handleClose}
+                        className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+                    >
+                        <X className="w-5 h-5 text-muted-foreground" />
+                    </Button>
                 </DialogHeader>
 
                 <div className="space-y-5 py-2">
@@ -704,13 +715,24 @@ function DeleteConfirmDialog({ open, campaign, onConfirm, onCancel, deleting }) 
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!v && !deleting) onCancel() }}>
             <DialogContent className="max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-destructive">
-                        <AlertTriangle className="w-5 h-5" /> Delete Campaign
-                    </DialogTitle>
-                    <DialogDescription>
-                        This action cannot be undone. The campaign and all associated call logs will be permanently deleted.
-                    </DialogDescription>
+                <DialogHeader className="flex flex-row items-center justify-between border-b pb-4">
+                    <div className="space-y-1">
+                        <DialogTitle className="flex items-center gap-2 text-destructive text-xl font-bold">
+                            <AlertTriangle className="w-6 h-6" /> Delete Campaign
+                        </DialogTitle>
+                        <DialogDescription className="text-sm text-muted-foreground">
+                            This action cannot be undone and will permanently remove data.
+                        </DialogDescription>
+                    </div>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={onCancel}
+                        disabled={deleting}
+                        className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+                    >
+                        <X className="w-5 h-5 text-muted-foreground" />
+                    </Button>
                 </DialogHeader>
                 <div className="py-2">
                     <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-lg text-sm">
@@ -1038,10 +1060,23 @@ export default function ProjectCampaignsPage() {
             {/* Edit Modal */}
             <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Edit className="w-5 h-5 text-purple-600" /> Edit Campaign
-                        </DialogTitle>
+                    <DialogHeader className="flex flex-row items-center justify-between border-b pb-4">
+                        <div className="space-y-1">
+                            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                                <Edit className="w-6 h-6 text-purple-600" /> Edit Campaign
+                            </DialogTitle>
+                            <DialogDescription className="text-sm text-muted-foreground">
+                                Modify the details of your campaign
+                            </DialogDescription>
+                        </div>
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => setEditModalOpen(false)}
+                            className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+                        >
+                            <X className="w-5 h-5 text-muted-foreground" />
+                        </Button>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div>
