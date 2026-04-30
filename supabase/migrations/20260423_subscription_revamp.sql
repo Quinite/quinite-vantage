@@ -150,30 +150,30 @@ INSERT INTO public.subscription_plans (name, slug, description, price_monthly, p
 VALUES
   (
     'Free', 'free',
-    'Get started at no cost with core CRM and limited AI calling.',
+    'Get started at no cost. Valid for 6 months.',
     0, 0,
-    '{"max_users":3,"max_projects":2,"max_campaigns":5,"max_leads":250,"monthly_minutes_included":50,"topup_allowed":false,"topup_rate_per_minute":6.0,"csv_export":false,"custom_domain":false,"lead_source_integrations":0,"pipeline_automation":true,"audit_log_days":0}'::jsonb,
+    '{"max_users":3,"max_projects":2,"max_campaigns":5,"max_leads":250,"ai_minutes_included":0,"topup_allowed":true,"topup_rate_per_minute":6.0,"csv_export":false,"custom_domain":false,"lead_source_integrations":0,"pipeline_automation":true,"audit_log_days":0}'::jsonb,
     true, 1
   ),
   (
     'Starter', 'starter',
     'For small teams ramping up their AI outreach.',
     2499, 23988,
-    '{"max_users":5,"max_projects":5,"max_campaigns":20,"max_leads":2500,"monthly_minutes_included":300,"topup_allowed":true,"topup_rate_per_minute":6.0,"csv_export":true,"custom_domain":false,"lead_source_integrations":1,"pipeline_automation":true,"audit_log_days":30}'::jsonb,
+    '{"max_users":5,"max_projects":5,"max_campaigns":20,"max_leads":1500,"monthly_minutes_included":100,"topup_allowed":true,"topup_rate_per_minute":6.0,"csv_export":true,"custom_domain":false,"lead_source_integrations":1,"pipeline_automation":true,"audit_log_days":30}'::jsonb,
     true, 2
   ),
   (
     'Pro', 'pro',
     'For growing teams that need more scale and integrations.',
     6999, 67188,
-    '{"max_users":20,"max_projects":25,"max_campaigns":100,"max_leads":15000,"monthly_minutes_included":1500,"topup_allowed":true,"topup_rate_per_minute":6.0,"csv_export":true,"custom_domain":true,"lead_source_integrations":-1,"pipeline_automation":true,"audit_log_days":365}'::jsonb,
+    '{"max_users":20,"max_projects":25,"max_campaigns":100,"max_leads":7500,"monthly_minutes_included":500,"topup_allowed":true,"topup_rate_per_minute":6.0,"csv_export":true,"custom_domain":true,"lead_source_integrations":-1,"pipeline_automation":true,"audit_log_days":365}'::jsonb,
     true, 3
   ),
   (
     'Enterprise', 'enterprise',
     'Unlimited scale for large organisations with full feature access.',
     19999, 199999,
-    '{"max_users":-1,"max_projects":-1,"max_campaigns":-1,"max_leads":-1,"monthly_minutes_included":5000,"topup_allowed":true,"topup_rate_per_minute":6.0,"csv_export":true,"custom_domain":true,"lead_source_integrations":-1,"pipeline_automation":true,"audit_log_days":-1}'::jsonb,
+    '{"max_users":-1,"max_projects":-1,"max_campaigns":-1,"max_leads":-1,"monthly_minutes_included":1500,"topup_allowed":true,"topup_rate_per_minute":6.0,"csv_export":true,"custom_domain":true,"lead_source_integrations":-1,"pipeline_automation":true,"audit_log_days":-1}'::jsonb,
     true, 4
   )
 ON CONFLICT (slug) DO UPDATE SET

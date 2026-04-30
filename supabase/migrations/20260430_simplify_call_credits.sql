@@ -82,6 +82,6 @@ WHERE features ? 'monthly_minutes_included';
 -- Update Free plan description to reflect 6-month validity
 UPDATE public.subscription_plans
 SET
-  description = 'Get started at no cost. Includes 50 AI minutes. Valid for 6 months.',
+  description = 'Get started at no cost. Valid for 6 months.',
   updated_at  = NOW()
 WHERE slug = 'free';

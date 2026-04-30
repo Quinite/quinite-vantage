@@ -251,14 +251,7 @@ export default function AdminDashboardPage() {
                         <Download className="w-3.5 h-3.5" />
                         Export
                     </Button>
-                    {hasPermission('view_inventory') && (
-                        <Link href="/dashboard/admin/inventory/new">
-                            <Button className="gap-2 text-xs">
-                                <Plus className="w-3.5 h-3.5" />
-                                New Property
-                            </Button>
-                        </Link>
-                    )}
+
                 </div>
             </div>
 
