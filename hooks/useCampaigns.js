@@ -234,6 +234,20 @@ export function useRestoreCampaign() {
     })
 }
 
+export function useRestartCampaign() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: async (id) => {
+            const res = await fetch(`/api/campaigns/${id}/restart`, { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || data.error || 'Failed to restart')
+            return data
+        },
+        onSuccess: (_, id) => { invalidateCampaign(qc, id); qc.invalidateQueries({ queryKey: ['campaign-leads', id] }); toast.success('Campaign restarted — ready to start fresh') },
+        onError: (e) => toast.error(e.message)
+    })
+}
+
 export function useEnrollLeads(campaignId) {
     const qc = useQueryClient()
     return useMutation({

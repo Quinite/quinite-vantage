@@ -30,7 +30,7 @@ import {
     useCampaign, useCampaignLeads, useCampaignProgress,
     useStartCampaign, usePauseCampaign, useResumeCampaign,
     useCancelCampaign, useCompleteCampaign, useArchiveCampaign,
-    useRestoreCampaign, useUpdateCampaign, useEnrollLeads,
+    useRestoreCampaign, useRestartCampaign, useUpdateCampaign, useEnrollLeads,
     useRemoveLeadFromCampaign, useOptOutLead
 } from '@/hooks/useCampaigns'
 import { useQueryClient } from '@tanstack/react-query'
@@ -794,6 +794,7 @@ export default function CampaignDetailPage() {
     const complete = useCompleteCampaign()
     const archive = useArchiveCampaign()
     const restore = useRestoreCampaign()
+    const restart = useRestartCampaign()
 
     const [confirmAction, setConfirmAction] = useState(null)
 
@@ -822,9 +823,10 @@ export default function CampaignDetailPage() {
         else if (action === 'complete') await complete.mutateAsync({ id })
         else if (action === 'archive') await archive.mutateAsync(id)
         else if (action === 'restore') await restore.mutateAsync(id)
+        else if (action === 'restart') await restart.mutateAsync(id)
     }
 
-    const anyPending = [start, pause, resume, cancel, complete, archive, restore].some(m => m.isPending)
+    const anyPending = [start, pause, resume, cancel, complete, archive, restore, restart].some(m => m.isPending)
 
     return (
         <div className="min-h-screen bg-muted/5">
@@ -898,6 +900,11 @@ export default function CampaignDetailPage() {
                                         <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restore
                                     </Button>
                                 )}
+                                {['running', 'paused', 'completed', 'cancelled', 'failed'].includes(s) && (
+                                    <Button variant="outline" size="sm" onClick={() => setConfirmAction('restart')} disabled={anyPending} className="border-orange-300 text-orange-600 hover:bg-orange-50">
+                                        <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restart
+                                    </Button>
+                                )}
                             </>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => qc.invalidateQueries({ queryKey: ['campaign', id] })} disabled={anyPending} className="h-8 w-8 p-0">
@@ -953,13 +960,14 @@ export default function CampaignDetailPage() {
                             {confirmAction === 'archive' && 'This will archive the campaign data. You can restore it later.'}
                             {confirmAction === 'restore' && 'This will restore the campaign to draft status.'}
                             {['start', 'pause', 'resume'].includes(confirmAction) && `Confirm ${confirmAction} this campaign?`}
+                            {confirmAction === 'restart' && 'This will delete all call logs, clear the call queue, reset all enrolled leads back to "enrolled" status, and set the campaign back to "scheduled". This cannot be undone.'}
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="gap-2">
                         <Button variant="outline" onClick={() => setConfirmAction(null)}>Cancel</Button>
                         <Button
                             onClick={() => doAction(confirmAction)}
-                            className={confirmAction === 'cancel' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}
+                            className={['cancel', 'restart'].includes(confirmAction) ? 'bg-red-600 hover:bg-red-700 text-white' : ''}
                         >
                             Confirm
                         </Button>
