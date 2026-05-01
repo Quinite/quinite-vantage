@@ -66,13 +66,28 @@ function SentimentIcon({ score }) {
 }
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, className = '' }) {
+function StatCard({ label, value, sub, icon: Icon, accent = 'text-foreground', trend }) {
     return (
-        <Card className={`${className}`}>
-            <CardContent className="p-4">
-                <div className="text-2xl font-bold text-foreground">{value ?? '—'}</div>
-                <div className="text-xs font-medium text-muted-foreground mt-0.5">{label}</div>
-                {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+        <Card className="relative overflow-hidden">
+            <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+                        <p className={`text-2xl font-bold ${accent}`}>{value ?? '—'}</p>
+                        {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+                    </div>
+                    {Icon && (
+                        <div className="p-2 rounded-lg bg-muted/60">
+                            <Icon className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                    )}
+                </div>
+                {trend != null && (
+                    <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-1.5">
+                        {trend > 0 ? <TrendingUp className="w-3 h-3 text-emerald-500" /> : trend < 0 ? <TrendingDown className="w-3 h-3 text-red-500" /> : <Minus className="w-3 h-3 text-muted-foreground" />}
+                        <span className="text-xs text-muted-foreground">{trend > 0 ? `+${trend}` : trend}% vs avg</span>
+                    </div>
+                )}
             </CardContent>
         </Card>
     )
@@ -84,27 +99,63 @@ function OverviewTab({ campaign, progress }) {
         ? Math.min(100, Math.round(((campaign.credit_spent || 0) / campaign.credit_cap) * 100))
         : null
 
+    const answerRate = campaign.total_calls > 0
+        ? Math.round((campaign.answered_calls / campaign.total_calls) * 100)
+        : null
+
+    const transferRate = campaign.answered_calls > 0
+        ? Math.round((campaign.transferred_calls / campaign.answered_calls) * 100)
+        : null
+
+    const sentiment = campaign.avg_sentiment_score != null ? Number(campaign.avg_sentiment_score) : null
+    const sentimentLabel = sentiment == null ? null : sentiment > 0.3 ? 'Positive' : sentiment < -0.1 ? 'Negative' : 'Neutral'
+    const sentimentColor = sentiment == null ? 'text-foreground' : sentiment > 0.3 ? 'text-emerald-600' : sentiment < -0.1 ? 'text-red-500' : 'text-amber-500'
+
+    const projectNames = (campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name)
+
     return (
         <div className="space-y-6">
-            {/* Progress bar */}
+
+            {/* Campaign Progress Card */}
             {progress && (
-                <Card>
-                    <CardContent className="p-5 space-y-3">
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium text-foreground">Campaign Progress</span>
-                            <span className="text-muted-foreground">{progress.processed} / {progress.total} leads processed</span>
+                <Card className="border-border/60">
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-sm font-semibold text-foreground">Campaign Progress</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">{progress.processed} of {progress.total} leads processed</p>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-2xl font-bold text-foreground">{progress.percentage ?? 0}%</span>
+                            </div>
                         </div>
-                        <Progress value={progress.percentage} className="h-2" />
-                        <div className="grid grid-cols-4 gap-3 pt-1">
+
+                        {/* Multi-segment progress bar */}
+                        <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden flex gap-px">
+                            {progress.total > 0 && (
+                                <>
+                                    <div className="bg-emerald-500 h-full rounded-l-full transition-all duration-700" style={{ width: `${((progress.called || 0) / progress.total) * 100}%` }} />
+                                    <div className="bg-amber-400 h-full transition-all duration-700" style={{ width: `${((progress.calling || 0) / progress.total) * 100}%` }} />
+                                    <div className="bg-blue-400 h-full transition-all duration-700" style={{ width: `${((progress.queued || 0) / progress.total) * 100}%` }} />
+                                    <div className="bg-red-400 h-full rounded-r-full transition-all duration-700" style={{ width: `${((progress.failed || 0) / progress.total) * 100}%` }} />
+                                </>
+                            )}
+                        </div>
+
+                        {/* Legend */}
+                        <div className="grid grid-cols-4 gap-3 mt-4">
                             {[
-                                { label: 'Queued', value: progress.queued, color: 'text-blue-600' },
-                                { label: 'Calling', value: progress.calling, color: 'text-amber-600' },
-                                { label: 'Called', value: progress.called, color: 'text-emerald-600' },
-                                { label: 'Failed', value: progress.failed, color: 'text-red-500' },
+                                { label: 'Called', value: progress.called ?? 0, dot: 'bg-emerald-500' },
+                                { label: 'Calling', value: progress.calling ?? 0, dot: 'bg-amber-400' },
+                                { label: 'Queued', value: progress.queued ?? 0, dot: 'bg-blue-400' },
+                                { label: 'Failed', value: progress.failed ?? 0, dot: 'bg-red-400' },
                             ].map(s => (
-                                <div key={s.label} className="text-center">
-                                    <div className={`text-lg font-bold ${s.color}`}>{s.value ?? 0}</div>
-                                    <div className="text-xs text-muted-foreground">{s.label}</div>
+                                <div key={s.label} className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
+                                    <div>
+                                        <div className="text-sm font-semibold text-foreground">{s.value}</div>
+                                        <div className="text-[10px] text-muted-foreground">{s.label}</div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -112,48 +163,89 @@ function OverviewTab({ campaign, progress }) {
                 </Card>
             )}
 
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total Calls" value={campaign.total_calls || 0} />
-                <StatCard label="Answered" value={campaign.answered_calls || 0} />
-                <StatCard label="Transferred" value={campaign.transferred_calls || 0} />
-                <StatCard label="Avg Sentiment" value={campaign.avg_sentiment_score != null ? Number(campaign.avg_sentiment_score).toFixed(2) : '—'} />
+            {/* Stat Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard
+                    label="Total Calls"
+                    value={campaign.total_calls || 0}
+                    icon={Phone}
+                    sub={campaign.total_enrolled > 0 ? `of ${campaign.total_enrolled} enrolled` : undefined}
+                />
+                <StatCard
+                    label="Answer Rate"
+                    value={answerRate != null ? `${answerRate}%` : `${campaign.answered_calls || 0}`}
+                    icon={CheckCircle2}
+                    accent={answerRate >= 60 ? 'text-emerald-600' : answerRate >= 30 ? 'text-amber-500' : 'text-foreground'}
+                    sub={answerRate != null ? `${campaign.answered_calls || 0} answered` : 'answered'}
+                />
+                <StatCard
+                    label="Transfer Rate"
+                    value={transferRate != null ? `${transferRate}%` : `${campaign.transferred_calls || 0}`}
+                    icon={Zap}
+                    accent={transferRate >= 20 ? 'text-emerald-600' : 'text-foreground'}
+                    sub={`${campaign.transferred_calls || 0} escalated`}
+                />
+                <StatCard
+                    label="Avg Sentiment"
+                    value={sentiment != null ? sentiment.toFixed(2) : '—'}
+                    icon={BarChart3}
+                    accent={sentimentColor}
+                    sub={sentimentLabel}
+                />
             </div>
 
-            {/* Credit cap */}
+            {/* Credit Budget */}
             {campaign.credit_cap != null && (
-                <Card>
-                    <CardContent className="p-5 space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium text-foreground">Credit Budget</span>
-                            <span className="text-muted-foreground">₹{Number(campaign.credit_spent || 0).toFixed(2)} / ₹{Number(campaign.credit_cap).toFixed(2)}</span>
+                <Card className="border-border/60">
+                    <CardContent className="p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 className="text-sm font-semibold text-foreground">Credit Budget</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    ₹{Number(campaign.credit_spent || 0).toFixed(2)} spent of ₹{Number(campaign.credit_cap).toFixed(2)} cap
+                                </p>
+                            </div>
+                            <span className={`text-sm font-bold tabular-nums ${creditPct >= 90 ? 'text-red-500' : creditPct >= 70 ? 'text-amber-500' : 'text-foreground'}`}>
+                                {creditPct ?? 0}%
+                            </span>
                         </div>
-                        <Progress value={creditPct} className={`h-2 ${creditPct >= 90 ? '[&>div]:bg-red-500' : creditPct >= 70 ? '[&>div]:bg-amber-500' : ''}`} />
-                        {progress?.credit_remaining != null && (
-                            <div className="text-xs text-muted-foreground">₹{Number(progress.credit_remaining).toFixed(2)} remaining</div>
+                        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all duration-700 ${creditPct >= 90 ? 'bg-red-500' : creditPct >= 70 ? 'bg-amber-400' : 'bg-primary'}`}
+                                style={{ width: `${creditPct ?? 0}%` }}
+                            />
+                        </div>
+                        {creditPct >= 80 && (
+                            <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" /> ₹{(Number(campaign.credit_cap) - Number(campaign.credit_spent || 0)).toFixed(2)} remaining
+                            </p>
                         )}
                     </CardContent>
                 </Card>
             )}
 
-            {/* Details */}
-            <Card>
-                <CardHeader><CardTitle className="text-sm">Campaign Details</CardTitle></CardHeader>
-                <CardContent className="p-4 pt-0 grid gap-3 text-sm">
-                    {[
-                        { label: 'Projects', value: (campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name).join(', ') || '—' },
-                        { label: 'Schedule', value: campaign.start_date && campaign.end_date ? `${campaign.start_date} – ${campaign.end_date}` : '—' },
-                        { label: 'Daily Window', value: campaign.time_start && campaign.time_end ? `${campaign.time_start} – ${campaign.time_end} IST` : '—' },
-                        { label: 'DND Compliance', value: campaign.dnd_compliance !== false ? 'Enabled (9am–9pm IST)' : 'Disabled' },
-                        { label: 'Auto Complete', value: campaign.auto_complete !== false ? 'Yes' : 'No' },
-                        { label: 'Language', value: campaign.call_settings?.language || '—' },
-                        { label: 'AI Voice', value: campaign.call_settings?.voice_id || '—' },
-                    ].map(row => (
-                        <div key={row.label} className="flex items-center justify-between">
-                            <span className="text-muted-foreground">{row.label}</span>
-                            <span className="font-medium text-foreground">{row.value}</span>
-                        </div>
-                    ))}
+            {/* Campaign Details */}
+            <Card className="border-border/60">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold">Configuration</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                    <div className="grid sm:grid-cols-2 gap-px bg-border/40 rounded-lg overflow-hidden border border-border/40">
+                        {[
+                            { label: 'Projects', value: projectNames.length > 0 ? projectNames.join(', ') : '—', icon: Building2 },
+                            { label: 'Schedule', value: campaign.start_date && campaign.end_date ? `${campaign.start_date} – ${campaign.end_date}` : '—', icon: Calendar },
+                            { label: 'Daily Window', value: campaign.time_start && campaign.time_end ? `${campaign.time_start.slice(0,5)} – ${campaign.time_end.slice(0,5)} IST` : '—', icon: Clock },
+                            { label: 'Language', value: campaign.call_settings?.language ? campaign.call_settings.language.charAt(0).toUpperCase() + campaign.call_settings.language.slice(1) : '—', icon: Zap },
+                            { label: 'AI Voice', value: campaign.call_settings?.voice_id ? campaign.call_settings.voice_id.charAt(0).toUpperCase() + campaign.call_settings.voice_id.slice(1) : '—', icon: Radio },
+                            { label: 'DND Compliance', value: campaign.dnd_compliance !== false ? '✓ Enabled (9am–9pm IST)' : 'Disabled', icon: AlertTriangle },
+                        ].map(row => (
+                            <div key={row.label} className="flex items-center gap-3 px-4 py-3 bg-background hover:bg-muted/30 transition-colors">
+                                <row.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-xs text-muted-foreground w-28 shrink-0">{row.label}</span>
+                                <span className="text-sm font-medium text-foreground truncate">{row.value}</span>
+                            </div>
+                        ))}
+                    </div>
                 </CardContent>
             </Card>
         </div>
@@ -561,13 +653,22 @@ function LeadEnrollmentPanel({ open, onClose, campaignId, projectId }) {
 }
 
 // ─── Call Results Tab ──────────────────────────────────────────────────────────
+const CALL_STATUS_STYLE = {
+    completed:   'bg-emerald-500/10 text-emerald-700 border-emerald-200',
+    transferred: 'bg-blue-500/10 text-blue-700 border-blue-200',
+    in_progress: 'bg-amber-500/10 text-amber-700 border-amber-200',
+    failed:      'bg-red-500/10 text-red-700 border-red-200',
+    unknown:     'bg-zinc-400/10 text-zinc-500 border-zinc-200',
+}
+
 function CallResultsTab({ campaignId }) {
     const [page, setPage] = useState(1)
     const [logs, setLogs] = useState([])
+    const [summary, setSummary] = useState(null)
     const [loading, setLoading] = useState(false)
     const [hasMore, setHasMore] = useState(false)
 
-    useState(() => {
+    useEffect(() => {
         async function fetchLogs() {
             setLoading(true)
             try {
@@ -575,6 +676,7 @@ function CallResultsTab({ campaignId }) {
                 if (res.ok) {
                     const data = await res.json()
                     setLogs(data.logs || [])
+                    setSummary(data.summary || null)
                     setHasMore(data.hasMore || false)
                 }
             } finally {
@@ -584,33 +686,118 @@ function CallResultsTab({ campaignId }) {
         if (campaignId) fetchLogs()
     }, [campaignId, page])
 
-    if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+    if (loading) return (
+        <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+    )
+
     if (!logs.length) return (
-        <div className="text-center py-12 text-muted-foreground">
-            <Phone className="w-8 h-8 mx-auto mb-2 opacity-40" />
-            <p className="text-sm">No call logs yet</p>
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <Phone className="w-5 h-5 opacity-40" />
+            </div>
+            <p className="text-sm font-medium">No call logs yet</p>
+            <p className="text-xs">Logs will appear here once calls start</p>
         </div>
     )
 
     return (
-        <div className="space-y-3">
-            {logs.map(log => (
-                <Card key={log.id}>
-                    <CardContent className="p-4 flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                            <div className="font-medium text-foreground text-sm truncate">{log.lead?.name || log.callee_number}</div>
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                                {log.created_at ? new Date(log.created_at).toLocaleString('en-IN') : '—'} · {log.duration ? `${Math.round(log.duration / 60)}m ${log.duration % 60}s` : '—'}
+        <div className="space-y-4">
+            {/* Summary strip */}
+            {summary && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                        { label: 'Total Calls', value: summary.totalCalls },
+                        { label: 'Answered', value: summary.answeredCalls },
+                        { label: 'Transferred', value: summary.transferred },
+                        { label: 'Avg Sentiment', value: summary.avgSentiment != null ? Number(summary.avgSentiment).toFixed(2) : '—' },
+                    ].map(s => (
+                        <div key={s.label} className="bg-muted/40 rounded-xl px-4 py-3 border border-border/40">
+                            <div className="text-lg font-bold text-foreground">{s.value ?? '—'}</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">{s.label}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Log list */}
+            <div className="space-y-2">
+                {logs.map(log => {
+                    const statusKey = log.call_status || 'unknown'
+                    const statusStyle = CALL_STATUS_STYLE[statusKey] || CALL_STATUS_STYLE.unknown
+                    const mins = log.duration ? Math.floor(log.duration / 60) : 0
+                    const secs = log.duration ? log.duration % 60 : 0
+                    const durationStr = log.duration ? `${mins}m ${secs}s` : null
+                    const score = log.sentiment_score != null ? Number(log.sentiment_score) : null
+
+                    return (
+                        <div key={log.id} className="group flex items-start gap-4 p-4 rounded-xl border border-border/50 bg-card hover:border-border hover:shadow-sm transition-all duration-150">
+                            {/* Avatar */}
+                            <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0 text-sm font-semibold text-muted-foreground">
+                                {(log.lead?.name || '?').charAt(0).toUpperCase()}
                             </div>
-                            {log.summary && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{log.summary}</p>}
+
+                            {/* Main content */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm text-foreground">{log.lead?.name || log.lead?.phone || '—'}</span>
+                                    <Badge variant="outline" className={`text-[10px] px-2 py-0.5 font-medium border ${statusStyle}`}>
+                                        {statusKey.replace('_', ' ')}
+                                    </Badge>
+                                    {log.transferred && (
+                                        <Badge variant="outline" className="text-[10px] px-2 py-0.5 border bg-blue-500/10 text-blue-700 border-blue-200">
+                                            transferred
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                                    {log.created_at && (
+                                        <span>{new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                                    )}
+                                    {durationStr && (
+                                        <span className="flex items-center gap-1">
+                                            <Clock className="w-3 h-3" /> {durationStr}
+                                        </span>
+                                    )}
+                                    {log.disconnect_reason && (
+                                        <span className="capitalize">{log.disconnect_reason.replace('_', ' ')}</span>
+                                    )}
+                                </div>
+                                {log.summary && (
+                                    <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{log.summary}</p>
+                                )}
+                            </div>
+
+                            {/* Sentiment */}
+                            <div className="shrink-0 flex flex-col items-end gap-1">
+                                {score != null && (
+                                    <div className={`flex items-center gap-1 text-xs font-medium ${score > 0.3 ? 'text-emerald-600' : score < -0.1 ? 'text-red-500' : 'text-amber-500'}`}>
+                                        {score > 0.3 ? <TrendingUp className="w-3.5 h-3.5" /> : score < -0.1 ? <TrendingDown className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                                        <span>{score.toFixed(2)}</span>
+                                    </div>
+                                )}
+                                {log.interest_level && (
+                                    <span className="text-[10px] text-muted-foreground capitalize">{log.interest_level}</span>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                            <SentimentIcon score={log.sentiment_score} />
-                            <Badge variant="outline" className="text-[10px] px-2">{log.call_status || 'unknown'}</Badge>
-                        </div>
-                    </CardContent>
-                </Card>
-            ))}
+                    )
+                })}
+            </div>
+
+            {/* Pagination */}
+            {(page > 1 || hasMore) && (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page === 1}>
+                        <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground tabular-nums">Page {page}</span>
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={!hasMore}>
+                        Next <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                </div>
+            )}
         </div>
     )
 }
@@ -919,8 +1106,13 @@ export default function CampaignDetailPage() {
                 {isRunning && progress && (
                     <div className="px-6 pb-3">
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <Progress value={progress.percentage} className="h-1.5 flex-1" />
-                            <span>{progress.percentage}% · {progress.processed}/{progress.total}</span>
+                            <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden flex gap-px">
+                                <div className="bg-emerald-500 h-full transition-all duration-700" style={{ width: `${((progress.called || 0) / Math.max(progress.total, 1)) * 100}%` }} />
+                                <div className="bg-amber-400 h-full transition-all duration-700" style={{ width: `${((progress.calling || 0) / Math.max(progress.total, 1)) * 100}%` }} />
+                                <div className="bg-blue-400 h-full transition-all duration-700" style={{ width: `${((progress.queued || 0) / Math.max(progress.total, 1)) * 100}%` }} />
+                            </div>
+                            <span className="tabular-nums font-medium">{progress.percentage}%</span>
+                            <span className="text-muted-foreground/60">{progress.processed}/{progress.total}</span>
                         </div>
                     </div>
                 )}
