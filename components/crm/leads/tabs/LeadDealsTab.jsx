@@ -66,9 +66,8 @@ function AvatarChip({ profile, label }) {
     const displayName = parts.length > 1 ? `${parts[parts.length - 1]} ${parts[0]}` : parts[0]
     return (
         <span className="inline-flex items-center gap-1.5 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded-full pl-0.5 pr-2 py-0.5 shadow-sm">
-            <Avatar className="h-4 w-4 border-white shadow-sm ring-1 ring-slate-100">
-                <AvatarImage src={profile.avatar_url || getDefaultAvatar(profile.full_name || profile.email)} />
-                <AvatarFallback className="text-[7px] font-bold">
+            <Avatar className="h-4 w-4 border-white shadow-sm ring-1 ring-slate-100 bg-slate-200">
+                <AvatarFallback className="text-[7px] font-bold text-slate-600">
                     {initials}
                 </AvatarFallback>
             </Avatar>

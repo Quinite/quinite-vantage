@@ -110,9 +110,8 @@ function UserAvatar({ user, size = 6 }) {
     if (!user) return null
     const initials = (user.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     return (
-        <Avatar className={`w-${size} h-${size} border border-white shadow-sm ring-1 ring-slate-100`}>
-            <AvatarImage src={user.avatar_url || getDefaultAvatar(user.full_name || user.email)} />
-            <AvatarFallback className="text-[8px] font-bold">
+        <Avatar className={`w-${size} h-${size} border border-white shadow-sm ring-1 ring-slate-100 bg-slate-200`}>
+            <AvatarFallback className="text-[8px] font-bold text-slate-600">
                 {initials}
             </AvatarFallback>
         </Avatar>
@@ -172,9 +171,8 @@ function AssigneeBadge({ assignee }) {
     const initials = (assignee.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     return (
         <div className="flex items-center gap-2 px-1.5 py-0.5 rounded-full border border-slate-100 bg-slate-50/50 max-w-full overflow-hidden">
-            <Avatar className="w-4 h-4 rounded-full border-white shadow-sm ring-1 ring-slate-100">
-                <AvatarImage src={assignee.avatar_url || getDefaultAvatar(assignee.full_name || assignee.email)} />
-                <AvatarFallback className="text-[7px] font-bold">
+            <Avatar className="w-4 h-4 rounded-full border-white shadow-sm ring-1 ring-slate-100 bg-slate-200">
+                <AvatarFallback className="text-[7px] font-bold text-slate-600">
                     {initials}
                 </AvatarFallback>
             </Avatar>

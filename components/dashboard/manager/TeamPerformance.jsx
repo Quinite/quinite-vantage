@@ -40,9 +40,10 @@ export function TeamPerformance({ members = [], topPerformers = [] }) {
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="relative">
-                                            <Avatar>
-                                                <AvatarImage src={member.avatar || getDefaultAvatar(member.name)} alt={member.name} />
-                                                <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
+                                            <Avatar className="bg-slate-100 border-2 border-white shadow-sm ring-1 ring-slate-100">
+                                                <AvatarFallback className="text-xs font-bold text-slate-600 bg-slate-100">
+                                                    {getInitials(member.name)}
+                                                </AvatarFallback>
                                             </Avatar>
                                             <div
                                                 className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${getStatusColor(member.isOnline)}`}
@@ -96,9 +97,10 @@ export function TeamPerformance({ members = [], topPerformers = [] }) {
                                             {index + 1}
                                         </div>
                                         <div className="relative">
-                                            <Avatar>
-                                                <AvatarImage src={performer.avatar || getDefaultAvatar(performer.name)} alt={performer.name} />
-                                                <AvatarFallback>{getInitials(performer.name)}</AvatarFallback>
+                                            <Avatar className="bg-slate-100 border-2 border-white shadow-sm ring-1 ring-slate-100">
+                                                <AvatarFallback className="text-xs font-bold text-slate-600 bg-slate-100">
+                                                    {getInitials(performer.name)}
+                                                </AvatarFallback>
                                             </Avatar>
                                         </div>
                                         <div>

@@ -180,9 +180,8 @@ function LeadCardInner({ lead }) {
                             <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Avatar className="h-5 w-5 border border-border/50 cursor-default">
-                                            <AvatarImage src={lead.assigned_to_user.avatar_url || getDefaultAvatar(lead.assigned_to_user.full_name)} />
-                                            <AvatarFallback className="text-[8px] font-bold bg-secondary text-secondary-foreground">
+                                        <Avatar className="h-5 w-5 border border-border/50 cursor-default bg-secondary">
+                                            <AvatarFallback className="text-[8px] font-bold text-secondary-foreground bg-secondary">
                                                 {lead.assigned_to_user.full_name?.substring(0, 2).toUpperCase()}
                                             </AvatarFallback>
                                         </Avatar>

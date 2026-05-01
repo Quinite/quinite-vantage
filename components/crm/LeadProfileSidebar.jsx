@@ -215,8 +215,10 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
                         </span>
                     )}
                     <div className="flex items-center gap-1.5 min-w-0">
-                        <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
-                            <User className="w-3 h-3 text-slate-500" />
+                        <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0 border border-white shadow-sm">
+                            <span className="text-[9px] font-bold text-slate-600">
+                                {lead.assigned_to_user?.full_name ? getInitials(lead.assigned_to_user.full_name) : 'UN'}
+                            </span>
                         </div>
                         <span className="text-[11px] text-slate-600 font-medium truncate">
                             {lead.assigned_to_user?.full_name?.split(' ')[0] || 'Unassigned'}

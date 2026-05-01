@@ -168,9 +168,8 @@ export default function SiteVisitsTable({ visits, sortBy = 'date_asc', onSortCha
                                 <TableCell>
                                     {visit.assigned_agent ? (
                                         <div className="flex items-center gap-2">
-                                            <Avatar className="w-6 h-6 border shadow-sm">
-                                                <AvatarImage src={visit.assigned_agent.avatar_url} />
-                                                <AvatarFallback className="text-[9px] font-bold">
+                                            <Avatar className="w-6 h-6 border shadow-sm bg-slate-100">
+                                                <AvatarFallback className="text-[9px] font-bold text-slate-600 bg-slate-100">
                                                     {visit.assigned_agent.full_name?.charAt(0) || 'A'}
                                                 </AvatarFallback>
                                             </Avatar>

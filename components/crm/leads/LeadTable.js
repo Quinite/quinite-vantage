@@ -158,9 +158,8 @@ export function LeadTable({
                                     <div className="flex items-center gap-1.5">
                                         {lead.assigned_to_user ? (
                                             <>
-                                                <Avatar className="h-5 w-5 border border-white shadow-sm ring-1 ring-slate-200">
-                                                    <AvatarImage src={lead.assigned_to_user.avatar_url} />
-                                                    <AvatarFallback className="text-[9px] font-bold">
+                                                <Avatar className="h-5 w-5 border border-white shadow-sm ring-1 ring-slate-200 bg-slate-100">
+                                                    <AvatarFallback className="text-[9px] font-bold text-slate-600 bg-slate-100">
                                                         {lead.assigned_to_user.full_name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                                     </AvatarFallback>
                                                 </Avatar>
@@ -457,8 +456,7 @@ export function LeadTable({
                                     <TableCell>
                                         {lead.assigned_to_user ? (
                                             <div className="flex items-center gap-2">
-                                                <Avatar className="h-6 w-6 border border-white shadow-sm ring-1 ring-slate-100">
-                                                    <AvatarImage src={lead.assigned_to_user.avatar_url} />
+                                                <Avatar className="h-6 w-6 border border-white shadow-sm ring-1 ring-slate-100 bg-slate-100">
                                                     <AvatarFallback className="text-[9px] font-bold bg-slate-100 text-slate-600">
                                                         {lead.assigned_to_user.full_name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                                     </AvatarFallback>
