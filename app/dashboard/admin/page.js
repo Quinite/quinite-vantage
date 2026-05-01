@@ -246,14 +246,14 @@ export default function AdminDashboardPage() {
                     <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard Overview</h1>
                     <p className="text-muted-foreground mt-1">Welcome back. Here's what's happening today.</p>
                 </div>
-                <div className="flex gap-3">
-                    <Button variant="outline" onClick={handleExport} className="gap-2 text-xs">
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                    <Button variant="outline" onClick={handleExport} className="gap-2 text-xs w-full sm:w-auto justify-center">
                         <Download className="w-3.5 h-3.5" />
                         Export
                     </Button>
                     {hasPermission('view_inventory') && (
-                        <Link href="/dashboard/admin/inventory/new">
-                            <Button className="gap-2 text-xs">
+                        <Link href="/dashboard/admin/inventory/new" className="w-full sm:w-auto">
+                            <Button className="gap-2 text-xs w-full justify-center">
                                 <Plus className="w-3.5 h-3.5" />
                                 New Property
                             </Button>

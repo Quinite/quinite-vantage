@@ -104,11 +104,11 @@ export default function ProjectCard({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/5 to-transparent" />
 
                 {/* Top badges */}
-                <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
-                    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border backdrop-blur-sm whitespace-nowrap', status.cls)}>
+                <div className="absolute top-3 left-3 right-3 flex flex-wrap items-start justify-between gap-2 z-10">
+                    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border backdrop-blur-sm whitespace-nowrap shadow-sm', status.cls)}>
                         {status.label}
                     </span>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
                         {project.brochure_url && (
                             <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/90 text-red-600 shadow-sm backdrop-blur-sm">
                                 <FileText className="w-2.5 h-2.5" />
@@ -116,7 +116,7 @@ export default function ProjectCard({
                             </span>
                         )}
                         {project.public_visibility && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/90 text-white">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/90 text-white shadow-sm">
                                 Public
                             </span>
                         )}
@@ -124,14 +124,16 @@ export default function ProjectCard({
                 </div>
 
                 {/* Bottom: name + location */}
-                <div className="absolute bottom-0 inset-x-0 p-4">
-                    <p className="text-white font-bold text-[15px] leading-tight truncate">{project.name}</p>
-                    {locationStr && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3 h-3 text-white/60 shrink-0" />
-                            <p className="text-white/75 text-xs truncate">{locationStr}</p>
-                        </div>
-                    )}
+                <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-10">
+                    <div className="max-w-full">
+                        <p className="text-white font-bold text-base leading-tight truncate drop-shadow-sm">{project.name}</p>
+                        {locationStr && (
+                            <div className="flex items-center gap-1 mt-1">
+                                <MapPin className="w-3 h-3 text-white/70 shrink-0" />
+                                <p className="text-white/80 text-[11px] truncate drop-shadow-sm">{locationStr}</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

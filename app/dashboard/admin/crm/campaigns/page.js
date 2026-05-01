@@ -1021,10 +1021,10 @@ export default function CampaignsPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
             {/* Project Filter */}
-            <div className="flex items-center gap-2 flex-1 sm:flex-none">
-              <div className="w-[180px] sm:w-[220px]">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-[220px]">
                 <Select
                   value={selectedProjectId}
                   onValueChange={(v) => {
@@ -1062,11 +1062,10 @@ export default function CampaignsPage() {
               <Button
                 onClick={() => { if (!canCreate || subExpired) return; setShowCreateDialog(true) }}
                 disabled={!canCreate || subExpired}
-                className="h-9 shadow-sm shrink-0"
+                className="h-9 shadow-sm w-full sm:w-auto justify-center shrink-0"
               >
                 {(!canCreate || subExpired) ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                <span className="hidden sm:inline">New Campaign</span>
-                <span className="sm:hidden">New</span>
+                <span>New Campaign</span>
               </Button>
             </PermissionTooltip>
           </div>

@@ -47,30 +47,26 @@ export function LeadFilters({
     }
 
     return (
-        <Card className="mb-6">
-            <CardContent className="pt-6">
-                <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+            <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex items-center gap-3 p-3 min-w-max">
+                    <div className="relative w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             placeholder="Search leads..."
-                            className="pl-8"
+                            className="pl-10 h-10 border-slate-200 bg-slate-50/50 rounded-xl focus-visible:ring-indigo-500"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
+
+                    <div className="flex items-center gap-2">
                         <Select value={stageFilter} onValueChange={setStageFilter}>
-                            <SelectTrigger className="w-full sm:w-[180px]">
+                            <SelectTrigger className="h-10 w-[160px] rounded-xl border-slate-200 bg-slate-50/50">
                                 <SelectValue placeholder="All Stages" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Stages</SelectItem>
-                                {/* 
-                    Note: If stages are project-dependent, the parent should pass 
-                    the correct list based on selected project.
-                    For "All Stages" across projects, we might need a distinct list.
-                */}
                                 {stages.map(stage => (
                                     <SelectItem key={stage.id} value={stage.id}>
                                         {stage.name}
@@ -83,7 +79,7 @@ export function LeadFilters({
                             value={projectId || "all"}
                             onValueChange={(val) => setProjectId(val === "all" ? null : val)}
                         >
-                            <SelectTrigger className="w-full sm:w-[150px]">
+                            <SelectTrigger className="h-10 w-[160px] rounded-xl border-slate-200 bg-slate-50/50">
                                 <SelectValue placeholder="All Projects" />
                             </SelectTrigger>
                             <SelectContent>
@@ -100,7 +96,7 @@ export function LeadFilters({
                             value={assignedTo || "all"}
                             onValueChange={(val) => setAssignedTo(val === "all" ? null : val)}
                         >
-                            <SelectTrigger className="w-full sm:w-[150px]">
+                            <SelectTrigger className="h-10 w-[160px] rounded-xl border-slate-200 bg-slate-50/50">
                                 <SelectValue placeholder="All Agents" />
                             </SelectTrigger>
                             <SelectContent>
@@ -114,7 +110,7 @@ export function LeadFilters({
                         </Select>
 
                         <Select value={viewMode} onValueChange={setViewMode}>
-                            <SelectTrigger className="w-full sm:w-[130px]">
+                            <SelectTrigger className="h-10 w-[130px] rounded-xl border-slate-200 bg-slate-50/50">
                                 <SelectValue placeholder="View Mode" />
                             </SelectTrigger>
                             <SelectContent>
@@ -123,12 +119,18 @@ export function LeadFilters({
                             </SelectContent>
                         </Select>
 
-                        <Button variant="outline" size="icon" onClick={onRefresh} disabled={loading} className="shrink-0">
-                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        <Button 
+                            variant="outline" 
+                            size="icon" 
+                            onClick={onRefresh} 
+                            disabled={loading} 
+                            className="h-10 w-10 shrink-0 rounded-xl border-slate-200 bg-slate-50/50 hover:bg-slate-100"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
                         </Button>
                     </div>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     )
 }

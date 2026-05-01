@@ -176,11 +176,11 @@ export function UnitsView({ projectId = null }) {
                             )}
                         </div>
 
-                        <div className="flex items-center gap-2 w-full md:w-auto">
+                        <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
                             {canManage && (
                                 <Button 
                                     onClick={openAddDrawer} 
-                                    className="h-10 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-all"
+                                    className="h-10 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-all w-full sm:w-auto justify-center"
                                 >
                                     <Plus className="w-4 h-4 mr-2" />
                                     Add Unit

@@ -131,22 +131,22 @@ export default function InventoryOverviewPage() {
             <div className="space-y-5">
 
                 {/* ── Header ─────────────────────────────────────────────── */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-foreground">Inventory Overview</h1>
                         <p className="text-sm text-muted-foreground mt-0.5">
                             {projects.length} active project{projects.length !== 1 ? 's' : ''}&nbsp;·&nbsp;{totalUnits} total units
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        <Link href="/dashboard/admin/inventory/units">
-                            <span className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-200 bg-white hover:bg-blue-50 transition-all cursor-pointer">
+                    <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0 w-full md:w-auto">
+                        <Link href="/dashboard/admin/inventory/units" className="w-full sm:w-auto">
+                            <span className="flex items-center justify-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-200 bg-white hover:bg-blue-50 transition-all cursor-pointer w-full">
                                 <Home className="w-3.5 h-3.5" />
                                 All Units
                             </span>
                         </Link>
-                        <Link href="/dashboard/admin/inventory/analytics">
-                            <span className="flex items-center gap-1.5 text-sm font-medium text-white px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer">
+                        <Link href="/dashboard/admin/inventory/analytics" className="w-full sm:w-auto">
+                            <span className="flex items-center justify-center gap-1.5 text-sm font-medium text-white px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer w-full">
                                 <BarChart3 className="w-3.5 h-3.5" />
                                 Analytics
                             </span>

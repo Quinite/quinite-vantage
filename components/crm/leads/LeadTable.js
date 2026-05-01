@@ -99,8 +99,16 @@ export function LeadTable({
             {/* Mobile Card View */}
             <div className="block sm:hidden space-y-4">
                 {leads.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card text-sm">
-                        No leads found
+                    <div className="text-center py-12 text-muted-foreground border border-dashed border-slate-200 rounded-2xl bg-slate-50/30">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="p-3 bg-white rounded-full shadow-sm">
+                                <User className="w-6 h-6 text-slate-300" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-600">No leads found</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">Try adjusting your filters or search query</p>
+                            </div>
+                        </div>
                     </div>
                 ) : (
                     leads.map((lead) => (
@@ -524,50 +532,54 @@ export function LeadTable({
             </div>
 
             {/* Pagination Footer */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
-                <div className="flex items-center gap-4">
-                    <div className="text-sm text-muted-foreground">
-                        {totalLeads} leads found
-                    </div>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+                <div className="text-sm text-slate-500 font-medium order-2 sm:order-1">
+                    <span className="font-bold text-slate-900">{totalLeads}</span> leads found
                 </div>
-                <div className="flex items-center space-x-2">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
+                
+                <div className="flex flex-wrap items-center justify-center gap-3 order-1 sm:order-2">
+                    <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">Rows</span>
                         <Select
                             value={String(limit)}
                             onValueChange={(val) => onLimitChange?.(parseInt(val))}
                         >
-                            <SelectTrigger className="h-8 w-[70px]">
+                            <SelectTrigger className="h-7 w-[65px] border-0 bg-transparent p-0 focus:ring-0 text-xs font-bold">
                                 <SelectValue placeholder={limit} />
                             </SelectTrigger>
                             <SelectContent side="top">
                                 {[10, 20, 50, 100].map((pageSize) => (
-                                    <SelectItem key={pageSize} value={String(pageSize)}>
+                                    <SelectItem key={pageSize} value={String(pageSize)} className="text-xs">
                                         {pageSize}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onPageChange(page - 1)}
-                        disabled={page === 1 || loading || isLoadingMore}
-                    >
-                        Previous
-                    </Button>
-                    <div className="text-sm text-muted-foreground min-w-[60px] text-center">
-                        Page {page}
+
+                    <div className="flex items-center gap-1.5">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onPageChange(page - 1)}
+                            disabled={page === 1 || loading || isLoadingMore}
+                            className="h-8 px-3 rounded-lg border-slate-200 bg-white shadow-sm disabled:opacity-30"
+                        >
+                            Previous
+                        </Button>
+                        <div className="bg-white border border-slate-200 rounded-lg h-8 px-3 flex items-center justify-center min-w-[70px] shadow-sm">
+                            <span className="text-xs font-bold text-slate-600">Page {page}</span>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onPageChange(page + 1)}
+                            disabled={!hasMore || loading || isLoadingMore}
+                            className="h-8 px-3 rounded-lg border-slate-200 bg-white shadow-sm disabled:opacity-30"
+                        >
+                            Next
+                        </Button>
                     </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onPageChange(page + 1)}
-                        disabled={!hasMore || loading || isLoadingMore}
-                    >
-                        Next
-                    </Button>
                 </div>
             </div>
             {/* Bulk Action Bar */}

@@ -110,19 +110,22 @@ export default function InventoryProjectDetailsPage() {
     return (
         <div className="space-y-6 p-6">
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => router.push('/dashboard/admin/inventory')}
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                </Button>
-                <div className="flex-1">
-                    <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
-                    {project.address && (
-                        <p className="text-sm text-muted-foreground mt-1">{project.address}</p>
-                    )}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-center gap-4 flex-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => router.push('/dashboard/admin/inventory')}
+                        className="shrink-0"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                    </Button>
+                    <div className="flex-1">
+                        <h1 className="text-2xl font-bold text-foreground truncate">{project.name}</h1>
+                        {project.address && (
+                            <p className="text-sm text-muted-foreground mt-1 truncate">{project.address}</p>
+                        )}
+                    </div>
                 </div>
             </div>
 

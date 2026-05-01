@@ -150,7 +150,7 @@ export function NotificationBell() {
                     )}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-96 p-0 shadow-xl border-slate-100" align="end">
+            <PopoverContent className="w-96 max-w-[calc(100vw-32px)] p-0 shadow-xl border-slate-100" align="end" collisionPadding={16}>
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
                     <div>
                         <h4 className="font-semibold text-sm text-slate-800">Notifications</h4>

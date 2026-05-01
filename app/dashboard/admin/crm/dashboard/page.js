@@ -195,16 +195,18 @@ export default function CRMDashboardPage() {
                     <h1 className="text-3xl font-semibold tracking-tight text-foreground">CRM Dashboard</h1>
                     <p className="text-muted-foreground mt-1">Overview of your sales pipeline and activities</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="gap-2">
-                                <Calendar className="w-4 h-4" />
-                                {getDateRangeLabel()}
+                            <Button variant="outline" className="gap-2 w-full sm:w-auto justify-between sm:justify-center">
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="w-4 h-4" />
+                                    {getDateRangeLabel()}
+                                </div>
                                 <ChevronDown className="w-4 h-4 ml-1" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuContent align="end" className="w-full sm:w-48">
                             {dateRangeOptions.map((option) => (
                                 <DropdownMenuItem
                                     key={option.value}
@@ -220,8 +222,8 @@ export default function CRMDashboardPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                     <PermissionGate feature="create_leads">
-                        <Link href="/dashboard/admin/crm/leads">
-                            <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
+                        <Link href="/dashboard/admin/crm/leads" className="w-full sm:w-auto">
+                            <Button className="gap-2 bg-blue-600 hover:bg-blue-700 w-full justify-center">
                                 <Plus className="w-4 h-4" />
                                 Add Lead
                             </Button>
