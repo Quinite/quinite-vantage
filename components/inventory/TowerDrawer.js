@@ -83,8 +83,9 @@ export default function TowerDrawer({
     if (nameExists) return;
 
     try {
+      const { has_ground_floor, ...rest } = formData;
       await onSave({
-        ...formData,
+        ...rest,
         total_floors: Number(formData.total_floors),
         units_per_floor: Number(formData.units_per_floor),
         project_id: projectId,

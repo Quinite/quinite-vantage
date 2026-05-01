@@ -485,6 +485,8 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
         leadIds: enrollMode === 'manual' ? [...selectedLeads] : []
       })
       handleClose()
+    } catch (err) {
+      // Error is already handled by toast in parent handleCreate
     } finally { setCreating(false) }
   }
 
@@ -1095,32 +1097,38 @@ export default function CampaignsPage() {
 
   async function handleCreate({ projectIds, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, creditCap, aiScript, callSettings, autoEnroll, leadIds }) {
     if (!canCreate) { toast.error("You do not have permission to create campaigns"); return }
-    const res = await fetch('/api/campaigns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        project_ids: projectIds, name, description,
-        start_date: startDate, end_date: endDate,
-        time_start: timeStart, time_end: timeEnd,
-        dnd_compliance: dndCompliance,
-        credit_cap: creditCap,
-        ai_script: aiScript,
-        call_settings: callSettings,
-        auto_enroll: autoEnroll,
-        lead_ids: leadIds
+    try {
+      const res = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_ids: projectIds, name, description,
+          start_date: startDate, end_date: endDate,
+          time_start: timeStart, time_end: timeEnd,
+          dnd_compliance: dndCompliance,
+          credit_cap: creditCap,
+          ai_script: aiScript,
+          call_settings: callSettings,
+          auto_enroll: autoEnroll,
+          lead_ids: leadIds
+        })
       })
-    })
-    if (!res.ok) {
+      if (!res.ok) {
+        const payload = await res.json()
+        throw new Error(payload?.error || 'Failed to create campaign')
+      }
       const payload = await res.json()
-      throw new Error(payload?.error || 'Failed to create campaign')
-    }
-    const payload = await res.json()
-    queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-    
-    if (payload.enrollment) {
-      toast.success(`Campaign created & enrolled ${payload.enrollment.enrolled} leads!`)
-    } else {
-      toast.success("Campaign created successfully!")
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+      
+      if (payload.enrollment) {
+        toast.success(`Campaign created & enrolled ${payload.enrollment.enrolled} leads!`)
+      } else {
+        toast.success("Campaign created successfully!")
+      }
+    } catch (err) {
+      console.error('Campaign creation error:', err)
+      toast.error(err.message || 'Failed to create campaign')
+      throw err // Re-throw to prevent dialog from closing
     }
   }
 

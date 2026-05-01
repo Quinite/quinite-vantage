@@ -9,10 +9,10 @@ import { formatCurrency } from '@/lib/utils/currency'
 export default function ProjectMetrics({ project, unitConfigs = [] }) {
     if (!project) return null
 
-    const totalUnits = project.total_units || 0
-    const soldUnits = project.sold_units || 0
-    const reservedUnits = project.reserved_units || 0
-    const availableUnits = project.available_units || totalUnits - soldUnits - reservedUnits
+    const totalUnits = project.total_units || (project.units && project.units[0] ? project.units[0].count : 0) || 0
+    const soldUnits = project.sold_units || (project.sold_units_count && project.sold_units_count[0] ? project.sold_units_count[0].count : 0) || 0
+    const reservedUnits = project.reserved_units || (project.reserved_units_count && project.reserved_units_count[0] ? project.reserved_units_count[0].count : 0) || 0
+    const availableUnits = project.available_units || (totalUnits - soldUnits - reservedUnits)
 
     const occupancyRate = totalUnits > 0 ? ((soldUnits + reservedUnits) / totalUnits) * 100 : 0
     const soldRate = totalUnits > 0 ? (soldUnits / totalUnits) * 100 : 0

@@ -28,8 +28,8 @@ export class CampaignService {
             .from('campaigns')
             .select(`
                 *,
-                project:projects(id, name),
-                campaign_projects(project_id, project:projects(id, name, description, city, locality, construction_status, possession_date))
+                project:projects!campaigns_project_id_fkey(id, name),
+                campaign_projects(project_id, project:projects(id, name, description, city, locality, project_status, possession_date))
             `, { count: 'exact' })
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
@@ -83,8 +83,8 @@ export class CampaignService {
             .from('campaigns')
             .select(`
                 *,
-                project:projects(id, name),
-                campaign_projects(project_id, project:projects(id, name, description, city, locality, construction_status, possession_date)),
+                project:projects!campaigns_project_id_fkey(id, name),
+                campaign_projects(project_id, project:projects(id, name, description, city, locality, project_status, possession_date)),
                 call_logs(id, call_status, duration, transferred)
             `)
             .eq('id', campaignId)
@@ -322,20 +322,31 @@ export class CampaignService {
         const alreadyEnrolled = toEnroll.length - newlyInserted.length
 
         if (enrolled > 0) {
+            // Update timestamp
             await adminClient
                 .from('campaigns')
-                .update({ total_enrolled: adminClient.rpc ? undefined : undefined, updated_at: new Date().toISOString() })
+                .update({ updated_at: new Date().toISOString() })
                 .eq('id', campaignId)
-            // Increment total_enrolled
-            await adminClient.rpc('increment_campaign_total_enrolled', { p_campaign_id: campaignId, p_amount: enrolled })
-                .catch(() => {
-                    // Fallback if RPC doesn't exist yet: recalculate
-                    return adminClient
-                        .from('campaign_leads')
-                        .select('id', { count: 'exact', head: true })
-                        .eq('campaign_id', campaignId)
-                        .then(({ count }) => adminClient.from('campaigns').update({ total_enrolled: count || 0 }).eq('id', campaignId))
+
+            // Increment total_enrolled via RPC or fallback to full recount
+            try {
+                const { error: rpcError } = await adminClient.rpc('increment_campaign_total_enrolled', { 
+                    p_campaign_id: campaignId, 
+                    p_amount: enrolled 
                 })
+                if (rpcError) throw rpcError
+            } catch (err) {
+                // Fallback: Recalculate total enrolled count from campaign_leads
+                const { count } = await adminClient
+                    .from('campaign_leads')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('campaign_id', campaignId)
+
+                await adminClient
+                    .from('campaigns')
+                    .update({ total_enrolled: count || 0 })
+                    .eq('id', campaignId)
+            }
         }
 
         return { enrolled, skipped, skip_details: skipDetails, already_enrolled: alreadyEnrolled }

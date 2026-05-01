@@ -73,7 +73,7 @@ export default function InventoryOverviewPage() {
 
     // ── unit type breakdown ─────────────────────────────────────────────────
     const byType = units.reduce((acc, u) => {
-        const t = u.type || 'Unknown'
+        const t = u.config?.config_name || u.config?.property_type || (u.bedrooms ? `${u.bedrooms} BHK` : 'Unknown')
         if (!acc[t]) acc[t] = { total: 0, available: 0, sold: 0, reserved: 0 }
         acc[t].total++
         if (u.status === 'available') acc[t].available++
@@ -90,7 +90,7 @@ export default function InventoryOverviewPage() {
             const pAvail = pu.filter(u => u.status === 'available').length
             const pSold  = pu.filter(u => u.status === 'sold').length
             const pRes   = pu.filter(u => u.status === 'reserved').length
-            const pTotal = p.total_units || pu.length
+            const pTotal = p.total_units || (p.units?.[0]?.count) || pu.length
             const salesPct = pct(pSold + pRes, pTotal)
             return { ...p, pAvail, pSold, pRes, pTotal, salesPct }
         })

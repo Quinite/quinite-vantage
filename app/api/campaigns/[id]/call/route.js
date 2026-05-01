@@ -44,7 +44,7 @@ export async function POST(request, { params }) {
         // Get the campaign
         const { data: campaign } = await adminClient
             .from('campaigns')
-            .select('*, project:projects(id, name)')
+            .select('*, project:projects!campaigns_project_id_fkey(id, name)')
             .eq('id', id)
             .eq('organization_id', profile.organization_id)
             .single()

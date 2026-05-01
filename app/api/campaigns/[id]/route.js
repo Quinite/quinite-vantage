@@ -41,7 +41,7 @@ export async function GET(request, { params }) {
 
         const { data, error } = await admin
             .from('campaigns')
-            .select('*, project:projects(id, name), campaign_projects(project_id, project:projects(id, name, description, city, locality, construction_status, possession_date))')
+            .select('*, project:projects!campaigns_project_id_fkey(id, name), campaign_projects(project_id, project:projects(id, name, description, city, locality, project_status, possession_date))')
             .eq('id', id)
             .eq('organization_id', profile.organization_id)
             .single()

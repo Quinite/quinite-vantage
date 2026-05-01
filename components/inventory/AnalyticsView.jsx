@@ -122,7 +122,7 @@ export function AnalyticsView({ units = [], projects = [] }) {
 
     // Unit type breakdown with conversion
     const byType = units.reduce((acc, u) => {
-        const t = u.type || 'Unknown'
+        const t = u.config?.config_name || u.config?.property_type || (u.bedrooms ? `${u.bedrooms} BHK` : 'Unknown')
         if (!acc[t]) acc[t] = { total: 0, sold: 0, reserved: 0, available: 0, value: 0 }
         acc[t].total++
         acc[t].value += price(u)

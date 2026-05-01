@@ -16,7 +16,8 @@ export class ProjectService {
             .select(`
                 *,
                 leads:leads(count),
-                campaigns:campaigns(count)
+                campaigns:campaigns!campaigns_project_id_fkey(count),
+                units:units(count)
             `, { count: 'exact' })
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
@@ -60,7 +61,7 @@ export class ProjectService {
             .select(`
                 *,
                 leads:leads(count),
-                campaigns:campaigns(count),
+                campaigns:campaigns!campaigns_project_id_fkey(count),
                 units:units(count),
                 unit_configs:unit_configs(*)
             `)

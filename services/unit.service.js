@@ -41,6 +41,8 @@ export class UnitService {
 
         if (filters.limit) {
             query = query.limit(filters.limit)
+        } else {
+            query = query.limit(5000)
         }
 
         const { data: units, error } = await query
