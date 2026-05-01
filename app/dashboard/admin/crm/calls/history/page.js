@@ -11,7 +11,7 @@ import {
     Phone, Search, Clock, PhoneForwarded, PhoneOff,
     MessageSquare, MessageCircle, Flag, TrendingUp, TrendingDown,
     Minus, Lock, ChevronDown, ChevronUp, Zap,
-    Building2, Calendar, CheckCircle2, X
+    Building2, Calendar, CheckCircle2, X, PlayCircle
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@/contexts/PermissionContext'
@@ -100,6 +100,7 @@ function TranscriptPanel({ transcript, onClose }) {
 // ─── Call row ─────────────────────────────────────────────────────────────────
 
 function CallRow({ call, isSelected, onSelect, onWhatsApp }) {
+    const [showRecording, setShowRecording] = useState(false)
     const statusKey = call.call_status || 'unknown'
     const sm = STATUS_META[statusKey] || STATUS_META.unknown
     const sent = sentimentMeta(call.sentiment_score != null ? Number(call.sentiment_score) : null)
@@ -200,6 +201,17 @@ function CallRow({ call, isSelected, onSelect, onWhatsApp }) {
 
                     {/* actions */}
                     <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                        {call.recording_url && (
+                            <Button
+                                variant="ghost" size="sm"
+                                onClick={() => setShowRecording(v => !v)}
+                                className="h-7 px-2 text-muted-foreground hover:text-blue-600"
+                                title={showRecording ? 'Hide recording' : 'Play recording'}
+                            >
+                                <PlayCircle className="w-3.5 h-3.5" />
+                                {showRecording ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
+                            </Button>
+                        )}
                         {call.conversation_transcript && (
                             <Button
                                 variant="ghost" size="sm"
@@ -223,6 +235,16 @@ function CallRow({ call, isSelected, onSelect, onWhatsApp }) {
                         )}
                     </div>
                 </div>
+
+                {/* recording player */}
+                {showRecording && call.recording_url && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                        <p className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                            <PlayCircle className="w-3.5 h-3.5" /> Call Recording
+                        </p>
+                        <audio controls src={call.recording_url} className="w-full h-9 rounded-lg" />
+                    </div>
+                )}
 
                 {/* transcript */}
                 {isSelected && call.conversation_transcript && (
@@ -349,7 +371,7 @@ export default function CallHistory() {
                 id, call_status, duration, call_cost, created_at,
                 conversation_transcript, sentiment_score,
                 interest_level, summary, ai_metadata, transferred,
-                disconnect_reason, callee_number,
+                disconnect_reason, callee_number, recording_url,
                 lead:leads!call_logs_lead_id_fkey(id, name, phone, assigned_to),
                 campaign:campaigns(id, name)
             `)
