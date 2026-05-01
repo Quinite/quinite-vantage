@@ -63,17 +63,25 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       }, { status: 403 })
     }
 
-    const { project_id, name, description, start_date, end_date, time_start, time_end, metadata, ai_script, call_settings, credit_cap, dnd_compliance, auto_enroll, lead_ids } = body
+    const { project_id, project_ids, name, description, start_date, end_date, time_start, time_end, metadata, ai_script, call_settings, credit_cap, dnd_compliance, auto_enroll, lead_ids } = body
 
-    if (!project_id || !start_date || !end_date || !time_start || !time_end) {
+    // Support both legacy project_id (single) and new project_ids (array)
+    const canonicalIds = (Array.isArray(project_ids) && project_ids.length > 0)
+      ? project_ids
+      : (project_id ? [project_id] : [])
+
+    if (!canonicalIds.length || !start_date || !end_date || !time_start || !time_end) {
       return corsJSON({
-        error: 'project_id, start_date, end_date, time_start and time_end are required'
+        error: 'At least one project, start_date, end_date, time_start and time_end are required'
       }, { status: 400 })
     }
 
+    const primaryProjectId = canonicalIds[0]
+
     const payload = {
       organization_id: profile.organization_id,
-      project_id,
+      project_id: primaryProjectId,
+      project_ids: canonicalIds,
       name: name || 'Call Campaign',
       description: description || null,
       start_date,
@@ -98,13 +106,17 @@ export const POST = withPermission('create_campaigns', async (request, context) 
 
     if (error) throw error
 
+    // Populate junction table
+    const cpRows = canonicalIds.map(pid => ({ campaign_id: campaign.id, project_id: pid }))
+    await admin.from('campaign_projects').insert(cpRows)
+
     let enrollmentSummary = null
     if (auto_enroll) {
       enrollmentSummary = await CampaignService.enrollLeads(
           campaign.id,
           profile.organization_id,
           user.id,
-          { filters: { project_id } }
+          { filters: { project_ids: canonicalIds } }
       )
     } else if (lead_ids && lead_ids.length > 0) {
       enrollmentSummary = await CampaignService.enrollLeads(
@@ -123,7 +135,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
         'campaign.create',
         'campaign',
         campaign.id,
-        { project_id }
+        { project_ids: canonicalIds }
       )
     } catch (e) {
       console.warn('Audit log failed:', e.message)

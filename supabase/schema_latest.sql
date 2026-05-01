@@ -199,11 +199,20 @@ CREATE TABLE public.campaigns (
   paused_at timestamp with time zone,
   completed_at timestamp with time zone,
   total_enrolled integer NOT NULL DEFAULT 0,
+  project_ids uuid[],
   CONSTRAINT campaigns_pkey PRIMARY KEY (id),
   CONSTRAINT campaigns_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT campaigns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
   CONSTRAINT campaigns_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT campaigns_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.campaign_projects (
+  campaign_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT campaign_projects_pkey PRIMARY KEY (campaign_id, project_id),
+  CONSTRAINT campaign_projects_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id) ON DELETE CASCADE,
+  CONSTRAINT campaign_projects_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE
 );
 CREATE TABLE public.country_pricing (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

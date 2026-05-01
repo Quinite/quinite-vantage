@@ -28,7 +28,8 @@ export class CampaignService {
             .from('campaigns')
             .select(`
                 *,
-                project:projects(id, name)
+                project:projects(id, name),
+                campaign_projects(project_id, project:projects(id, name, description, city, locality, construction_status, possession_date))
             `, { count: 'exact' })
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
@@ -40,7 +41,7 @@ export class CampaignService {
         }
 
         if (filters.projectId) {
-            query = query.eq('project_id', filters.projectId)
+            query = query.contains('project_ids', [filters.projectId])
         }
 
         // Pagination
@@ -55,8 +56,14 @@ export class CampaignService {
 
         if (error) throw error
 
+        const normalized = (campaigns || []).map(c => ({
+            ...c,
+            projects: c.campaign_projects?.map(cp => cp.project).filter(Boolean)
+                || (c.project ? [c.project] : [])
+        }))
+
         return {
-            campaigns: campaigns || [],
+            campaigns: normalized,
             metadata: {
                 total: count || 0,
                 page,
@@ -77,6 +84,7 @@ export class CampaignService {
             .select(`
                 *,
                 project:projects(id, name),
+                campaign_projects(project_id, project:projects(id, name, description, city, locality, construction_status, possession_date)),
                 call_logs(id, call_status, duration, transferred)
             `)
             .eq('id', campaignId)
@@ -85,7 +93,11 @@ export class CampaignService {
 
         if (error) throw error
 
-        return campaign
+        return {
+            ...campaign,
+            projects: campaign.campaign_projects?.map(cp => cp.project).filter(Boolean)
+                || (campaign.project ? [campaign.project] : [])
+        }
     }
 
     /**
@@ -243,7 +255,8 @@ export class CampaignService {
             if (filters.assigned_to) leadsQuery = leadsQuery.eq('assigned_to', filters.assigned_to)
             if (filters.score_min != null) leadsQuery = leadsQuery.gte('score', filters.score_min)
             if (filters.score_max != null) leadsQuery = leadsQuery.lte('score', filters.score_max)
-            if (filters.project_id) leadsQuery = leadsQuery.eq('project_id', filters.project_id)
+            if (filters.project_ids?.length > 0) leadsQuery = leadsQuery.in('project_id', filters.project_ids)
+            else if (filters.project_id) leadsQuery = leadsQuery.eq('project_id', filters.project_id)
         } else {
             throw new Error('Must provide lead_ids or filters')
         }

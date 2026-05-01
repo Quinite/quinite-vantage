@@ -14,7 +14,7 @@ function handleCORS(response) {
 }
 
 // Fields that cannot be changed once a campaign is running/paused
-const IMMUTABLE_WHEN_RUNNING = new Set(['project_id', 'start_date', 'end_date'])
+const IMMUTABLE_WHEN_RUNNING = new Set(['project_id', 'project_ids', 'start_date', 'end_date'])
 
 // Fields that are allowed to change while running/paused
 const ALLOWED_WHEN_RUNNING = new Set([
@@ -41,14 +41,20 @@ export async function GET(request, { params }) {
 
         const { data, error } = await admin
             .from('campaigns')
-            .select('*, project:projects(id, name)')
+            .select('*, project:projects(id, name), campaign_projects(project_id, project:projects(id, name, description, city, locality, construction_status, possession_date))')
             .eq('id', id)
             .eq('organization_id', profile.organization_id)
             .single()
 
         if (error || !data) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
 
-        return handleCORS(NextResponse.json({ campaign: data }))
+        const campaign = {
+            ...data,
+            projects: data.campaign_projects?.map(cp => cp.project).filter(Boolean)
+                || (data.project ? [data.project] : [])
+        }
+
+        return handleCORS(NextResponse.json({ campaign }))
     } catch (e) {
         console.error('[GET /campaigns/[id]]', e)
         return handleCORS(NextResponse.json({ error: e.message }, { status: 500 }))
@@ -103,6 +109,13 @@ export const PUT = withAuth(async (request, context) => {
             }
 
             body = filteredBody
+        }
+
+        // Sync junction table if project_ids is being updated
+        if (body.project_ids && Array.isArray(body.project_ids) && body.project_ids.length > 0) {
+            body.project_id = body.project_ids[0]
+            await admin.from('campaign_projects').delete().eq('campaign_id', campaignId)
+            await admin.from('campaign_projects').insert(body.project_ids.map(pid => ({ campaign_id: campaignId, project_id: pid })))
         }
 
         const campaign = await CampaignService.updateCampaign(campaignId, body, profile.organization_id)

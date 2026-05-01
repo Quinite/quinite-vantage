@@ -28,6 +28,13 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from "@/components/ui/skeleton"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { MultiSelect } from "@/components/ui/multi-select"
+import {
   Loader2,
   Megaphone,
   Calendar,
@@ -56,7 +63,8 @@ import {
   Sparkles,
   ChevronRight,
   Info,
-  X
+  X,
+  Search
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
@@ -77,13 +85,17 @@ function isValidPhone(raw) { return !!normalizePhone(raw) }
 const WON_LOST = ['won', 'lost']
 const CLOSED_DEAL = ['reserved', 'won']
 
+function getEligibility(lead) {
+  if (lead.archived_at) return { eligible: false, reason: 'Lead is archived' }
+  if (lead.do_not_call) return { eligible: false, reason: 'Do Not Call (DNC) enabled' }
+  if (!isValidPhone(lead.phone) && !isValidPhone(lead.mobile)) return { eligible: false, reason: 'No valid phone number' }
+  if (lead.stage && WON_LOST.includes(lead.stage.name?.toLowerCase())) return { eligible: false, reason: `Lead in '${lead.stage.name}' stage` }
+  if (lead.deals?.some(d => CLOSED_DEAL.includes(d.status))) return { eligible: false, reason: 'Has closed deals' }
+  return { eligible: true }
+}
+
 function isEligibleLead(lead) {
-  if (lead.archived_at) return false
-  if (lead.do_not_call) return false
-  if (!isValidPhone(lead.phone) && !isValidPhone(lead.mobile)) return false
-  if (lead.stage && WON_LOST.includes(lead.stage.name?.toLowerCase())) return false
-  if (lead.deals?.some(d => CLOSED_DEAL.includes(d.status))) return false
-  return true
+  return getEligibility(lead).eligible
 }
 
 // ─── Status Badge ───────────────────────────────────────────────────────────
@@ -213,10 +225,14 @@ function CampaignCard({
           <h3 className="text-base font-semibold text-foreground mb-1 truncate hover:text-primary transition-colors">
             {campaign.name}
           </h3>
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <Building2 className="w-3 h-3 flex-shrink-0 opacity-70" />
-            <span className="truncate">{getProjectName(campaign.project_id)}</span>
-          </p>
+          <div className="flex items-start gap-1 flex-wrap mt-0.5">
+            <Building2 className="w-3 h-3 flex-shrink-0 opacity-70 mt-0.5" />
+            {(campaign.projects?.length > 0 ? campaign.projects : [{ id: campaign.project_id, name: getProjectName(campaign.project_id) }]).map(p => (
+              <span key={p.id} className="text-[10px] bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground leading-none">
+                {p.name}
+              </span>
+            ))}
+          </div>
         </div>
 
         {campaign.description && (
@@ -361,10 +377,10 @@ function CampaignCard({
 }
 
 // ─── Create Campaign Dialog ────────────────────────────────────────────────
-function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
+function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, onCreate }) {
   const today = getTodayString()
 
-  const [projectId, setProjectId] = useState('')
+  const [selectedProjectIds, setSelectedProjectIds] = useState([])
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -392,15 +408,25 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
       .catch(() => setCreditBalance(null))
   }, [open])
 
+  function toggleProject(id) {
+    setSelectedProjectIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   useEffect(() => {
-    if (!projectId) { setProjectLeads([]); return }
+    if (!selectedProjectIds.length) { setProjectLeads([]); return }
     setLoadingLeads(true)
-    fetch(`/api/leads?project_id=${projectId}&limit=200&view_mode=active`)
-      .then(r => r.json())
-      .then(d => setProjectLeads(d.leads || []))
-      .catch(() => setProjectLeads([]))
+    Promise.all(
+      selectedProjectIds.map(pid =>
+        fetch(`/api/leads?project_id=${pid}&limit=200&view_mode=active`)
+          .then(r => r.json()).then(d => d.leads || [])
+      )
+    ).then(results => {
+      const seen = new Set()
+      const merged = results.flat().filter(l => { if (seen.has(l.id)) return false; seen.add(l.id); return true })
+      setProjectLeads(merged)
+    }).catch(() => setProjectLeads([]))
       .finally(() => setLoadingLeads(false))
-  }, [projectId])
+  }, [selectedProjectIds])
 
   const eligibleLeads = useMemo(() => projectLeads.filter(isEligibleLead), [projectLeads])
   const filteredLeads = useMemo(() => {
@@ -420,7 +446,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
 
   const errors_ = useMemo(() => {
     const e = {}
-    if (!projectId) e.projectId = 'Project is required'
+    if (!selectedProjectIds.length) e.projectIds = 'Select at least one project'
     if (!name.trim()) e.name = 'Campaign name is required'
     if (!startDate) e.startDate = 'Start date is required'
     if (!endDate) e.endDate = 'End date is required'
@@ -429,7 +455,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
     if (!timeEnd) e.timeEnd = 'End time is required'
     if (timeStart && timeEnd && timeEnd <= timeStart) e.timeEnd = 'End time must be after start time'
     return e
-  }, [projectId, name, startDate, endDate, timeStart, timeEnd])
+  }, [selectedProjectIds, name, startDate, endDate, timeStart, timeEnd])
 
   const isValid = Object.keys(errors_).length === 0
   const fieldErr = (key) => touched && errors_[key] ? errors_[key] : null
@@ -438,7 +464,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
 
   function handleClose() {
     if (creating) return
-    setProjectId(''); setName(''); setDescription(''); setStartDate(''); setEndDate('')
+    setSelectedProjectIds([]); setName(''); setDescription(''); setStartDate(''); setEndDate('')
     setTimeStart('09:00'); setTimeEnd('21:00'); setDndCompliance(true); setTouched(false)
     setCreditCap(''); setAiScript(''); setEnrollMode('auto'); setSelectedLeads(new Set()); setLeadSearch('')
     setCallSettings({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
@@ -451,7 +477,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
     setCreating(true)
     try {
       await onCreate({
-        projectId, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance,
+        projectIds: selectedProjectIds, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance,
         creditCap: creditCap !== '' ? parseFloat(creditCap) : null,
         aiScript: aiScript.trim() || null,
         callSettings: { ...callSettings, max_duration: parseInt(callSettings.max_duration), silence_timeout: parseInt(callSettings.silence_timeout) },
@@ -493,21 +519,20 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
           </Button>
         </div>
 
-        <div className="px-6 py-4 space-y-5">
+        <div className="px-6 py-0 space-y-4">
 
           {/* ── Basic Info ── */}
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Project <span className="text-destructive">*</span></Label>
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger className={`${selectSm} w-full ${fieldErr('projectId') ? 'border-destructive' : ''}`}>
-                  <SelectValue placeholder="Select a project…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {fieldErr('projectId') && <p className="text-xs text-destructive">{fieldErr('projectId')}</p>}
+              <Label className="text-xs font-medium text-muted-foreground">Projects <span className="text-destructive">*</span></Label>
+              <MultiSelect
+                options={projects.map(p => ({ value: p.id, label: p.name }))}
+                selected={selectedProjectIds}
+                onChange={setSelectedProjectIds}
+                placeholder={loadingProjects ? "Loading projects..." : "Select projects..."}
+                className={fieldErr('projectIds') ? 'border-destructive' : ''}
+              />
+              {fieldErr('projectIds') && <p className="text-xs text-destructive">{fieldErr('projectIds')}</p>}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium text-muted-foreground">Campaign Name <span className="text-destructive">*</span></Label>
@@ -530,7 +555,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
           </div>
 
           {/* ── Schedule ── */}
-          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+          <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 space-y-3 shadow-sm">
             <div className="flex items-center gap-1.5 mb-1">
               <Calendar className="w-3.5 h-3.5 text-blue-500" />
               <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Schedule</span>
@@ -576,7 +601,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
           </div>
 
           {/* ── Call Settings ── */}
-          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+          <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 space-y-3 shadow-sm">
             <div className="flex items-center gap-1.5 mb-1">
               <SlidersHorizontal className="w-3.5 h-3.5 text-violet-500" />
               <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Call Settings</span>
@@ -682,124 +707,214 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
           </div>
 
           {/* ── AI Instructions ── */}
-          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
-            <div className="flex items-center gap-1.5 mb-1">
+          <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 space-y-4 shadow-sm">
+            <div className="flex items-center gap-1.5 mb-2">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span className="text-xs font-semibold text-foreground uppercase tracking-wide">AI Instructions</span>
               <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Optional</Badge>
             </div>
             <Textarea
-              className="text-sm bg-white dark:bg-zinc-900 resize-none"
+              className="text-sm bg-white dark:bg-zinc-900 resize-none placeholder:text-xs"
               placeholder="e.g., Focus on 2BHK units. Mention the monsoon offer — 5% off for bookings this week. Always ask for a site visit."
               value={aiScript} onChange={e => setAiScript(e.target.value)} rows={2}
             />
-            <p className="text-[11px] text-muted-foreground">Appended to the auto-generated AI system prompt.</p>
+            <p className="text-[11px] text-gray-400 !mt-[0.3rem]">Appended to the auto-generated AI system prompt.</p>
           </div>
 
           {/* ── Lead Enrollment ── */}
-          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Users className="w-3.5 h-3.5 text-green-600" />
-              <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Lead Enrollment</span>
+          <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-green-500/10 rounded-lg">
+                  <Users className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-foreground">Lead Enrollment</h4>
+                  <p className="text-[11px] text-muted-foreground">Select which leads to include in this campaign</p>
+                </div>
+              </div>
+              {selectedProjectIds.length > 0 && !loadingLeads && (
+                <Badge variant="outline" className="bg-background text-[10px] font-bold px-2 py-0.5">
+                  {enrollMode === 'auto' ? eligibleLeads.length : selectedLeads.size} Total
+                </Badge>
+              )}
             </div>
 
-            {/* 2-option toggle */}
-            <div className="flex gap-1 p-1 bg-background rounded-md border border-border">
+            {/* 2-option toggle (Segmented Control) */}
+            <div className="flex p-0.5 bg-background rounded-xl border border-border shadow-sm">
               {[
-                { key: 'auto', label: 'Auto — All Eligible' },
-                { key: 'manual', label: 'Pick Manually' },
+                { key: 'auto', label: 'Automatic', sub: 'All eligible leads' },
+                { key: 'manual', label: 'Manual', sub: 'Pick specific leads' },
               ].map(m => (
                 <button key={m.key} type="button"
-                  disabled={!projectId}
+                  disabled={!selectedProjectIds.length}
                   onClick={() => setEnrollMode(m.key)}
-                  className={`flex-1 text-xs py-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium
-                    ${enrollMode === m.key ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                  className={`flex-1 flex flex-col items-center py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed
+                    ${enrollMode === m.key 
+                      ? 'bg-primary text-primary-foreground shadow-md transform scale-[1.01]' 
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                 >
-                  {m.label}
+                  <span className="text-xs font-bold">{m.label}</span>
+                  <span className={`text-[9px] ${enrollMode === m.key ? 'text-primary-foreground/80' : 'text-muted-foreground/70'}`}>{m.sub}</span>
                 </button>
               ))}
             </div>
 
-            {!projectId && (
-              <p className="text-xs text-muted-foreground text-center py-1">Select a project to manage lead enrollment</p>
+            {!selectedProjectIds.length && (
+              <div className="flex flex-col items-center justify-center py-8 text-center bg-background/50 rounded-lg border border-dashed border-border">
+                <Building2 className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                <p className="text-xs text-muted-foreground px-4">Select at least one project first to see available leads</p>
+              </div>
             )}
 
             {/* Auto preview */}
-            {projectId && enrollMode === 'auto' && (
-              <div className="rounded-md border border-border bg-background overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border/60">
-                  <span className="text-xs text-muted-foreground">Eligible leads</span>
+            {selectedProjectIds.length > 0 && enrollMode === 'auto' && (
+              <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm">
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/40 border-b border-border/60">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                    <span className="text-xs font-bold text-foreground">Enrolling Automatically</span>
+                  </div>
                   {loadingLeads
-                    ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" />Loading…</span>
-                    : <span className="text-xs font-semibold text-foreground">{eligibleLeads.length} will enroll</span>
+                    ? <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" />Syncing…</span>
+                    : <span className="text-[10px] font-bold bg-green-500/10 text-green-700 px-2 py-0.5 rounded-full">{eligibleLeads.length} Leads</span>
                   }
                 </div>
-                <div className="max-h-40 overflow-y-auto divide-y divide-border/40">
+                <div className="max-h-[250px] overflow-y-auto divide-y divide-border/40 scrollbar-thin">
                   {loadingLeads
-                    ? <div className="p-3 space-y-1.5">{[1,2,3].map(i => <Skeleton key={i} className="h-6 w-full" />)}</div>
+                    ? <div className="p-3 space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
                     : eligibleLeads.length === 0
-                      ? <p className="text-xs text-muted-foreground text-center py-5">No eligible leads in this project</p>
+                      ? <div className="flex flex-col items-center justify-center py-8 opacity-60">
+                          <Users className="w-8 h-8 mb-2 text-muted-foreground" />
+                          <p className="text-xs font-medium">No eligible leads found</p>
+                        </div>
                       : eligibleLeads.map(lead => (
-                          <div key={lead.id} className="flex items-center gap-2.5 px-3 py-1.5">
-                            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                              <span className="text-[9px] font-bold text-primary">{lead.name?.[0]?.toUpperCase()}</span>
-                            </div>
-                            <span className="text-xs text-foreground flex-1 truncate">{lead.name}</span>
-                            <span className="text-[11px] text-muted-foreground shrink-0">{lead.phone || lead.mobile}</span>
-                            {lead.stage && (
-                              <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 h-4" style={{ borderColor: lead.stage.color, color: lead.stage.color }}>
-                                {lead.stage.name}
-                              </Badge>
-                            )}
+                        <div key={lead.id} className="flex items-center gap-3 px-4 py-2 hover:bg-muted/20 transition-colors group">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center shrink-0 border border-primary/10 group-hover:scale-105 transition-transform">
+                            <span className="text-[11px] font-bold text-primary">{lead.name?.[0]?.toUpperCase()}</span>
                           </div>
-                        ))
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-foreground truncate">{lead.name}</span>
+                              {lead.interest_level && (
+                                <div className={`w-1.5 h-1.5 rounded-full ${
+                                  lead.interest_level.toLowerCase() === 'hot' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 
+                                  lead.interest_level.toLowerCase() === 'warm' ? 'bg-orange-400' : 'bg-blue-400'
+                                }`} title={`Interest: ${lead.interest_level}`} />
+                              )}
+                              {lead.source && (
+                                <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 uppercase tracking-tighter">
+                                  {lead.source}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] text-muted-foreground font-medium">{lead.phone || lead.mobile}</span>
+                              <span className="text-[10px] text-muted-foreground/40">•</span>
+                              <span className="text-[10px] text-muted-foreground">{lead.preferred_location || lead.mailing_city || 'No Loc'}</span>
+                              {(lead.budget_range || lead.max_budget) && (
+                                <>
+                                  <span className="text-[10px] text-muted-foreground/40">•</span>
+                                  <span className="text-[10px] text-green-600 font-bold">{lead.budget_range || `₹${lead.max_budget}`}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {lead.stage && (
+                            <Badge variant="outline" className="text-[9px] px-2 py-0 shrink-0 h-5 font-bold border-2" style={{ borderColor: lead.stage.color + '40', color: lead.stage.color, backgroundColor: lead.stage.color + '08' }}>
+                              {lead.stage.name}
+                            </Badge>
+                          )}
+                        </div>
+                      ))
                   }
                 </div>
                 {!loadingLeads && projectLeads.length > eligibleLeads.length && (
-                  <p className="text-[11px] text-muted-foreground px-3 py-1.5 border-t border-border/40 bg-muted/20">
-                    {projectLeads.length - eligibleLeads.length} skipped (Won/Lost, closed deal, no phone, DNC)
-                  </p>
+                  <div className="px-4 py-2 bg-amber-50/50 border-t border-amber-100 flex items-center gap-2">
+                    <Info className="w-3 h-3 text-amber-600" />
+                    <p className="text-[10px] text-amber-700 font-medium">
+                      {projectLeads.length - eligibleLeads.length} leads excluded (Closed, DNC, or missing phone)
+                    </p>
+                  </div>
                 )}
               </div>
             )}
 
             {/* Manual selection */}
-            {projectId && enrollMode === 'manual' && (
-              <div className="rounded-md border border-border bg-background overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border/60">
-                  <Input placeholder="Search leads…"
-                    className="h-6 text-xs border-0 bg-transparent p-0 focus-visible:ring-0 flex-1 shadow-none"
-                    value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
+            {selectedProjectIds.length > 0 && enrollMode === 'manual' && (
+              <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm">
+                <div className="flex items-center gap-3 px-4 py-2 bg-muted/40 border-b border-border/60">
+                  <div className="flex items-center gap-2 flex-1">
+                    <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Input placeholder="Search by name or phone…"
+                      className="h-6 text-xs border-0 bg-transparent p-0 focus-visible:ring-0 shadow-none"
+                      value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
+                  </div>
                   <button type="button" onClick={toggleAllVisible}
-                    className="text-[11px] text-primary font-medium whitespace-nowrap hover:underline shrink-0">
+                    className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold hover:bg-primary/20 transition-colors">
                     {filteredLeads.filter(isEligibleLead).every(l => selectedLeads.has(l.id)) && filteredLeads.filter(isEligibleLead).length > 0 ? 'Deselect all' : 'Select all'}
                   </button>
                 </div>
-                <div className="max-h-48 overflow-y-auto divide-y divide-border/40">
+                <div className="max-h-[250px] overflow-y-auto divide-y divide-border/40 scrollbar-thin">
                   {loadingLeads
-                    ? <div className="p-3 space-y-1.5">{[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
+                    ? <div className="p-3 space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
                     : filteredLeads.length === 0
-                      ? <p className="text-xs text-muted-foreground text-center py-5">No leads found</p>
+                      ? <div className="flex flex-col items-center justify-center py-8 opacity-60">
+                          <Search className="w-8 h-8 mb-2 text-muted-foreground" />
+                          <p className="text-xs font-medium">No leads match your search</p>
+                        </div>
                       : filteredLeads.map(lead => {
-                          const eligible = isEligibleLead(lead)
+                          const { eligible, reason } = getEligibility(lead)
                           const checked = selectedLeads.has(lead.id)
                           return (
                             <label key={lead.id}
-                              className={`flex items-center gap-2.5 px-3 py-2 transition-colors
-                                ${eligible ? 'cursor-pointer hover:bg-muted/30' : 'opacity-40 cursor-not-allowed'}`}
+                              className={`flex items-center gap-3 px-4 py-2 transition-all group
+                                ${eligible ? 'cursor-pointer hover:bg-primary/5' : 'opacity-40 cursor-not-allowed bg-muted/10'}`}
                             >
-                              <input type="checkbox" checked={checked} disabled={!eligible}
-                                onChange={() => eligible && toggleLead(lead.id)}
-                                className="rounded accent-primary shrink-0 w-3.5 h-3.5" />
-                              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                <span className="text-[9px] font-semibold text-muted-foreground">{lead.name?.[0]?.toUpperCase()}</span>
+                              <div className="relative flex items-center">
+                                <input type="checkbox" checked={checked} disabled={!eligible}
+                                  onChange={() => eligible && toggleLead(lead.id)}
+                                  className="w-4 h-4 rounded-md border-border text-primary focus:ring-primary accent-primary cursor-pointer disabled:cursor-not-allowed" />
+                              </div>
+                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 border border-border group-hover:border-primary/30 transition-colors">
+                                <span className="text-[10px] font-bold text-muted-foreground">{lead.name?.[0]?.toUpperCase()}</span>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-foreground truncate">{lead.name}</p>
-                                <p className="text-[11px] text-muted-foreground">{lead.phone || lead.mobile || 'No phone'}</p>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs font-bold truncate ${checked ? 'text-primary' : 'text-foreground'}`}>{lead.name}</span>
+                                  {lead.interest_level && (
+                                    <div className={`w-1.5 h-1.5 rounded-full ${
+                                      lead.interest_level.toLowerCase() === 'hot' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 
+                                      lead.interest_level.toLowerCase() === 'warm' ? 'bg-orange-400' : 'bg-blue-400'
+                                    }`} />
+                                  )}
+                                  {!eligible && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="text-[8px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded font-black uppercase cursor-help border border-destructive/20">Ineligible</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="bg-destructive text-destructive-foreground border-none">
+                                          <p className="text-[11px] font-bold">{reason}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] text-muted-foreground font-medium">{lead.phone || lead.mobile || 'No phone'}</span>
+                                  <span className="text-[10px] text-muted-foreground/40">•</span>
+                                  <span className="text-[10px] text-muted-foreground">{lead.preferred_location || lead.mailing_city || 'Unknown'}</span>
+                                  {(lead.budget_range || lead.max_budget) && (
+                                    <>
+                                      <span className="text-[10px] text-muted-foreground/40">•</span>
+                                      <span className="text-[10px] text-green-600 font-bold">{lead.budget_range || `₹${lead.max_budget}`}</span>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                               {lead.stage && (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0" style={{ borderColor: lead.stage.color, color: lead.stage.color }}>
+                                <Badge variant="outline" className="text-[9px] px-2 py-0 h-5 shrink-0 font-bold" style={{ borderColor: lead.stage.color + '40', color: lead.stage.color, backgroundColor: lead.stage.color + '05' }}>
                                   {lead.stage.name}
                                 </Badge>
                               )}
@@ -809,9 +924,10 @@ function CreateCampaignDialog({ open, onOpenChange, projects, onCreate }) {
                   }
                 </div>
                 {selectedLeads.size > 0 && (
-                  <p className="text-xs font-semibold text-primary px-3 py-1.5 border-t border-border/40 bg-primary/5">
-                    {selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected
-                  </p>
+                  <div className="px-4 py-2 bg-primary/10 border-t border-primary/20 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-primary">{selectedLeads.size} Leads Selected</span>
+                    <button type="button" onClick={() => setSelectedLeads(new Set())} className="text-[10px] text-muted-foreground hover:text-destructive font-medium transition-colors">Clear Selection</button>
+                  </div>
                 )}
               </div>
             )}
@@ -898,6 +1014,7 @@ export default function CampaignsPage() {
   const [statusTab, setStatusTab] = useState('active')
   const [selectedProjectId, setSelectedProjectId] = useState(() => searchParams.get('project_id') || 'all')
   const [projects, setProjects] = useState([])
+  const [loadingProjects, setLoadingProjects] = useState(false)
   const [creditBalance, setCreditBalance] = useState(null)
 
   // Map tab to status filter(s)
@@ -931,7 +1048,7 @@ export default function CampaignsPage() {
   const [campaignResults, setCampaignResults] = useState(null)
 
   // Edit form state
-  const [editProjectId, setEditProjectId] = useState('')
+  const [editProjectIds, setEditProjectIds] = useState([])
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editStartDate, setEditStartDate] = useState('')
@@ -943,6 +1060,7 @@ export default function CampaignsPage() {
   const [editCallSettings, setEditCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
 
   useEffect(() => { fetchProjectsOnly(); fetchCreditBalance() }, [])
+  useEffect(() => { if (showCreateDialog) fetchProjectsOnly() }, [showCreateDialog])
 
   // Sync filter when URL query param changes (e.g. navigating from project page)
   useEffect(() => {
@@ -962,6 +1080,7 @@ export default function CampaignsPage() {
   }
 
   async function fetchProjectsOnly() {
+    setLoadingProjects(true)
     try {
       const pRes = await fetch('/api/projects')
       const pData = await pRes.json()
@@ -969,16 +1088,18 @@ export default function CampaignsPage() {
     } catch (e) {
       console.error(e)
       toast.error("Failed to load projects")
+    } finally {
+      setLoadingProjects(false)
     }
   }
 
-  async function handleCreate({ projectId, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, creditCap, aiScript, callSettings, autoEnroll, leadIds }) {
+  async function handleCreate({ projectIds, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, creditCap, aiScript, callSettings, autoEnroll, leadIds }) {
     if (!canCreate) { toast.error("You do not have permission to create campaigns"); return }
     const res = await fetch('/api/campaigns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        project_id: projectId, name, description,
+        project_ids: projectIds, name, description,
         start_date: startDate, end_date: endDate,
         time_start: timeStart, time_end: timeEnd,
         dnd_compliance: dndCompliance,
@@ -1030,9 +1151,13 @@ export default function CampaignsPage() {
     }
   }
 
+  function toggleEditProject(id) {
+    setEditProjectIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   function openEditModal(campaign) {
     setEditingCampaign(campaign)
-    setEditProjectId(campaign.project_id || '')
+    setEditProjectIds(campaign.projects?.map(p => p.id) || (campaign.project_id ? [campaign.project_id] : []))
     setEditName(campaign.name || '')
     setEditDescription(campaign.description || '')
     setEditStartDate(campaign.start_date || '')
@@ -1053,7 +1178,7 @@ export default function CampaignsPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: editProjectId, name: editName, description: editDescription,
+          project_ids: editProjectIds, name: editName, description: editDescription,
           start_date: editStartDate, end_date: editEndDate,
           time_start: editTimeStart, time_end: editTimeEnd,
           status: editStatus,
@@ -1314,6 +1439,7 @@ export default function CampaignsPage() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         projects={projects}
+        loadingProjects={loadingProjects}
         onCreate={handleCreate}
       />
 
@@ -1351,15 +1477,13 @@ export default function CampaignsPage() {
           <div className="space-y-4 py-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <Label className="text-sm font-medium mb-1.5 block">Project *</Label>
-                <select
-                  value={editProjectId}
-                  onChange={e => setEditProjectId(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Select a project</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <Label className="text-sm font-medium mb-1.5 block">Projects *</Label>
+                <MultiSelect
+                  options={projects.map(p => ({ value: p.id, label: p.name }))}
+                  selected={editProjectIds}
+                  onChange={setEditProjectIds}
+                  placeholder={loadingProjects ? "Loading projects..." : "Select projects..."}
+                />
               </div>
               <div>
                 <Label className="text-sm font-medium mb-1.5 block">Campaign Name *</Label>

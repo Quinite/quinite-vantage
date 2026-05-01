@@ -141,7 +141,7 @@ function OverviewTab({ campaign, progress }) {
                 <CardHeader><CardTitle className="text-sm">Campaign Details</CardTitle></CardHeader>
                 <CardContent className="p-4 pt-0 grid gap-3 text-sm">
                     {[
-                        { label: 'Project', value: campaign.project?.name || '—' },
+                        { label: 'Projects', value: (campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name).join(', ') || '—' },
                         { label: 'Schedule', value: campaign.start_date && campaign.end_date ? `${campaign.start_date} – ${campaign.end_date}` : '—' },
                         { label: 'Daily Window', value: campaign.time_start && campaign.time_end ? `${campaign.time_start} – ${campaign.time_end} IST` : '—' },
                         { label: 'DND Compliance', value: campaign.dnd_compliance !== false ? 'Enabled (9am–9pm IST)' : 'Disabled' },
@@ -678,7 +678,9 @@ function SettingsTab({ campaign }) {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <Label className="text-muted-foreground">Project (locked)</Label>
-                            <div className="px-3 py-2 rounded-md border border-border/50 bg-muted/30 text-sm text-muted-foreground">{campaign.project?.name || '—'}</div>
+                            <div className="px-3 py-2 rounded-md border border-border/50 bg-muted/30 text-sm text-muted-foreground">
+                              {(campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name).join(', ') || '—'}
+                            </div>
                         </div>
                         <div className="space-y-1.5">
                             <Label className="text-muted-foreground">Date Range (locked)</Label>
@@ -843,7 +845,7 @@ export default function CampaignDetailPage() {
                                 <StatusBadge status={s} />
                             </div>
                             <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                <Building2 className="w-3 h-3" /> {campaign.project?.name || '—'}
+                                <Building2 className="w-3 h-3" /> {(campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name).join(', ') || '—'}
                             </div>
                         </div>
                     </div>
