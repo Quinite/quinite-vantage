@@ -460,9 +460,9 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
                   ));
                 })() : (
                   <div className="h-[400px] flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl bg-white/50">
-                    <Building2 className="w-16 h-16 mb-4 opacity-10" />
-                    <p className="text-lg font-black uppercase tracking-wider text-slate-300">No towers defined</p>
-                    <Button onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="mt-6 bg-slate-900 text-white rounded-xl h-12 px-8 font-bold">Create Tower</Button>
+                    <Building2 className="w-12 h-12 mb-4 opacity-10" />
+                    <p className="text-md font-bold uppercase tracking-wider text-slate-300">No towers defined</p>
+                    <Button onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="mt-4 bg-slate-900 text-white rounded-xl h-10 px-6 font-bold">Create Tower</Button>
                   </div>
                 )}
               </div>

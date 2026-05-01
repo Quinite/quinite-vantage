@@ -21,8 +21,8 @@ export async function POST(request, { params }) {
             .from('call_logs')
             .update({
                 call_status: 'failed',
-                end_time: new Date().toISOString(),
-                outcome: 'force_cancelled_by_user'
+                ended_at: new Date().toISOString(),
+                disconnect_reason: 'force_cancelled'
             })
             .eq('id', id)
 
