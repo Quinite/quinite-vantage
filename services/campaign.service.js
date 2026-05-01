@@ -390,16 +390,34 @@ export class CampaignService {
             statusCounts[row.status] = (statusCounts[row.status] || 0) + 1
         }
 
-        // Apply search client-side (small result sets) or use DB if large
+        // Apply search client-side
         let rows = data || []
         if (search) {
             const s = search.toLowerCase()
             rows = rows.filter(r => r.lead?.name?.toLowerCase().includes(s) || r.lead?.phone?.includes(s))
         }
 
+        // Fetch call_queue retry info for failed leads (no FK so queried separately)
+        const failedLeadIds = rows.filter(r => r.status === 'failed').map(r => r.lead_id)
+        if (failedLeadIds.length > 0) {
+            const { data: queueRows } = await adminClient
+                .from('call_queue')
+                .select('lead_id, attempt_count, next_retry_at')
+                .eq('campaign_id', campaignId)
+                .in('lead_id', failedLeadIds)
+            if (queueRows?.length) {
+                const queueMap = {}
+                for (const q of queueRows) queueMap[q.lead_id] = q
+                rows = rows.map(r => r.status === 'failed' ? { ...r, queue_item: queueMap[r.lead_id] || null } : r)
+            }
+        }
+
         return {
             leads: rows,
-            metadata: { total: count || 0, page, limit, status_counts: statusCounts }
+            total: count || 0,
+            hasMore: from + limit < (count || 0),
+            page,
+            status_counts: statusCounts,
         }
     }
 

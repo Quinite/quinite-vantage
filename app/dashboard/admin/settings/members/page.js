@@ -2,7 +2,7 @@
 import { Skeleton } from '@/components/ui/skeleton'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { toast } from 'sonner'
+import { toast } from 'react-hot-toast'
 import CredentialsModal from '@/components/dashboard/CredentialsModal'
 import { Pencil, Trash2, Plus, Shield, Loader2, ChevronDown, Search, ArrowUpDown, AlertCircle, Building2, User2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -560,9 +560,16 @@ function RoleSelect({ userId, currentRole, onSuccess }) {
 
 function UserModal({ user, onClose, onSuccess }) {
     const [loading, setLoading] = useState(false)
+    // Normalize phone to E.164 — PhoneInput requires a + prefix
+    const normalizePhone = (p) => {
+        if (!p) return ''
+        const trimmed = p.trim()
+        return trimmed.startsWith('+') ? trimmed : `+${trimmed}`
+    }
+
     const [formData, setFormData] = useState({
         email:    user?.email     || '',
-        phone:    user?.phone     || '',
+        phone:    normalizePhone(user?.phone),
         fullName: user?.full_name || '',
         role:     user?.role      || 'employee',
     })

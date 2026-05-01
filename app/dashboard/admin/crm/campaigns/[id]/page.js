@@ -252,7 +252,7 @@ function OverviewTab({ campaign, progress }) {
     )
 }
 
-// ─── Lead Status Tabs ──────────────────────────────────────────────────────────
+// ─── Lead Status config ────────────────────────────────────────────────────────
 const LEAD_STATUS_TABS = [
     { key: 'all', label: 'All' },
     { key: 'enrolled', label: 'Enrolled' },
@@ -264,6 +264,170 @@ const LEAD_STATUS_TABS = [
     { key: 'skipped', label: 'Skipped' },
 ]
 
+const LEAD_STATUS_STYLE = {
+    enrolled: 'bg-blue-500/10 text-blue-600 border-blue-200',
+    queued:   'bg-sky-500/10 text-sky-600 border-sky-200',
+    calling:  'bg-amber-500/10 text-amber-600 border-amber-200',
+    called:   'bg-emerald-500/10 text-emerald-600 border-emerald-200',
+    failed:   'bg-red-500/10 text-red-600 border-red-200',
+    opted_out:'bg-orange-500/10 text-orange-600 border-orange-200',
+    skipped:  'bg-zinc-400/10 text-zinc-500 border-zinc-200',
+    archived: 'bg-gray-300/10 text-gray-400 border-gray-200',
+}
+
+function LeadStatusBadge({ status, skipReason }) {
+    return (
+        <Badge variant="outline" className={`${LEAD_STATUS_STYLE[status] || LEAD_STATUS_STYLE.skipped} border text-[10px] px-2 py-0.5 capitalize`} title={skipReason || undefined}>
+            {status?.replace('_', ' ')}
+        </Badge>
+    )
+}
+
+// ─── Retry countdown ───────────────────────────────────────────────────────────
+function useRetryCountdown(nextRetryAt) {
+    const [label, setLabel] = useState('')
+
+    useEffect(() => {
+        function compute() {
+            if (!nextRetryAt) return ''
+            const diff = new Date(nextRetryAt) - Date.now()
+            if (diff <= 0) return 'Retrying soon'
+            const totalMins = Math.ceil(diff / 60000)
+            if (totalMins < 60) return `Retry in ${totalMins}m`
+            const h = Math.floor(totalMins / 60)
+            const m = totalMins % 60
+            return m > 0 ? `Retry in ${h}h ${m}m` : `Retry in ${h}h`
+        }
+        setLabel(compute())
+        const t = setInterval(() => setLabel(compute()), 60000)
+        return () => clearInterval(t)
+    }, [nextRetryAt])
+
+    return label
+}
+
+// ─── Lead Card ─────────────────────────────────────────────────────────────────
+function LeadCard({ row, selected, onSelect, onRemove, onOptOut, canModify, removeIsPending }) {
+    const MAX_ATTEMPTS = 4
+    const queueItem = Array.isArray(row.queue_item) ? row.queue_item[0] : row.queue_item
+    const attemptCount = queueItem?.attempt_count ?? null
+    const nextRetryAt = queueItem?.next_retry_at ?? null
+    const isFailed = row.status === 'failed'
+    const maxReached = isFailed && attemptCount != null && attemptCount >= MAX_ATTEMPTS
+    const retryLabel = useRetryCountdown(maxReached ? null : nextRetryAt)
+
+    const failureReason = row.call_log?.call_status
+    const sentiment = row.call_log?.sentiment_score != null ? Number(row.call_log.sentiment_score) : null
+    const sentimentLabel = sentiment == null ? null : sentiment >= 0.3 ? 'Positive' : sentiment < -0.1 ? 'Negative' : 'Neutral'
+
+    const canAction = canModify && ['enrolled', 'queued', 'calling', 'called', 'failed'].includes(row.status)
+
+    return (
+        <div className={`relative rounded-xl border bg-card flex flex-col overflow-hidden transition-shadow hover:shadow-sm ${isFailed ? 'border-red-200 dark:border-red-900/50' : 'border-border'}`}>
+            <div className="p-4 flex flex-col gap-3 flex-1">
+                {/* Top row: checkbox + name + status */}
+                <div className="flex items-start gap-3">
+                    {canModify && (
+                        <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={onSelect}
+                            className="mt-0.5 rounded shrink-0"
+                        />
+                    )}
+                    <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-foreground truncate">{row.lead?.name || '—'}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{row.lead?.phone || '—'}</div>
+                    </div>
+                    <LeadStatusBadge status={row.status} skipReason={row.skip_reason} />
+                </div>
+
+                {/* Pills row */}
+                <div className="flex flex-wrap gap-1.5">
+                    {row.lead?.interest_level && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-600 border border-violet-200 capitalize">
+                            {row.lead.interest_level}
+                        </span>
+                    )}
+                    {row.lead?.score != null && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border">
+                            Score {row.lead.score}
+                        </span>
+                    )}
+                    {sentiment != null && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                            sentiment >= 0.3 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200' :
+                            sentiment < -0.1 ? 'bg-red-500/10 text-red-600 border-red-200' :
+                            'bg-amber-500/10 text-amber-600 border-amber-200'
+                        }`}>
+                            <SentimentIcon score={sentiment} />
+                            {sentimentLabel}
+                        </span>
+                    )}
+                </div>
+
+                {/* Bottom row: last called + actions */}
+                <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                        {row.last_call_attempt_at
+                            ? `Last called ${new Date(row.last_call_attempt_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`
+                            : 'Not yet called'}
+                    </span>
+                    {canAction && (
+                        <div className="flex items-center gap-1">
+                            <Button
+                                variant="ghost" size="sm"
+                                onClick={() => onRemove(row.lead_id)}
+                                disabled={removeIsPending}
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                title="Remove from campaign"
+                            >
+                                <UserMinus className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                                variant="ghost" size="sm"
+                                onClick={() => onOptOut(row.lead_id)}
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-600"
+                                title="Opt out"
+                            >
+                                <Ban className="w-3.5 h-3.5" />
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Failed banner */}
+            {isFailed && (
+                <div className={`flex items-center justify-between px-4 py-2 border-t text-xs ${
+                    maxReached
+                        ? 'bg-muted/60 border-border text-muted-foreground'
+                        : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50'
+                }`}>
+                    <div className="flex items-center gap-2">
+                        {failureReason && (
+                            <span className={`px-1.5 py-0.5 rounded font-medium text-[10px] uppercase tracking-wide ${
+                                maxReached ? 'bg-muted text-muted-foreground' : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
+                            }`}>
+                                {failureReason.replace(/[-_]/g, ' ')}
+                            </span>
+                        )}
+                        {attemptCount != null && (
+                            <span className={maxReached ? 'text-muted-foreground' : 'text-red-700 dark:text-red-400'}>
+                                Attempt {Math.min(attemptCount, MAX_ATTEMPTS)} of {MAX_ATTEMPTS}
+                            </span>
+                        )}
+                    </div>
+                    <span className={`font-medium ${maxReached ? 'text-muted-foreground' : 'text-red-700 dark:text-red-400'}`}>
+                        {maxReached ? 'Max attempts reached' : (retryLabel || 'Pending retry')}
+                    </span>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ─── Enrolled Leads Tab ────────────────────────────────────────────────────────
 function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
     const [statusFilter, setStatusFilter] = useState('all')
     const [search, setSearch] = useState('')
@@ -315,10 +479,26 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
 
     const canModify = !['completed', 'cancelled', 'archived'].includes(campaignStatus)
 
+    function emptyMessage() {
+        if (statusFilter === 'failed') return 'No failed leads — all calls connected successfully'
+        if (statusFilter === 'enrolled') return 'No leads enrolled yet'
+        if (search) return 'No leads match your search'
+        return 'No leads found'
+    }
+
     return (
         <div className="space-y-4">
             {/* Toolbar */}
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+                {canModify && (
+                    <input
+                        type="checkbox"
+                        checked={leads.length > 0 && selected.size === leads.length}
+                        onChange={toggleAll}
+                        className="rounded shrink-0"
+                        title="Select all on this page"
+                    />
+                )}
                 <div className="relative flex-1 min-w-48">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -340,33 +520,12 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
                 </div>
             </div>
 
-            {/* Status tab bar */}
-            <div className="flex gap-1 flex-wrap">
-                {LEAD_STATUS_TABS.map(tab => (
-                    <button
-                        key={tab.key}
-                        onClick={() => { setStatusFilter(tab.key); setPage(1); setSelected(new Set()) }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${statusFilter === tab.key
-                            ? 'bg-primary text-primary-foreground border-primary'
-                            : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-                    >
-                        {tab.label}
-                        {tab.key !== 'all' && counts[tab.key] > 0 && (
-                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-background/30 text-[10px]">{counts[tab.key]}</span>
-                        )}
-                        {tab.key === 'all' && data?.total > 0 && (
-                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-background/30 text-[10px]">{data.total}</span>
-                        )}
-                    </button>
-                ))}
-            </div>
-
-            {/* Bulk actions */}
+            {/* Bulk action strip */}
             {selected.size > 0 && (
-                <div className="flex items-center gap-2 p-2 bg-primary/5 border border-primary/20 rounded-lg">
+                <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
                     <span className="text-sm font-medium text-primary">{selected.size} selected</span>
                     <Button variant="outline" size="sm" onClick={handleBulkRemove} disabled={removeLead.isPending} className="h-7 text-xs">
-                        <UserMinus className="w-3.5 h-3.5 mr-1" /> Remove Selected
+                        <UserMinus className="w-3.5 h-3.5 mr-1" /> Remove
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} className="h-7 text-xs ml-auto">
                         Clear
@@ -374,93 +533,58 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
                 </div>
             )}
 
-            {/* Table */}
+            {/* Pill filter bar */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                {LEAD_STATUS_TABS.map(tab => {
+                    const count = tab.key === 'all' ? data?.total : counts[tab.key]
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => { setStatusFilter(tab.key); setPage(1); setSelected(new Set()) }}
+                            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
+                                statusFilter === tab.key
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                            }`}
+                        >
+                            {tab.label}
+                            {count > 0 && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none ${
+                                    statusFilter === tab.key ? 'bg-white/20' : 'bg-muted'
+                                }`}>{count}</span>
+                            )}
+                        </button>
+                    )
+                })}
+            </div>
+
+            {/* Cards */}
             {isLoading ? (
-                <div className="flex items-center justify-center py-12">
+                <div className="flex items-center justify-center py-16">
                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
             ) : leads.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="text-center py-16 text-muted-foreground">
                     <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">No leads found</p>
-                    {canModify && <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowEnrollPanel(true)}>Add Leads</Button>}
+                    <p className="text-sm">{emptyMessage()}</p>
+                    {canModify && statusFilter === 'all' && !search && (
+                        <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowEnrollPanel(true)}>Add Leads</Button>
+                    )}
                 </div>
             ) : (
-                <div className="border border-border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted/50">
-                            <tr>
-                                {canModify && (
-                                    <th className="p-3 w-8">
-                                        <input type="checkbox" checked={selected.size === leads.length && leads.length > 0} onChange={toggleAll} className="rounded" />
-                                    </th>
-                                )}
-                                <th className="p-3 text-left font-medium text-muted-foreground">Lead</th>
-                                <th className="p-3 text-left font-medium text-muted-foreground hidden md:table-cell">Status</th>
-                                <th className="p-3 text-left font-medium text-muted-foreground hidden lg:table-cell">Last Called</th>
-                                <th className="p-3 text-left font-medium text-muted-foreground hidden lg:table-cell">Sentiment</th>
-                                {canModify && <th className="p-3 w-20" />}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {leads.map(row => (
-                                <tr key={row.lead_id} className="hover:bg-muted/30 transition-colors">
-                                    {canModify && (
-                                        <td className="p-3">
-                                            <input type="checkbox" checked={selected.has(row.lead_id)} onChange={() => toggleSelect(row.lead_id)} className="rounded" />
-                                        </td>
-                                    )}
-                                    <td className="p-3">
-                                        <div className="font-medium text-foreground truncate max-w-[180px]">{row.lead?.name || '—'}</div>
-                                        <div className="text-xs text-muted-foreground">{row.lead?.phone || '—'}</div>
-                                    </td>
-                                    <td className="p-3 hidden md:table-cell">
-                                        <LeadStatusBadge status={row.status} skipReason={row.skip_reason} />
-                                    </td>
-                                    <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs">
-                                        {row.last_call_attempt_at
-                                            ? new Date(row.last_call_attempt_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                                            : '—'}
-                                    </td>
-                                    <td className="p-3 hidden lg:table-cell">
-                                        <div className="flex items-center gap-1">
-                                            <SentimentIcon score={row.call_log?.sentiment_score} />
-                                            <span className="text-xs text-muted-foreground">
-                                                {row.call_log?.sentiment_score != null ? Number(row.call_log.sentiment_score).toFixed(2) : '—'}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    {canModify && (
-                                        <td className="p-3">
-                                            <div className="flex items-center gap-1">
-                                                {['enrolled', 'queued', 'calling', 'called', 'failed'].includes(row.status) && (
-                                                    <>
-                                                        <Button
-                                                            variant="ghost" size="sm"
-                                                            onClick={() => removeLead.mutate(row.lead_id)}
-                                                            disabled={removeLead.isPending}
-                                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                                                            title="Remove from campaign"
-                                                        >
-                                                            <UserMinus className="w-3.5 h-3.5" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost" size="sm"
-                                                            onClick={() => setOptOutTarget(row.lead_id)}
-                                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-600"
-                                                            title="Opt out"
-                                                        >
-                                                            <Ban className="w-3.5 h-3.5" />
-                                                        </Button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    )}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {leads.map(row => (
+                        <LeadCard
+                            key={row.lead_id}
+                            row={row}
+                            selected={selected.has(row.lead_id)}
+                            onSelect={() => toggleSelect(row.lead_id)}
+                            onRemove={id => removeLead.mutate(id)}
+                            onOptOut={id => setOptOutTarget(id)}
+                            canModify={canModify}
+                            removeIsPending={removeLead.isPending}
+                        />
+                    ))}
                 </div>
             )}
 
@@ -511,24 +635,6 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
                 </DialogContent>
             </Dialog>
         </div>
-    )
-}
-
-function LeadStatusBadge({ status, skipReason }) {
-    const cfg = {
-        enrolled: 'bg-blue-500/10 text-blue-600 border-blue-200',
-        queued:   'bg-sky-500/10 text-sky-600 border-sky-200',
-        calling:  'bg-amber-500/10 text-amber-600 border-amber-200',
-        called:   'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-        failed:   'bg-red-500/10 text-red-600 border-red-200',
-        opted_out:'bg-orange-500/10 text-orange-600 border-orange-200',
-        skipped:  'bg-zinc-400/10 text-zinc-500 border-zinc-200',
-        archived: 'bg-gray-300/10 text-gray-400 border-gray-200',
-    }
-    return (
-        <Badge variant="outline" className={`${cfg[status] || cfg.skipped} border text-[10px] px-2 py-0.5`} title={skipReason || undefined}>
-            {status?.replace('_', ' ')}
-        </Badge>
     )
 }
 
@@ -1005,7 +1111,11 @@ export default function CampaignDetailPage() {
 
     async function doAction(action) {
         setConfirmAction(null)
-        if (action === 'start') await start.mutateAsync(id)
+        if (action === 'start') {
+            await start.mutateAsync(id)
+            router.push('/dashboard/admin/crm/calls/live')
+            return
+        }
         else if (action === 'pause') await pause.mutateAsync(id)
         else if (action === 'resume') await resume.mutateAsync(id)
         else if (action === 'cancel') await cancel.mutateAsync(id)
