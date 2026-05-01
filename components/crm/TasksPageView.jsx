@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -108,12 +110,12 @@ function UserAvatar({ user, size = 6 }) {
     if (!user) return null
     const initials = (user.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     return (
-        <div className={`w-${size} h-${size} rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0 overflow-hidden text-[10px] ring-1 ring-white`}>
-            {user.avatar_url
-                ? <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
-                : initials
-            }
-        </div>
+        <Avatar className={`w-${size} h-${size} border border-white shadow-sm ring-1 ring-slate-100`}>
+            <AvatarImage src={user.avatar_url || getDefaultAvatar(user.full_name || user.email)} />
+            <AvatarFallback className="text-[8px] font-bold">
+                {initials}
+            </AvatarFallback>
+        </Avatar>
     )
 }
 
@@ -170,12 +172,12 @@ function AssigneeBadge({ assignee }) {
     const initials = (assignee.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     return (
         <div className="flex items-center gap-2 px-1.5 py-0.5 rounded-full border border-slate-100 bg-slate-50/50 max-w-full overflow-hidden">
-            <div className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0 overflow-hidden text-[8px]">
-                {assignee.avatar_url
-                    ? <img src={assignee.avatar_url} alt={assignee.full_name} className="w-full h-full object-cover" />
-                    : initials
-                }
-            </div>
+            <Avatar className="w-4 h-4 rounded-full border-white shadow-sm ring-1 ring-slate-100">
+                <AvatarImage src={assignee.avatar_url || getDefaultAvatar(assignee.full_name || assignee.email)} />
+                <AvatarFallback className="text-[7px] font-bold">
+                    {initials}
+                </AvatarFallback>
+            </Avatar>
             <span className="text-[11px] font-medium text-slate-600 truncate tracking-tight">{assignee.full_name}</span>
         </div>
     )
@@ -193,9 +195,12 @@ function LeadHoverCard({ lead, leadId, children }) {
             <HoverCardContent className="w-[250px] p-0 rounded-xl border border-slate-200/80 shadow-lg overflow-hidden" side="top" align="start">
                 {/* Header */}
                 <div className="flex items-center gap-2.5 px-3 py-2.5">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 text-white shadow-sm bg-gradient-to-br from-indigo-500 to-violet-600">
-                        {initial}
-                    </div>
+                    <Avatar className="w-8 h-8 shrink-0 border border-white shadow-sm">
+                        <AvatarImage src={lead.avatar_url || getDefaultAvatar(lead.email || lead.name)} />
+                        <AvatarFallback className="text-xs font-bold bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+                            {initial}
+                        </AvatarFallback>
+                    </Avatar>
                     <div className="flex-1 min-w-0">
                         <p className="font-semibold text-[13px] truncate text-foreground">{lead.name}</p>
                         {lead.stage && (
@@ -308,9 +313,12 @@ function TaskRow({ task, onToggle, onEditClick, onDeleteClick, canDelete }) {
                                 href={`/dashboard/admin/crm/leads/${task.lead_id}`}
                                 className="inline-flex items-center gap-1.5 max-w-full px-2 py-0.5 rounded-full border border-slate-100 bg-slate-50 hover:bg-white hover:border-indigo-200 hover:text-indigo-600 transition-all"
                             >
-                                <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black text-white shrink-0" style={{ background: stageColor }}>
-                                    {leadInitial}
-                                </div>
+                                <Avatar className="w-4 h-4 shrink-0 border-white shadow-sm ring-1 ring-slate-100">
+                                    <AvatarImage src={task.lead.avatar_url || getDefaultAvatar(task.lead.email || task.lead.name)} />
+                                    <AvatarFallback className="text-[8px] font-black text-white" style={{ background: stageColor }}>
+                                        {leadInitial}
+                                    </AvatarFallback>
+                                </Avatar>
                                 <span className="text-[11px] font-bold truncate tracking-tight">{task.lead.name}</span>
                             </Link>
                         </LeadHoverCard>
@@ -662,9 +670,12 @@ function TaskDetailSheet({ task, open, onClose, onToggle, onUpdated, onDelete, t
                                     {task.lead ? (
                                         <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50/80 overflow-hidden shadow-sm">
                                             <div className="flex items-center gap-3 p-3.5">
-                                                <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 shadow-md ring-2 ring-white" style={{ background: `linear-gradient(135deg, ${stageColor}, ${stageColor}dd)`, filter: 'saturate(1.3)' }}>
-                                                    {leadInitial}
-                                                </div>
+                                                <Avatar className="w-10 h-10 shrink-0 shadow-md ring-2 ring-white border-none">
+                                                    <AvatarImage src={task.lead.avatar_url || getDefaultAvatar(task.lead.email || task.lead.name)} />
+                                                    <AvatarFallback className="text-sm font-bold text-white" style={{ background: `linear-gradient(135deg, ${stageColor}, ${stageColor}dd)`, filter: 'saturate(1.3)' }}>
+                                                        {leadInitial}
+                                                    </AvatarFallback>
+                                                </Avatar>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-semibold truncate text-foreground">{task.lead.name}</p>
                                                     {task.lead.stage && (

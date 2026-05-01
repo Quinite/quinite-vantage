@@ -24,6 +24,8 @@ import { formatRelativeTime, formatDateTime } from '@/lib/utils/date'
 import { formatCurrency } from '@/lib/utils/currency'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 
 function formatPrice(val) {
     if (!val) return null
@@ -63,11 +65,13 @@ function AvatarChip({ profile, label }) {
     const parts = (profile.full_name || '').trim().split(' ')
     const displayName = parts.length > 1 ? `${parts[parts.length - 1]} ${parts[0]}` : parts[0]
     return (
-        <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 border border-gray-200 rounded-full pl-0.5 pr-2 py-0.5">
-            {profile.avatar_url
-                ? <img src={profile.avatar_url} className="w-3.5 h-3.5 rounded-full object-cover" alt={profile.full_name} />
-                : <span className="w-3.5 h-3.5 rounded-full bg-gray-300 inline-flex items-center justify-center text-[7px] font-bold text-gray-600 shrink-0">{initials}</span>
-            }
+        <span className="inline-flex items-center gap-1.5 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded-full pl-0.5 pr-2 py-0.5 shadow-sm">
+            <Avatar className="h-4 w-4 border-white shadow-sm ring-1 ring-slate-100">
+                <AvatarImage src={profile.avatar_url || getDefaultAvatar(profile.full_name || profile.email)} />
+                <AvatarFallback className="text-[7px] font-bold">
+                    {initials}
+                </AvatarFallback>
+            </Avatar>
             <span className="font-medium leading-none">{displayName}</span>
         </span>
     )

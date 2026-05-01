@@ -133,9 +133,9 @@ function CallCard({ call }) {
                                     {interestCfg.label}
                                 </span>
                             )}
-                            {call.priority_score != null && (
+                            {(call.priority_score || call.ai_metadata?.priority_score) != null && (
                                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
-                                    🎯 Priority {call.priority_score}
+                                    🎯 Priority {call.priority_score || call.ai_metadata?.priority_score}
                                 </span>
                             )}
                         </div>

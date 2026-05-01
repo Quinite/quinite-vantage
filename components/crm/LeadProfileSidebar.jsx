@@ -1,11 +1,12 @@
 'use client'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Camera, Mail, Phone, Smartphone, Building, Building2, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'react-hot-toast'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 
 function WhatsAppIcon({ className }) {
     return (
@@ -126,14 +127,11 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
             <div className="flex flex-col items-center text-center px-6 -mt-12 mb-4">
                 <div className="relative mb-1 group">
                     <Avatar key={lead.avatar_url || 'no-avatar'} className="h-24 w-24 border-4 border-background shadow-md">
-                        {lead.avatar_url ? (
-                            <img
-                                src={lead.avatar_url}
-                                alt={lead.name}
-                                className="aspect-square h-full w-full object-cover"
-                                onError={(e) => { e.target.style.display = 'none' }}
-                            />
-                        ) : null}
+                        <AvatarImage 
+                            src={lead.avatar_url || getDefaultAvatar(lead.email || lead.name)} 
+                            alt={lead.name}
+                            className="object-cover"
+                        />
                         <AvatarFallback className="text-2xl font-bold bg-white text-primary">
                             {getInitials(lead.name)}
                         </AvatarFallback>

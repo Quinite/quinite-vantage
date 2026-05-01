@@ -284,7 +284,7 @@ export default function CallRecordingPlayer({ callLog }) {
                             <div className="space-y-1">
                                 <div className="text-xs text-gray-500">Lead Priority</div>
                                 <div className="text-lg font-bold text-gray-900">
-                                    {callLog.priority_score || 0}/100
+                                    {callLog.priority_score || callLog.ai_metadata?.priority_score || 0}/100
                                 </div>
                             </div>
 

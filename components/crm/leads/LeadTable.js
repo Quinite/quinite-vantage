@@ -108,7 +108,7 @@ export function LeadTable({
                             <div className="flex items-start justify-between">
                                 <div className="flex items-center gap-3">
                                     <Avatar className="h-10 w-10 border border-slate-100">
-                                        <AvatarImage src={lead.avatar_url || getDefaultAvatar(lead.name)} />
+                                        <AvatarImage src={lead.avatar_url || getDefaultAvatar(lead.email || lead.name)} />
                                         <AvatarFallback className="text-sm font-semibold bg-primary/10 text-primary">
                                             {lead.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                         </AvatarFallback>

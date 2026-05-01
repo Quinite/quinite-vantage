@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Phone, User, Clock, Building2, TrendingUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 
 export default function AgentDashboard() {
     const [incomingCalls, setIncomingCalls] = useState([])
@@ -46,7 +48,7 @@ export default function AgentDashboard() {
             .from('agent_calls')
             .select(`
                 *,
-                lead:leads(name, phone, email),
+                lead:leads(name, phone, email, avatar_url),
                 campaign:campaigns(name),
                 ai_call_log:call_logs(conversation_transcript, sentiment_score)
             `)
@@ -126,9 +128,12 @@ export default function AgentDashboard() {
                             <CardHeader className="pb-3">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                                            <User className="w-6 h-6 text-primary" />
-                                        </div>
+                                        <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-sm">
+                                            <AvatarImage src={call.lead.avatar_url || getDefaultAvatar(call.lead.email || call.lead.name)} />
+                                            <AvatarFallback className="bg-primary/10 text-primary">
+                                                <User className="w-6 h-6" />
+                                            </AvatarFallback>
+                                        </Avatar>
                                         <div>
                                             <CardTitle className="text-xl">{call.lead.name}</CardTitle>
                                             <div className="flex items-center gap-2 mt-1">

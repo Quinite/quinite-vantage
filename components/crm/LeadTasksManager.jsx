@@ -39,6 +39,8 @@ import {
 } from 'lucide-react'
 import TaskUnitBadge from './TaskUnitBadge'
 import { Card, CardContent } from '@/components/ui/card'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'react-hot-toast'
@@ -123,12 +125,12 @@ function AssigneeBadge({ assignee }) {
     const initials = (assignee.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     return (
         <div className="flex items-center gap-2 px-1.5 py-0.5 rounded-full border border-slate-100 bg-slate-50/50 max-w-full overflow-hidden">
-            <div className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0 overflow-hidden text-[8px]">
-                {assignee.avatar_url
-                    ? <img src={assignee.avatar_url} alt={assignee.full_name} className="w-full h-full object-cover" />
-                    : initials
-                }
-            </div>
+            <Avatar className="w-4 h-4 rounded-full border-white shadow-sm ring-1 ring-slate-100">
+                <AvatarImage src={assignee.avatar_url || getDefaultAvatar(assignee.full_name || assignee.email)} />
+                <AvatarFallback className="text-[7px] font-bold">
+                    {initials}
+                </AvatarFallback>
+            </Avatar>
             <span className="text-[10px] font-medium text-slate-600 truncate tracking-tight">{assignee.full_name}</span>
         </div>
     )

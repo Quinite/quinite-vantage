@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { VISIT_STATUS_COLORS, VISIT_STATUS_LABELS, OUTCOME_LABELS } from '@/lib/site-visit-stages'
 import { useRouter } from 'next/navigation'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 
 import { ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react'
 
@@ -105,16 +106,24 @@ export default function SiteVisitsTable({ visits, sortBy = 'date_asc', onSortCha
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex flex-col min-w-0">
-                                        <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                                            {visit.leads?.name || 'Unknown Lead'}
-                                        </span>
-                                        {visit.leads?.phone && (
-                                            <span className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                                                <Phone className="w-3 h-3" />
-                                                {visit.leads.phone}
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <Avatar className="h-8 w-8 shrink-0 border border-slate-100">
+                                            <AvatarImage src={visit.leads?.avatar_url || getDefaultAvatar(visit.leads?.email || visit.leads?.name)} />
+                                            <AvatarFallback className="text-[10px] font-bold">
+                                                {visit.leads?.name?.charAt(0) || 'L'}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                                {visit.leads?.name || 'Unknown Lead'}
                                             </span>
-                                        )}
+                                            {visit.leads?.phone && (
+                                                <span className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                                                    <Phone className="w-3 h-3" />
+                                                    {visit.leads.phone}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </TableCell>
                                 <TableCell>
