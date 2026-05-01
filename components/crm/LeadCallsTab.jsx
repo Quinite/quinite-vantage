@@ -28,6 +28,7 @@ const STATUS_CONFIG = {
     failed:      { cls: 'bg-red-100 text-red-700 border-red-200',       label: 'Failed' },
     in_progress: { cls: 'bg-blue-100 text-blue-700 border-blue-200 animate-pulse', label: 'In Progress' },
     completed:   { cls: 'bg-green-100 text-green-700 border-green-200', label: 'Completed' },
+    transferred: { cls: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Transferred' },
     disconnected:{ cls: 'bg-slate-100 text-slate-700 border-slate-200', label: 'Disconnected' },
 }
 
@@ -86,6 +87,11 @@ function CallCard({ call }) {
                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${statusCfg.cls}`}>
                             {statusCfg.label}
                         </span>
+                        {call.transferred && (call.call_status || '').toLowerCase() !== 'transferred' && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1">
+                                <PhoneOutgoing className="w-2.5 h-2.5" /> Transferred to Human
+                            </span>
+                        )}
                     </div>
                     {call.summary && (
                         <p className="text-[11px] text-gray-500 mt-0.5 truncate leading-snug">
@@ -125,6 +131,11 @@ function CallCard({ call }) {
                             {interestCfg && (
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${interestCfg.cls}`}>
                                     {interestCfg.label}
+                                </span>
+                            )}
+                            {call.priority_score != null && (
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                                    🎯 Priority {call.priority_score}
                                 </span>
                             )}
                         </div>

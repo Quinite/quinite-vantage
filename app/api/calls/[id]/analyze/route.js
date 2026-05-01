@@ -73,10 +73,10 @@ export async function POST(request, { params }) {
             sentiment_score: analysis.sentiment_score,
             sentiment_label: analysis.sentiment_label,
             interest_level: analysis.interest_level,
+            priority_score: Math.round(analysis.priority), // Use top-level column
             ai_metadata: {
                 objections: analysis.objections,
                 budget_estimated: analysis.budget,
-                priority_score: analysis.priority,
                 key_takeaways: analysis.key_takeaways,
                 manual_analysis_at: new Date().toISOString()
             }

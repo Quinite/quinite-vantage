@@ -266,7 +266,7 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
             <div className="px-4 space-y-2 mb-3">
                 {/* Abuse — highest priority, block calling */}
                 {lead.abuse_flag && (
-                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 mt-2">
                         <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                         <div>
                             <p className="text-xs font-bold text-red-700">Do Not Call — Abusive</p>
@@ -279,7 +279,7 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
 
                 {/* Callback scheduled */}
                 {lead.waiting_status === 'callback_scheduled' && (
-                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200">
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 mt-2">
                         <Clock className="w-4 h-4 text-amber-500 shrink-0" />
                         <div>
                             <p className="text-xs font-bold text-amber-700">Callback Scheduled</p>
@@ -292,7 +292,7 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
 
                 {/* Transferred to human */}
                 {lead.transferred_to_human && (
-                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200">
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200 mt-2">
                         <UserCheck className="w-4 h-4 text-blue-500 shrink-0" />
                         <p className="text-xs font-semibold text-blue-700">Transferred to Human Agent</p>
                     </div>

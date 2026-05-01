@@ -173,13 +173,7 @@ function ActiveCallCard({ call, elapsed, onForceEnd }) {
                     </div>
                 </div>
 
-                {/* transferred banner */}
-                {isTransferred && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-xs font-medium text-blue-700">
-                        <PhoneForwarded className="w-3.5 h-3.5 shrink-0" />
-                        Transferred to human agent
-                    </div>
-                )}
+                {/* transferred banner removed to avoid redundancy with status badge */}
             </div>
         </div>
     )

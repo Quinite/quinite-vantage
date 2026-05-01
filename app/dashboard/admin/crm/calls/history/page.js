@@ -131,9 +131,9 @@ function CallRow({ call, isSelected, onSelect, onWhatsApp }) {
                             <Badge variant="outline" className={`text-[10px] px-2 py-0.5 font-medium border ${sm.cls}`}>
                                 {sm.label}
                             </Badge>
-                            {call.transferred && (
+                            {call.transferred && statusKey !== 'transferred' && (
                                 <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-medium border bg-blue-500/10 text-blue-700 border-blue-200">
-                                    <PhoneForwarded className="w-2.5 h-2.5 mr-1" />Transferred
+                                    <PhoneForwarded className="w-2.5 h-2.5 mr-1" />Transferred to Human
                                 </Badge>
                             )}
                             {interestKey && im && (
@@ -184,10 +184,10 @@ function CallRow({ call, isSelected, onSelect, onWhatsApp }) {
                                     </div>
                                 )}
                                 {/* priority */}
-                                {call.ai_metadata?.priority_score != null && (
+                                {call.priority_score != null && (
                                     <div className="flex items-center gap-1">
                                         <Flag className="w-3.5 h-3.5 text-amber-500" />
-                                        <span className="text-xs text-muted-foreground">Priority <span className="font-semibold text-foreground">{call.ai_metadata.priority_score}</span></span>
+                                        <span className="text-xs text-muted-foreground">Priority <span className="font-semibold text-foreground">{call.priority_score}</span></span>
                                     </div>
                                 )}
                                 {/* summary */}
@@ -350,7 +350,7 @@ export default function CallHistory() {
             .select(`
                 id, call_status, duration, call_cost, created_at,
                 conversation_transcript, sentiment_score,
-                interest_level, summary, ai_metadata, transferred,
+                interest_level, summary, ai_metadata, transferred, priority_score,
                 disconnect_reason, callee_number,
                 lead:leads!call_logs_lead_id_fkey(id, name, phone, assigned_to),
                 campaign:campaigns(id, name)

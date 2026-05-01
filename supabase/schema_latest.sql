@@ -117,6 +117,7 @@ CREATE TABLE public.call_logs (
   summary text,
   call_cost numeric DEFAULT 0,
   ai_metadata jsonb DEFAULT '{}'::jsonb,
+  priority_score integer,
   CONSTRAINT call_logs_pkey PRIMARY KEY (id),
   CONSTRAINT call_logs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT call_logs_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
