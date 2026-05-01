@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Calendar as CalendarIcon, Clock, User, Building2, X, Lock } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, User, Building2, X, Lock, ChevronsUpDown, Check, Home, Search } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils/currency'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +41,7 @@ export function taskToFormData(task) {
         assigned_to: task?.assigned_to || 'none',
         lead_id:     task?.lead_id     || null,
         project_id:  task?.project_id  || null,
+        unit_id:     task?.unit_id     || null,
     }
 }
 
@@ -58,12 +60,13 @@ export function formDataToPayload(formData) {
         assigned_to: formData.assigned_to === 'none' ? null : formData.assigned_to,
         lead_id:     formData.lead_id     || null,
         project_id:  formData.project_id  || null,
+        unit_id:     formData.unit_id     || null,
     }
 }
 
 export const EMPTY_FORM = {
     title: '', description: '', due_date: '', due_time: '',
-    priority: 'medium', assigned_to: 'none', lead_id: null, project_id: null,
+    priority: 'medium', assigned_to: 'none', lead_id: null, project_id: null, unit_id: null,
 }
 
 // ─── Lead search dropdown ─────────────────────────────────────────────────────
@@ -117,7 +120,10 @@ function LeadSelector({ value, valueLabel, onChange, disabled }) {
                 disabled={disabled}
             />
             {open && results.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <div 
+                    className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto"
+                    onWheel={e => e.stopPropagation()}
+                >
                     {results.map(lead => (
                         <button
                             key={lead.id}
@@ -186,7 +192,10 @@ function ProjectSelector({ value, valueLabel, onChange, disabled }) {
                 disabled={disabled}
             />
             {open && results.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <div 
+                    className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto"
+                    onWheel={e => e.stopPropagation()}
+                >
                     {results.map(proj => (
                         <button
                             key={proj.id}
@@ -204,6 +213,167 @@ function ProjectSelector({ value, valueLabel, onChange, disabled }) {
     )
 }
 
+function UnitSelector({ value, valueLabel, onChange, disabled, projectId }) {
+    const [query, setQuery]     = useState('')
+    const [results, setResults] = useState([])
+    const [open, setOpen]       = useState(false)
+    const [loading, setLoading] = useState(false)
+    const timer = useRef(null)
+
+    useEffect(() => {
+        if (!open && !query.trim()) { setResults([]); return }
+        
+        clearTimeout(timer.current)
+        timer.current = setTimeout(async () => {
+            setLoading(true)
+            try {
+                let url = `/api/inventory/units?search=${encodeURIComponent(query)}&limit=15`
+                if (projectId) url += `&project_id=${projectId}`
+                const res = await fetch(url)
+                const json = await res.json()
+                setResults(json.units || [])
+            } catch { setResults([]) }
+            finally { setLoading(false) }
+        }, 300)
+        return () => clearTimeout(timer.current)
+    }, [query, open, projectId])
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    disabled={disabled}
+                    className={cn(
+                        'w-full flex items-center justify-between h-9 px-3 rounded-md border border-input bg-white text-sm transition-colors',
+                        'hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                        !value && 'text-muted-foreground'
+                    )}
+                >
+                    <span className="flex items-center gap-2 truncate">
+                        <Home className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                        {value && valueLabel ? valueLabel : 'Select unit... (optional)'}
+                    </span>
+                    <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                <div className="flex flex-col rounded-md bg-popover text-popover-foreground">
+                    <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-40" />
+                        <input
+                            className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+                            placeholder="Search unit number..."
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                        />
+                    </div>
+                    <div 
+                        className="max-h-[220px] overflow-y-auto scrollbar-thin"
+                        onWheel={e => e.stopPropagation()}
+                    >
+                        {loading ? (
+                            <div className="py-4 text-center text-sm text-muted-foreground">Searching units...</div>
+                        ) : (
+                            <div className="p-1">
+                                <button
+                                    type="button"
+                                    onClick={() => { onChange(null); setOpen(false); setQuery('') }}
+                                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                >
+                                    None
+                                    {!value && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                                </button>
+                                {results.map(unit => {
+                                    const label = `Unit ${unit.unit_number}${unit.tower?.name ? ` (${unit.tower.name})` : ''}`
+                                    const details = [
+                                        unit.bedrooms ? `${unit.bedrooms}BHK` : null,
+                                        unit.carpet_area ? `${unit.carpet_area} sqft` : null,
+                                        unit.total_price ? formatCurrency(unit.total_price) : null,
+                                    ].filter(Boolean).join(' · ')
+
+                                    return (
+                                        <button
+                                            key={unit.id}
+                                            type="button"
+                                            onClick={() => {
+                                                onChange(unit.id, label)
+                                                setOpen(false)
+                                                setQuery('')
+                                            }}
+                                            className="w-full flex flex-col items-start gap-0.5 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent transition-colors text-left"
+                                        >
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="font-medium truncate text-slate-900">
+                                                    {label}
+                                                </span>
+                                                {details && <span className="text-[10px] text-muted-foreground">{details}</span>}
+                                            </div>
+                                            {value === unit.id && <Check className="w-3.5 h-3.5 shrink-0 text-indigo-600" />}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
+function UnitPreview({ unit, onRemove }) {
+    if (!unit) return null
+    
+    const price = unit.total_price || unit.base_price || 0
+    const area = unit.carpet_area || unit.built_up_area
+
+    return (
+        <div className="p-3 rounded-lg border bg-white shadow-sm flex flex-col gap-2.5 relative group mt-1">
+            <button
+                type="button"
+                onClick={onRemove}
+                className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
+            >
+                <X className="h-3.5 w-3.5" />
+            </button>
+
+            <div className="flex items-start gap-3">
+                <div className="h-9 w-9 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100 shrink-0">
+                    <Building2 className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900 truncate">Unit {unit.unit_number}</h4>
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase tracking-tighter border border-emerald-100">
+                            {unit.construction_status?.replace('_', ' ') || 'Available'}
+                        </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                        {unit.tower?.name ? `${unit.tower.name} Tower` : 'Main Block'}
+                    </p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-50">
+                <div className="flex flex-col">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">BHK</span>
+                    <span className="text-[10px] font-bold text-slate-700">{unit.bedrooms ? `${unit.bedrooms} BHK` : 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Area</span>
+                    <span className="text-[10px] font-bold text-slate-700">{area ? `${area} sqft` : 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Price</span>
+                    <span className="text-[10px] font-bold text-emerald-700">{price ? formatCurrency(price) : 'N/A'}</span>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ─── Main Form Fields ─────────────────────────────────────────────────────────
 
 /**
@@ -216,8 +386,10 @@ function ProjectSelector({ value, valueLabel, onChange, disabled }) {
  *   showLeadProject – boolean (show lead/project selectors, default true)
  *   selectedLeadLabel    – string (display name for selected lead)
  *   selectedProjectLabel – string (display name for selected project)
+ *   selectedUnitLabel    – string (display name for selected unit)
  *   onLeadChange    – (leadId, leadName) => void
  *   onProjectChange – (projectId, projectName) => void
+ *   onUnitChange    – (unitId, unitLabel) => void
  *   fixedLeadId     – string (if set, lead is pre-set and not changeable)
  *   fixedLeadLabel   – string (display name for fixed lead)
  */
@@ -230,8 +402,10 @@ export default function TaskFormFields({
     showLeadProject = true,
     selectedLeadLabel = null,
     selectedProjectLabel = null,
+    selectedUnitLabel = null,
     onLeadChange,
     onProjectChange,
+    onUnitChange,
     fixedLeadId = null,
     fixedLeadLabel = null,
 }) {
@@ -372,27 +546,13 @@ export default function TaskFormFields({
                 )}
             </div>
 
-            {/* Lead + Project selectors (optional links) */}
-            {showLeadProject && !fixedLeadId && (
+            {/* Project + Unit Row */}
+            {showLeadProject && (
                 <div className="grid grid-cols-2 gap-3">
+                    {/* Project Selector */}
                     <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
                         <Label className={lc}>
-                            Link to Lead{' '}
-                            <span className="text-muted-foreground text-xs font-normal">(optional)</span>
-                        </Label>
-                        <LeadSelector
-                            value={formData.lead_id}
-                            valueLabel={selectedLeadLabel}
-                            onChange={(id, name) => {
-                                onChange('lead_id', id)
-                                onLeadChange?.(id, name)
-                            }}
-                        />
-                    </div>
-
-                    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
-                        <Label className={lc}>
-                            Link to Project{' '}
+                            Project{' '}
                             <span className="text-muted-foreground text-xs font-normal">(optional)</span>
                         </Label>
                         <ProjectSelector
@@ -404,6 +564,51 @@ export default function TaskFormFields({
                             }}
                         />
                     </div>
+
+                    {/* Unit Selector */}
+                    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
+                        <Label className={lc}>
+                            Property / Unit{' '}
+                            <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                        </Label>
+                        {formData.project_id ? (
+                            <UnitSelector
+                                value={formData.unit_id}
+                                valueLabel={selectedUnitLabel}
+                                projectId={formData.project_id}
+                                onChange={(id, label) => {
+                                    onChange('unit_id', id)
+                                    onUnitChange?.(id, label)
+                                }}
+                            />
+                        ) : (
+                            <div className={cn(
+                                "flex items-center gap-2 px-3 border border-dashed rounded-md bg-slate-50/50 text-slate-400 cursor-not-allowed",
+                                compact ? 'h-8 text-[11px]' : 'h-9 text-xs'
+                            )}>
+                                <Building2 className="w-3.5 h-3.5 shrink-0 opacity-40" />
+                                <span className="truncate">Select project first</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Lead Selector (Only shown if not fixed) */}
+            {showLeadProject && !fixedLeadId && (
+                <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
+                    <Label className={lc}>
+                        Link to Lead{' '}
+                        <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                    </Label>
+                    <LeadSelector
+                        value={formData.lead_id}
+                        valueLabel={selectedLeadLabel}
+                        onChange={(id, name) => {
+                            onChange('lead_id', id)
+                            onLeadChange?.(id, name)
+                        }}
+                    />
                 </div>
             )}
 

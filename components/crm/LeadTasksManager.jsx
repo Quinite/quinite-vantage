@@ -34,7 +34,10 @@ import {
     Search,
     ListChecks,
     Loader2,
+    Building2,
+    Home,
 } from 'lucide-react'
+import TaskUnitBadge from './TaskUnitBadge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -47,7 +50,8 @@ import {
 } from 'date-fns'
 import { usePermissions } from '@/contexts/PermissionContext'
 import { formatIndianDateTime, formatIndianDate } from '@/lib/formatDate'
-import TaskFormFields, { taskToFormData, formDataToPayload, EMPTY_FORM } from '@/components/crm/TaskFormFields'
+import TaskFormFields from '@/components/crm/TaskFormFields'
+import { taskToFormData, formDataToPayload, EMPTY_FORM } from '@/components/crm/TaskFormFields'
 import { useLeadTasks } from '@/hooks/useLeads'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -180,6 +184,21 @@ function TaskRow({ task, onToggle, onDelete, onEditClick, canEdit, canDelete }) 
                 </div>
             </div>
 
+            {/* Column 2: Property (Project + Unit) */}
+            <div className="hidden xl:flex flex-col gap-1 w-40 shrink-0 min-w-0">
+                {task.project ? (
+                    <span className="inline-flex items-center gap-1.5 w-fit px-2 py-0.5 rounded-full border border-purple-100 bg-purple-50 text-purple-700">
+                        <Building2 className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                        <span className="text-[10px] font-bold truncate tracking-tight uppercase">{task.project.name}</span>
+                    </span>
+                ) : null}
+                {task.unit && (
+                    <div className="w-fit">
+                        <TaskUnitBadge unit={task.unit} project={task.project} compact />
+                    </div>
+                )}
+            </div>
+
             {/* Column 2: Priority Badge (Fixed Width) */}
             <div className="hidden lg:flex items-center w-28 shrink-0">
                 {!isCompleted ? (
@@ -268,7 +287,7 @@ function TaskRow({ task, onToggle, onDelete, onEditClick, canEdit, canDelete }) 
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-export default function LeadTasksManager({ leadId, leadName }) {
+export default function LeadTasksManager({ leadId, leadName, projectId = null, projectName = null }) {
     const { hasAnyPermission, loading: permLoading } = usePermissions()
     const queryClient = useQueryClient()
     
@@ -284,6 +303,8 @@ export default function LeadTasksManager({ leadId, leadName }) {
     const [createForm, setCreateForm]   = useState(EMPTY_FORM)
     const [editForm, setEditForm]       = useState(EMPTY_FORM)
     const [collapsedGroups, setCollapsedGroups] = useState(new Set(['done']))
+    const [selectedUnitLabel, setSelectedUnitLabel] = useState(null)
+    const [selectedProjLabel, setSelectedProjLabel] = useState(null)
 
     const canCreate       = !permLoading && hasAnyPermission(['create_tasks'])
     const canEdit         = !permLoading && hasAnyPermission(['edit_tasks'])
@@ -362,7 +383,14 @@ export default function LeadTasksManager({ leadId, leadName }) {
 
     // Populate edit form whenever a task is selected for editing
     useEffect(() => {
-        if (editTask) setEditForm(taskToFormData(editTask))
+        if (editTask) {
+            setEditForm(taskToFormData(editTask))
+            setSelectedProjLabel(editTask.project?.name || null)
+            setSelectedUnitLabel(editTask.unit ? `Unit ${editTask.unit.unit_number}${editTask.unit.tower?.name ? ` (${editTask.unit.tower.name})` : ''}` : null)
+        } else {
+            setSelectedProjLabel(null)
+            setSelectedUnitLabel(null)
+        }
     }, [editTask?.id])
 
     const handleToggle = async (task) => {
@@ -601,7 +629,14 @@ export default function LeadTasksManager({ leadId, leadName }) {
                 </div>
 
                 {/* ─── Create Task Dialog ──────────────────────────────────────── */}
-                <Dialog open={createOpen} onOpenChange={open => { setCreateOpen(open); if (!open) setCreateForm(EMPTY_FORM) }}>
+                <Dialog open={createOpen} onOpenChange={open => { 
+                    setCreateOpen(open); 
+                    if (!open) {
+                        setCreateForm(EMPTY_FORM);
+                        setSelectedProjLabel(null);
+                        setSelectedUnitLabel(null);
+                    } 
+                }}>
                     <DialogContent className="max-w-lg">
                         <DialogHeader>
                             <DialogTitle>New Task</DialogTitle>
@@ -615,7 +650,15 @@ export default function LeadTasksManager({ leadId, leadName }) {
                                 canAssignOthers={canAssignOthers}
                                 fixedLeadId={leadId}
                                 fixedLeadLabel={leadName}
-                                showLeadProject={false}
+                                showLeadProject={true}
+                                selectedProjectLabel={selectedProjLabel}
+                                onProjectChange={(id, label) => {
+                                    setCreateForm(f => ({ ...f, project_id: id, unit_id: null }));
+                                    setSelectedProjLabel(label);
+                                    setSelectedUnitLabel(null);
+                                }}
+                                selectedUnitLabel={selectedUnitLabel}
+                                onUnitChange={(id, label) => setSelectedUnitLabel(label)}
                             />
                             <div className="flex items-center justify-end gap-3 pt-4 border-t">
                                 <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)} className="text-slate-500">
@@ -644,7 +687,15 @@ export default function LeadTasksManager({ leadId, leadName }) {
                                 canAssignOthers={canAssignOthers}
                                 fixedLeadId={leadId}
                                 fixedLeadLabel={leadName}
-                                showLeadProject={false}
+                                showLeadProject={true}
+                                selectedProjectLabel={selectedProjLabel}
+                                onProjectChange={(id, label) => {
+                                    setEditForm(f => ({ ...f, project_id: id, unit_id: null }));
+                                    setSelectedProjLabel(label);
+                                    setSelectedUnitLabel(null);
+                                }}
+                                selectedUnitLabel={selectedUnitLabel}
+                                onUnitChange={(id, label) => setSelectedUnitLabel(label)}
                             />
                             <div className="flex items-center justify-end gap-3 pt-4 border-t">
                                 <Button type="button" variant="ghost" onClick={() => setEditTask(null)} className="text-slate-500">

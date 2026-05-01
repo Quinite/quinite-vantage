@@ -73,12 +73,16 @@ import {
     Filter,
     SlidersHorizontal,
     X as XIcon,
+    Home,
 } from 'lucide-react'
+import TaskUnitBadge from './TaskUnitBadge'
 import { toast } from 'react-hot-toast'
 import { isToday, isPast, parseISO, differenceInDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isSameMonth, format, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameWeek, startOfDay, endOfDay } from 'date-fns'
 import { usePermissions } from '@/contexts/PermissionContext'
 import { useRouter } from 'next/navigation'
-import TaskFormFields, { taskToFormData, formDataToPayload, EMPTY_FORM } from '@/components/crm/TaskFormFields'
+import TaskFormFields from '@/components/crm/TaskFormFields'
+import { taskToFormData, formDataToPayload, EMPTY_FORM } from '@/components/crm/TaskFormFields'
+import { formatCurrency } from '@/lib/utils/currency'
 import { formatIndianDateTime, formatIndianDate } from '@/lib/formatDate'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -242,6 +246,10 @@ function LeadHoverCard({ lead, leadId, children }) {
     )
 }
 
+function UnitBadge({ unit, project }) {
+    return <TaskUnitBadge unit={unit} project={project} />
+}
+
 // ─── Task Row ─────────────────────────────────────────────────────────────────
 
 function TaskRow({ task, onToggle, onEditClick, onDeleteClick, canDelete }) {
@@ -292,7 +300,7 @@ function TaskRow({ task, onToggle, onEditClick, onDeleteClick, canDelete }) {
                     </div>
                 </div>
 
-                {/* Lead or Project Badge */}
+                {/* Lead Column */}
                 <div className="flex-[1] hidden lg:block" onClick={e => e.stopPropagation()}>
                     {task.lead ? (
                         <LeadHoverCard lead={task.lead} leadId={task.lead_id}>
@@ -306,13 +314,24 @@ function TaskRow({ task, onToggle, onEditClick, onDeleteClick, canDelete }) {
                                 <span className="text-[11px] font-bold truncate tracking-tight">{task.lead.name}</span>
                             </Link>
                         </LeadHoverCard>
-                    ) : task.project ? (
-                        <span className="inline-flex items-center gap-1.5 max-w-full px-2 py-0.5 rounded-full border border-purple-100 bg-purple-50 text-purple-700">
-                            <span className="text-[11px] font-bold truncate">{task.project.name}</span>
-                        </span>
                     ) : (
-                        <span className="text-[11px] text-muted-foreground italic">Standalone</span>
+                        <span className="text-[11px] text-muted-foreground italic px-2">Standalone</span>
                     )}
+                </div>
+
+                {/* Property Column (Project + Unit) */}
+                <div className="flex-[0.5] hidden xl:flex flex-col gap-1 min-w-0" onClick={e => e.stopPropagation()}>
+                    {task.project ? (
+                        <span className="inline-flex items-center gap-1.5 w-fit px-2 py-0.5 rounded-full border border-purple-100 bg-purple-50 text-purple-700">
+                            <Building2 className="w-2.5 h-2.5 shrink-0" />
+                            <span className="text-[10px] font-bold truncate tracking-tight uppercase">{task.project.name}</span>
+                        </span>
+                    ) : null}
+                    {task.unit ? (
+                        <UnitBadge unit={task.unit} project={task.project} compact />
+                    ) : !task.project ? (
+                        <span className="text-[10px] text-muted-foreground italic px-2">No property</span>
+                    ) : null}
                 </div>
 
                 {/* Priority */}
@@ -376,12 +395,14 @@ function TaskDetailSheet({ task, open, onClose, onToggle, onUpdated, onDelete, t
     const [form, setForm]                     = useState(() => taskToFormData(task))
     const [selectedLeadLabel, setLeadLabel]   = useState(task?.lead?.name || null)
     const [selectedProjLabel, setProjLabel]   = useState(task?.project?.name || null)
+    const [selectedUnitLabel, setUnitLabel]   = useState(task?.unit ? `Unit ${task.unit.unit_number}${task.unit.tower?.name ? ` (${task.unit.tower.name})` : ''}` : null)
 
     useEffect(() => {
         if (task) {
             setForm(taskToFormData(task))
             setLeadLabel(task.lead?.name || null)
             setProjLabel(task.project?.name || null)
+            setUnitLabel(task.unit ? `Unit ${task.unit.unit_number}${task.unit.tower?.name ? ` (${task.unit.tower.name})` : ''}` : null)
             setEditing(false)
         }
     }, [task?.id])
@@ -514,8 +535,10 @@ function TaskDetailSheet({ task, open, onClose, onToggle, onUpdated, onDelete, t
                                     showLeadProject
                                     selectedLeadLabel={selectedLeadLabel}
                                     selectedProjectLabel={selectedProjLabel}
+                                    selectedUnitLabel={selectedUnitLabel}
                                     onLeadChange={(id, name) => { setForm(f => ({ ...f, lead_id: id })); setLeadLabel(name) }}
                                     onProjectChange={(id, name) => { setForm(f => ({ ...f, project_id: id })); setProjLabel(name) }}
+                                    onUnitChange={(id, label) => { setForm(f => ({ ...f, unit_id: id })); setUnitLabel(label) }}
                                 />
                                 {/* Cancel / Save after lead+project fields */}
                                 <div className="flex items-center justify-end gap-2 pt-1">
@@ -584,6 +607,54 @@ function TaskDetailSheet({ task, open, onClose, onToggle, onUpdated, onDelete, t
                                         )}
                                     </div>
                                 </div>
+
+                                {task.unit && (
+                                    <div className="px-5 py-4 border-t border-slate-100">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Linked Unit</p>
+                                        <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-3 group relative overflow-hidden transition-all hover:border-emerald-200">
+                                            {/* Decorative emerald accent */}
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/10 group-hover:bg-emerald-500 transition-colors" />
+                                            
+                                            <div className="flex items-start gap-3.5 pl-1.5">
+                                                <div className="h-10 w-10 bg-emerald-50 rounded-xl flex items-center justify-center border border-emerald-100 shrink-0 shadow-sm">
+                                                    <Building2 className="h-5 w-5 text-emerald-600" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="text-sm font-bold text-slate-900 truncate">Unit {task.unit.unit_number}</h4>
+                                                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase tracking-tighter border border-emerald-100">
+                                                            {task.unit.construction_status?.replace('_', ' ') || 'Available'}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-500 font-medium">
+                                                        {task.unit.tower?.name ? `${task.unit.tower.name} Tower` : 'Main Block'}
+                                                    </p>
+                                                </div>
+                                                <Link 
+                                                    href={`/dashboard/inventory`} 
+                                                    className="shrink-0 p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all opacity-0 group-hover:opacity-100"
+                                                >
+                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                </Link>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-50 pl-1.5">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Configuration</span>
+                                                    <span className="text-[11px] font-bold text-slate-700">{task.unit.bedrooms ? `${task.unit.bedrooms} BHK` : 'N/A'}</span>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Carpet Area</span>
+                                                    <span className="text-[11px] font-bold text-slate-700">{task.unit.carpet_area ? `${task.unit.carpet_area} sqft` : 'N/A'}</span>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">Total Price</span>
+                                                    <span className="text-[11px] font-bold text-emerald-700">{task.unit.total_price ? formatCurrency(task.unit.total_price) : 'N/A'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Linked context */}
                                 <div className="px-5 py-4">
@@ -1036,10 +1107,14 @@ function TaskCalendarView({ tasks, onTaskClick, onToggle }) {
                                                         </span>
                                                     )}
                                                     {task.lead && (
-                                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                            <User className="w-3 h-3" />{task.lead.name}
+                                                        <LeadBadge leadId={task.lead_id} name={task.lead.name} />
+                                                    )}
+                                                    {task.project && (
+                                                        <span className="text-[9px] font-bold uppercase tracking-tight text-indigo-500 bg-indigo-50/50 px-1.5 py-px rounded border border-indigo-100">
+                                                            {task.project.name}
                                                         </span>
                                                     )}
+                                                    {task.unit && <UnitBadge unit={task.unit} project={task.project} />}
                                                 </div>
                                             </div>
                                             {task.assignee && <UserAvatar user={task.assignee} size={6} />}
@@ -1241,6 +1316,7 @@ export default function TasksPageView() {
     const [formData, setFormData]           = useState(EMPTY_FORM)
     const [selectedLeadLabel, setLeadLabel] = useState(null)
     const [selectedProjLabel, setProjLabel] = useState(null)
+    const [selectedUnitLabel, setUnitLabel] = useState(null)
     const [deleteConfirmTask, setDeleteConfirmTask] = useState(null)
     const [deleting, setDeleting]           = useState(false)
     const [viewMode, setViewMode]           = useState('list')
@@ -1417,6 +1493,7 @@ export default function TasksPageView() {
         setFormData(EMPTY_FORM)
         setLeadLabel(null)
         setProjLabel(null)
+        setUnitLabel(null)
     }
 
     const overdueCount     = tasks.filter(t => t.status !== 'completed' && getIsOverdue(t)).length
@@ -1715,8 +1792,10 @@ export default function TasksPageView() {
                             showLeadProject
                             selectedLeadLabel={selectedLeadLabel}
                             selectedProjectLabel={selectedProjLabel}
+                            selectedUnitLabel={selectedUnitLabel}
                             onLeadChange={(id, name) => { setFormData(f => ({ ...f, lead_id: id })); setLeadLabel(name) }}
                             onProjectChange={(id, name) => { setFormData(f => ({ ...f, project_id: id })); setProjLabel(name) }}
+                            onUnitChange={(id, label) => { setFormData(f => ({ ...f, unit_id: id })); setUnitLabel(label) }}
                         />
 
                         <div className="flex items-center justify-end gap-3 pt-4 border-t">

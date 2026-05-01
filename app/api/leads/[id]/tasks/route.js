@@ -14,7 +14,15 @@ export async function GET(request, { params }) {
 
         const { data: tasks, error } = await supabase
             .from('tasks')
-            .select('*')
+            .select(`
+                *,
+                project:projects!tasks_project_id_fkey(id, name, city, address),
+                unit:units!tasks_unit_id_fkey(
+                    id, unit_number, bedrooms, bathrooms, floor_number, facing, 
+                    carpet_area, total_price, status, construction_status,
+                    tower:towers(name)
+                )
+            `)
             .eq('lead_id', id)
             .order('due_date', { ascending: true, nullsFirst: false })
 
@@ -87,9 +95,18 @@ export async function POST(request, { params }) {
                 priority:        body.priority    || 'medium',
                 status:          'pending',
                 assigned_to:     body.assigned_to || null,
+                unit_id:         body.unit_id     || null,
                 created_by:      user.id,
             })
-            .select('*')
+            .select(`
+                *,
+                project:projects!tasks_project_id_fkey(id, name, city, address),
+                unit:units!tasks_unit_id_fkey(
+                    id, unit_number, bedrooms, bathrooms, floor_number, facing, 
+                    carpet_area, total_price, status, construction_status,
+                    tower:towers(name)
+                )
+            `)
             .single()
 
         if (error) {

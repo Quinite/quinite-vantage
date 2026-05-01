@@ -35,6 +35,14 @@ export class UnitService {
             query = query.filter('config.category', 'eq', filters.category)
         }
 
+        if (filters.search) {
+            query = query.or(`unit_number.ilike.%${filters.search}%,title.ilike.%${filters.search}%`)
+        }
+
+        if (filters.limit) {
+            query = query.limit(filters.limit)
+        }
+
         const { data: units, error } = await query
 
         if (error) throw error

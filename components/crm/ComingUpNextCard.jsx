@@ -26,7 +26,9 @@ import {
     Clock,
     CalendarClock,
     Loader2,
+    Building2,
 } from 'lucide-react'
+import TaskUnitBadge from './TaskUnitBadge'
 import { cn } from '@/lib/utils'
 import { toast } from 'react-hot-toast'
 import { isPast, isToday, parseISO, differenceInDays } from 'date-fns'
@@ -154,6 +156,15 @@ function OverviewTaskRow({ task, onToggle, onDelete }) {
                     <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{task.description}</p>
                 )}
 
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {task.project && (
+                        <span className="text-[9px] font-bold uppercase tracking-tight text-indigo-500 bg-indigo-50/50 px-1.5 py-px rounded border border-indigo-100 shrink-0">
+                            {task.project.name}
+                        </span>
+                    )}
+                    {task.unit && <TaskUnitBadge unit={task.unit} project={task.project} />}
+                </div>
+
                 {/* Footer: due date + assignee */}
                 <div className="flex items-center gap-3 mt-1.5">
                     {!isCompleted && <DueDateBadge task={task} />}
@@ -187,6 +198,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
     const [saving, setSaving] = useState(false)
     const [teamMembers, setTeamMembers] = useState([])
     const [formData, setFormData] = useState(EMPTY_FORM)
+    const [selectedUnitLabel, setSelectedUnitLabel] = useState(null)
 
     useEffect(() => {
         if (leadId) fetchTasks()
@@ -237,6 +249,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
             toast.success('Task created successfully')
             setIsDialogOpen(false)
             setFormData(EMPTY_FORM)
+            setSelectedUnitLabel(null)
             fetchTasks()
         } catch (error) {
             console.error('Error creating task:', error)
@@ -412,6 +425,8 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
                             fixedLeadId={leadId}
                             fixedLeadLabel={leadName}
                             showLeadProject={false}
+                            selectedUnitLabel={selectedUnitLabel}
+                            onUnitChange={(id, label) => setSelectedUnitLabel(label)}
                         />
                         <div className="flex items-center justify-end gap-3 pt-4 border-t">
                             <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="text-slate-500">

@@ -22,7 +22,12 @@ async function resolveTaskScope(admin, user, profile, taskId) {
                 id, name, email, phone, mobile, score, interest_level, assigned_to,
                 stage:pipeline_stages!leads_stage_id_fkey(id, name, color)
             ),
-            project:projects!tasks_project_id_fkey(id, name, city, address)
+            project:projects!tasks_project_id_fkey(id, name, city, address),
+            unit:units!tasks_unit_id_fkey(
+                id, unit_number, bedrooms, bathrooms, floor_number, facing, 
+                carpet_area, total_price, status, construction_status,
+                tower:towers(name)
+            )
         `)
         .eq('id', taskId)
         .eq('organization_id', profile.organization_id)
@@ -106,7 +111,7 @@ export const PATCH = withAuth(async (request, context) => {
         const updates = {}
         const changedFields = {}
 
-        const editableFields = ['title', 'description', 'due_date', 'due_time', 'priority', 'status', 'lead_id', 'project_id']
+        const editableFields = ['title', 'description', 'due_date', 'due_time', 'priority', 'status', 'lead_id', 'project_id', 'unit_id']
         for (const field of editableFields) {
             if (field in body) {
                 if (field === 'status' || body[field] !== existing[field]) {
@@ -142,7 +147,12 @@ export const PATCH = withAuth(async (request, context) => {
                     id, name, email, phone, mobile, score, interest_level, assigned_to,
                     stage:pipeline_stages!leads_stage_id_fkey(id, name, color)
                 ),
-                project:projects!tasks_project_id_fkey(id, name, city, address)
+                project:projects!tasks_project_id_fkey(id, name, city, address),
+                unit:units!tasks_unit_id_fkey(
+                    id, unit_number, bedrooms, bathrooms, floor_number, facing, 
+                    carpet_area, total_price, status, construction_status,
+                    tower:towers(name)
+                )
             `)
             .single()
 

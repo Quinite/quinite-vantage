@@ -24,9 +24,11 @@ import { useOrgSettings } from '@/hooks/usePipelines'
 import { useSiteVisits } from '@/hooks/useSiteVisits'
 import { usePermission } from '@/contexts/PermissionContext'
 import { useQuery } from '@tanstack/react-query'
+import { createClient } from '@/lib/supabase/client'
 
 export default function LeadProfileView({ leadId, onClose, isModal = false }) {
     const { data: lead, isLoading: leadLoading, refetch: refetchLead } = useLead(leadId)
+    const supabase = createClient()
     const { data: organization } = useOrgSettings()
     const canViewDeals = usePermission('view_deals')
 
@@ -74,6 +76,28 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
     useEffect(() => {
         if (lead?.notes) setNotes(lead.notes)
     }, [lead?.notes])
+
+    // Subscribe to project_id changes on this lead (triggered by AI call auto-association)
+    useEffect(() => {
+        if (!leadId) return
+        const channel = supabase
+            .channel(`lead_project_${leadId}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'leads',
+                filter: `id=eq.${leadId}`
+            }, (payload) => {
+                const newProjectId = payload.new?.project_id
+                const oldProjectId = payload.old?.project_id
+                if (newProjectId !== oldProjectId) {
+                    toast.success(`Lead's project updated automatically based on AI call interest`)
+                    refetchLead()
+                }
+            })
+            .subscribe()
+        return () => { supabase.removeChannel(channel) }
+    }, [leadId])
 
     const refreshAll = () => refetchLead()
 
@@ -196,7 +220,12 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                     <LeadCallsTab callLogs={lead?.call_logs || []} />
                 )}
                 {activeTab === 'tasks' && (
-                    <LeadTasksManager leadId={leadId} leadName={lead?.name} />
+                    <LeadTasksManager 
+                        leadId={leadId} 
+                        leadName={lead?.name} 
+                        projectId={lead?.project_id}
+                        projectName={projectData?.name}
+                    />
                 )}
                 {activeTab === 'notes' && (
                     <LeadProfileNotes
