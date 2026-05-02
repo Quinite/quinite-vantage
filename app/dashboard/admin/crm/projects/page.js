@@ -29,7 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot, ArrowUpRight, ConciergeBell, ShoppingBag, Factory, Zap, FileText, Download, Copy } from 'lucide-react'
+import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot, ArrowUpRight, ConciergeBell, ShoppingBag, Factory, Zap, FileText, Download, Copy, Search } from 'lucide-react'
 
 function WhatsAppIcon({ className }) {
   return (
@@ -427,12 +427,12 @@ export default function ProjectsPage() {
 
 
   return (
-    <div className="min-h-screen bg-muted/5">
+    <div className="min-h-screen bg-slate-50/50">
       {/* Header */}
-      <div className="px-8 py-6 bg-white border-b border-slate-100">
+      <div className="p-4 md:px-8 md:py-6 bg-white border-b border-slate-100">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Project Portfolio</h1>
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight text-slate-900">Project Portfolio</h1>
             <p className="text-sm md:text-base text-slate-500 mt-1">
               {!loading ? `Managing ${projects.length} active projects in your workspace.` : 'Loading projects...'}
             </p>

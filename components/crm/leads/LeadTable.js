@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Edit, Trash2, Phone, Mail, User, ArrowUpDown, ArrowUp, ArrowDown, Archive, RefreshCcw, Star, Zap, Globe, Eye } from 'lucide-react'
+import { Edit, Trash2, Phone, Mail, User, Users, ArrowUpDown, ArrowUp, ArrowDown, Archive, RefreshCcw, Star, Zap, Globe, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getDefaultAvatar } from '@/lib/avatar-utils'

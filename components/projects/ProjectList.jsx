@@ -106,10 +106,10 @@ export default function ProjectList({
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                            <TableHead className="w-[100px]">Image</TableHead>
+                            <TableHead className="w-[80px] md:w-[100px]">Image</TableHead>
                             <TableHead>Project Info</TableHead>
-                            <TableHead>Location</TableHead>
-                            <TableHead>Type</TableHead>
+                            <TableHead className="hidden sm:table-cell">Location</TableHead>
+                            <TableHead className="hidden lg:table-cell">Type</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -163,13 +163,13 @@ export default function ProjectList({
                                             <div className="text-[11px] text-muted-foreground truncate">{project.address}</div>
                                         </div>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden sm:table-cell">
                                         <div className="text-sm text-muted-foreground flex items-center gap-1">
                                             <MapPin className="w-3 h-3 opacity-70" />
                                             {loc.city || 'N/A'}, {loc.locality || ''}
                                         </div>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden lg:table-cell">
                                         <div className="text-sm">
                                             <span className="capitalize px-2 py-1 bg-muted rounded text-muted-foreground text-xs font-medium border border-border/50">
                                                 {prop.category || 'Project'}

@@ -32,22 +32,44 @@ function CustomToolbar({ date, view, onNavigate, onView }) {
             : format(date, 'EEEE, MMMM d')
 
     return (
-        <div className="flex items-center justify-between mb-4 px-1">
-            <div className="flex items-center gap-1">
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => onNavigate('PREV')}>
-                    <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-medium" onClick={() => onNavigate('TODAY')}>
-                    Today
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => onNavigate('NEXT')}>
-                    <ChevronRight className="w-4 h-4" />
-                </Button>
+        <div className="flex flex-col gap-2 mb-4 px-1">
+            {/* Row 1: Nav + Title */}
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => onNavigate('PREV')}>
+                        <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-medium" onClick={() => onNavigate('TODAY')}>
+                        Today
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => onNavigate('NEXT')}>
+                        <ChevronRight className="w-4 h-4" />
+                    </Button>
+                </div>
+
+                <h2 className="text-sm font-semibold text-foreground text-center flex-1 min-w-0 truncate">{label}</h2>
+
+                {/* View toggle — hidden on very small, shown inline on sm+ */}
+                <div className="hidden sm:flex items-center bg-muted p-0.5 rounded-lg gap-0.5 shrink-0">
+                    {['month', 'week', 'day'].map(v => (
+                        <button
+                            key={v}
+                            onClick={() => onView(v)}
+                            className={cn(
+                                'px-2.5 py-1 text-xs rounded-md font-medium capitalize transition-all',
+                                view === v
+                                    ? 'bg-background shadow-sm text-foreground'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            )}
+                        >
+                            {v}
+                        </button>
+                    ))}
+                </div>
             </div>
 
-            <h2 className="text-sm font-semibold text-foreground">{label}</h2>
-
-            <div className="flex items-center bg-muted p-0.5 rounded-lg gap-0.5">
+            {/* Row 2: View toggle for mobile only */}
+            <div className="flex sm:hidden items-center bg-muted p-0.5 rounded-lg gap-0.5 self-start">
                 {['month', 'week', 'day'].map(v => (
                     <button
                         key={v}
