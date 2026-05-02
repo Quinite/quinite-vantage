@@ -85,69 +85,73 @@ export default function SiteVisitsPage() {
     const conversionRate  = completedCount > 0 ? Math.round((interestedCount / completedCount) * 100) : 0
 
     return (
-        <div className="flex flex-col h-full gap-4 p-4 md:p-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col h-full gap-6 p-4 md:p-8 bg-slate-50/50 overflow-y-auto">
+            {/* Standardized Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
-                    <h1 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-primary" />
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                        <MapPin className="w-6 h-6 md:w-8 md:h-8 text-indigo-600" />
                         Site Visits
                     </h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                        {isLoading ? 'Loading…' : `${visits.length} total this period`}
+                    <p className="text-sm md:text-base text-slate-500 mt-1">
+                        {isLoading ? 'Loading site visits...' : `Track and manage ${visits.length} scheduled property viewings.`}
                     </p>
                 </div>
 
-                {/* Filters */}
+                {/* Filters Row */}
                 {(users.length > 0 || projects.length > 0) && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
-                        
-                        {/* Project Filter */}
-                        <Select value={filterProject} onValueChange={setFilterProject}>
-                            <SelectTrigger className="h-8 w-36 text-xs">
-                                <SelectValue placeholder="All projects" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All projects</SelectItem>
-                                {projects.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                        <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 w-full sm:w-auto overflow-x-auto no-scrollbar">
+                            {/* Project Filter */}
+                            <Select value={filterProject} onValueChange={setFilterProject}>
+                                <SelectTrigger className="h-9 w-[130px] text-xs border-none bg-transparent focus:ring-0">
+                                    <SelectValue placeholder="All projects" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All projects</SelectItem>
+                                    {projects.map(p => (
+                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
 
-                        {/* Agent Filter */}
-                        <Select value={filterAgent} onValueChange={setFilterAgent}>
-                            <SelectTrigger className="h-8 w-36 text-xs">
-                                <SelectValue placeholder="All agents" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All agents</SelectItem>
-                                {users.map(u => (
-                                    <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            <div className="w-px h-4 bg-slate-200 shrink-0" />
 
-                        {/* Status Filter */}
-                        <Select value={filterStatus} onValueChange={setFilterStatus}>
-                            <SelectTrigger className="h-8 w-32 text-xs">
-                                <SelectValue placeholder="All status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All status</SelectItem>
-                                <SelectItem value="scheduled">Scheduled</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                                <SelectItem value="no_show">No Show</SelectItem>
-                                <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                        </Select>
+                            {/* Agent Filter */}
+                            <Select value={filterAgent} onValueChange={setFilterAgent}>
+                                <SelectTrigger className="h-9 w-[130px] text-xs border-none bg-transparent focus:ring-0">
+                                    <SelectValue placeholder="All agents" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All agents</SelectItem>
+                                    {users.map(u => (
+                                        <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <div className="w-px h-4 bg-slate-200 shrink-0" />
+
+                            {/* Status Filter */}
+                            <Select value={filterStatus} onValueChange={setFilterStatus}>
+                                <SelectTrigger className="h-9 w-[120px] text-xs border-none bg-transparent focus:ring-0">
+                                    <SelectValue placeholder="All status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All status</SelectItem>
+                                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                    <SelectItem value="no_show">No Show</SelectItem>
+                                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
                         {(filterAgent !== '__all__' || filterProject !== '__all__' || filterStatus !== '__all__' || search) && (
                             <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                                className="h-9 text-xs text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-3 rounded-xl"
                                 onClick={() => { 
                                     setFilterAgent('__all__'); 
                                     setFilterProject('__all__'); 
@@ -155,7 +159,7 @@ export default function SiteVisitsPage() {
                                     setSearch('');
                                 }}
                             >
-                                Clear
+                                Reset
                             </Button>
                         )}
                     </div>
@@ -163,7 +167,7 @@ export default function SiteVisitsPage() {
             </div>
 
             {/* Stat Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 {[
                     {
                         label: 'Scheduled',
@@ -196,10 +200,10 @@ export default function SiteVisitsPage() {
                         label: 'Cancelled',
                         value: cancelledCount,
                         icon: XCircle,
-                        color: 'text-zinc-500',
-                        bg: 'bg-zinc-50',
-                        border: 'border-zinc-200',
-                        bar: 'bg-zinc-400',
+                        color: 'text-slate-500',
+                        bg: 'bg-slate-50',
+                        border: 'border-slate-200',
+                        bar: 'bg-slate-400',
                     },
                     {
                         label: 'Conversion',
@@ -212,17 +216,17 @@ export default function SiteVisitsPage() {
                         sub: `${interestedCount} interested`,
                     },
                 ].map(({ label, value, icon: Icon, color, bg, border, bar, sub }) => (
-                    <div key={label} className={`relative flex flex-col gap-2 rounded-xl border ${border} bg-card p-4 overflow-hidden`}>
-                        <div className={`absolute top-0 left-0 right-0 h-0.5 ${bar}`} />
+                    <div key={label} className={`relative flex flex-col gap-3 rounded-2xl border ${border} bg-white p-5 shadow-sm transition-all hover:shadow-md overflow-hidden group`}>
+                        <div className={`absolute top-0 left-0 right-0 h-1 ${bar} opacity-70 group-hover:opacity-100 transition-opacity`} />
                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">{label}</span>
-                            <span className={`w-7 h-7 rounded-lg ${bg} flex items-center justify-center`}>
-                                <Icon className={`w-3.5 h-3.5 ${color}`} />
-                            </span>
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                            <div className={`w-8 h-8 rounded-xl ${bg} flex items-center justify-center`}>
+                                <Icon className={`w-4 h-4 ${color}`} />
+                            </div>
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-foreground leading-none">{isLoading ? '—' : value}</p>
-                            {sub && <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>}
+                            <p className="text-3xl font-bold text-slate-900 leading-none tabular-nums tracking-tight">{isLoading ? '—' : value}</p>
+                            {sub && <p className="text-[11px] font-medium text-slate-500 mt-2">{sub}</p>}
                         </div>
                     </div>
                 ))}
