@@ -14,9 +14,6 @@ import {
     Calendar,
     Phone,
     Mail,
-    CheckCircle2,
-    Clock,
-    AlertCircle,
     ChevronDown
 } from 'lucide-react'
 import Link from 'next/link'
@@ -66,7 +63,7 @@ export default function CRMDashboardPage() {
 
     const metrics = [
         {
-
+            title: 'Total Leads',
             value: loading ? '...' : stats?.totalLeads || 0,
             change: loading ? '...' : stats?.leadsChange || '+12%',
             trend: 'up',
@@ -219,14 +216,7 @@ export default function CRMDashboardPage() {
                             ))}
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <PermissionGate feature="create_leads">
-                        <Link href="/dashboard/admin/crm/leads">
-                            <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
-                                <Plus className="w-4 h-4" />
-                                Add Lead
-                            </Button>
-                        </Link>
-                    </PermissionGate>
+
                 </div>
             </div>
 
@@ -399,48 +389,7 @@ export default function CRMDashboardPage() {
                 </Card>
             </div>
 
-            {/* Bottom Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card>
-                    <CardContent className="p-6">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-lg bg-blue-50">
-                                <CheckCircle2 className="w-6 h-6 text-blue-600" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Tasks Completed</p>
-                                <p className="text-2xl font-bold text-foreground">{loading ? '...' : stats?.tasksCompleted || 0}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-6">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-lg bg-orange-50">
-                                <Clock className="w-6 h-6 text-orange-600" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Pending Follow-ups</p>
-                                <p className="text-2xl font-bold text-foreground">{loading ? '...' : stats?.tasksPending || 0}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-6">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-lg bg-red-50">
-                                <AlertCircle className="w-6 h-6 text-red-600" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Overdue Tasks</p>
-                                <p className="text-2xl font-bold text-foreground">{loading ? '...' : stats?.tasksOverdue || 0}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+
         </div>
     )
 }

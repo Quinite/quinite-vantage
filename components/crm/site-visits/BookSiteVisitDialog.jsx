@@ -146,8 +146,8 @@ export default function BookSiteVisitDialog({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4 py-1">
-                    {/* Client / Lead Selection */}
-                    <div className="space-y-1.5">
+                    {/* Client / Lead Selection — hidden when opened from a lead's profile */}
+                    {!leadId && <div className="space-y-1.5">
                         <Label className="text-sm font-bold text-slate-600 tracking-wide">Lead <span className="text-red-500">*</span></Label>
                         
                         {currentLeadId ? (
@@ -292,6 +292,8 @@ export default function BookSiteVisitDialog({
                             </Popover>
                         )}
                     </div>
+
+                    }
 
                     {/* Date and Time Row */}
                     <div className="grid grid-cols-2 gap-4">
