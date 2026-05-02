@@ -51,7 +51,7 @@ export function LeadFilters({
             <CardContent className="pt-6">
                 <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1 relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Search className="absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Search leads..."
                             className="pl-8"

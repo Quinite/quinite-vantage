@@ -517,7 +517,7 @@ export function LeadTable({
                                                             <Button variant="ghost" size="icon" onClick={() => onEdit(lead)} className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
                                                                 <Edit className="h-3.5 w-3.5" />
                                                             </Button>
-                                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg" onClick={() => onArchive?.(lead)} title="Archive">
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg" onClick={() => onArchive?.(lead)} title="Archive">
                                                                 <Archive className="h-3.5 w-3.5" />
                                                             </Button>
                                                         </>
