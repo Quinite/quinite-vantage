@@ -49,6 +49,7 @@ export const GET = withAuth(async (request, context) => {
                 id,
                 lead_id,
                 project_id,
+                unit_id,
                 title,
                 description,
                 due_date,

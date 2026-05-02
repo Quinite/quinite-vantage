@@ -15,7 +15,7 @@ async function resolveTaskScope(admin, user, profile, taskId) {
     const { data: task, error } = await admin
         .from('tasks')
         .select(`
-            id, lead_id, project_id, title, description, due_date, due_time,
+            id, lead_id, project_id, unit_id, title, description, due_date, due_time,
             priority, status, assigned_to, created_by, updated_by,
             completed_at, created_at, updated_at,
             lead:leads!tasks_lead_id_fkey(
