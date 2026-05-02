@@ -29,7 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot, ArrowUpRight, ConciergeBell, ShoppingBag, Factory, Zap, FileText, Download, Copy, Search } from 'lucide-react'
+import { Building2, Plus, Sparkles, Loader2, Briefcase, LayoutGrid, List, X, Lock, RefreshCw, ChevronDown, ChevronUp, Archive, History, Megaphone, Users, PhoneCall, AlertCircle, Store, IndianRupee, MapPin, Calendar, CheckCircle2, Layout, Layers, Info, Star, PropertyCategoryIcon, Home, LandPlot, ArrowUpRight, ConciergeBell, ShoppingBag, Factory, Zap, FileText, Download, Copy } from 'lucide-react'
 
 function WhatsAppIcon({ className }) {
   return (
@@ -427,38 +427,40 @@ export default function ProjectsPage() {
 
 
   return (
-    <div className="min-h-screen bg-slate-50/50">
+    <div className="min-h-screen bg-muted/5">
       {/* Header */}
-      <div className="p-4 md:px-8 md:py-6 bg-white border-b border-slate-100">
+      <div className="px-6 py-5 border-b border-border bg-background">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl md:text-3xl font-bold tracking-tight text-slate-900">Project Portfolio</h1>
-            <p className="text-sm md:text-base text-slate-500 mt-1">
-              {!loading ? `Managing ${projects.length} active projects in your workspace.` : 'Loading projects...'}
-            </p>
+          {/* Title */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Projects</h1>
+            {!loading && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {projects.length} project{projects.length !== 1 ? 's' : ''} in your workspace
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
             {/* Search */}
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Search projects…"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
-                className="pl-10 h-10 bg-slate-50 border-slate-200 rounded-xl w-full focus-visible:ring-indigo-500"
+                className="h-10 bg-muted/40 border-border/60 focus:bg-background w-full"
               />
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
               {/* View toggle */}
-              <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0">
+              <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/50 shrink-0">
                 {[['grid', LayoutGrid], ['list', List]].map(([mode, Icon]) => (
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode)}
-                    className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all ${
-                      viewMode === mode ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'
+                    className={`h-9 w-9 flex items-center justify-center rounded-md transition-all ${
+                      viewMode === mode ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -469,11 +471,11 @@ export default function ProjectsPage() {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-10 w-10 shrink-0 rounded-xl border-slate-200"
+                className="h-10 w-10 shrink-0"
                 onClick={() => refetch()}
                 disabled={isFetching}
               >
-                <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
+                <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
               </Button>
 
               <PermissionTooltip
@@ -483,10 +485,10 @@ export default function ProjectsPage() {
                 <Button
                   onClick={() => setCreateOpen(true)}
                   disabled={!canCreate || subExpired}
-                  className="h-10 flex-1 sm:flex-initial gap-2 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all duration-200"
+                  className="h-10 flex-1 sm:flex-initial gap-2 px-4"
                 >
                   {(!canCreate || subExpired) ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                  <span className="whitespace-nowrap">Add Project</span>
+                  <span className="whitespace-nowrap">New Project</span>
                 </Button>
               </PermissionTooltip>
             </div>
