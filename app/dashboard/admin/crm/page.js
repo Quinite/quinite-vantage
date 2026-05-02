@@ -1,9 +1,10 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw, Settings } from 'lucide-react'
+import { Plus, RefreshCw, Settings, Zap } from 'lucide-react'
 import PipelineBoard from '@/components/crm/PipelineBoard'
 import ManageStagesSheet from '@/components/crm/ManageStagesSheet'
+import PipelineTriggersSheet from '@/components/crm/PipelineTriggersSheet'
 import { usePipelines } from '@/hooks/usePipelines'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef, Suspense } from 'react'
@@ -23,6 +24,7 @@ function CrmPipelineContent() {
     const projectId = searchParams.get('project_id')
     const [isDealInitOpen, setIsDealInitOpen] = useState(false)
     const [manageStagesOpen, setManageStagesOpen] = useState(false)
+    const [triggersOpen, setTriggersOpen] = useState(false)
     const [projects, setProjects] = useState([])
     const { data: pipelines = [], refetch: refetchPipelines } = usePipelines()
     const activePipeline = pipelines[0] ?? null
@@ -47,13 +49,23 @@ function CrmPipelineContent() {
                     </h1>
 
                     <PermissionGate feature={['manage_crm_settings', 'view_settings']}>
-                        <Button
-                            onClick={() => setManageStagesOpen(true)}
-                            className="bg-muted hover:bg-muted/80 text-foreground border border-border shadow-sm h-10 px-4 transition-all"
-                        >
-                            <Settings className="w-4 h-4 mr-2" />
-                            Manage Pipeline
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                onClick={() => setTriggersOpen(true)}
+                                variant="outline"
+                                className="h-10 px-4 gap-2 border-dashed"
+                            >
+                                <Zap className="w-4 h-4" />
+                                Pipeline Triggers
+                            </Button>
+                            <Button
+                                onClick={() => setManageStagesOpen(true)}
+                                className="bg-muted hover:bg-muted/80 text-foreground border border-border shadow-sm h-10 px-4 transition-all"
+                            >
+                                <Settings className="w-4 h-4 mr-2" />
+                                Manage Pipeline
+                            </Button>
+                        </div>
                     </PermissionGate>
                 </div>
 
@@ -74,6 +86,13 @@ function CrmPipelineContent() {
                 onOpenChange={setIsDealInitOpen}
                 projects={projects}
                 initialProjectId={projectId}
+            />
+
+            {/* Pipeline Triggers Sheet */}
+            <PipelineTriggersSheet
+                open={triggersOpen}
+                onOpenChange={setTriggersOpen}
+                pipelineId={activePipeline?.id}
             />
 
             {/* Manage Stages Sheet */}

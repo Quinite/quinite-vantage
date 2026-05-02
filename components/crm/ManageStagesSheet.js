@@ -32,7 +32,7 @@ import {
     useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Trash2, Save, Loader2 } from 'lucide-react'
+import { GripVertical, Trash2, Save, Loader2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 function SortableStageItem({ stage, onRename, onDelete }) {
@@ -109,12 +109,17 @@ function SortableStageItem({ stage, onRename, onDelete }) {
 export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }) {
     const [stages, setStages] = useState([])
     const [saving, setSaving] = useState(false)
+    const [newStageName, setNewStageName] = useState('')
+    const [addingStage, setAddingStage] = useState(false)
 
     useEffect(() => {
         if (pipeline?.stages) {
-            // Clone and sort by order_index
             const sortedStages = [...pipeline.stages].sort((a, b) => a.order_index - b.order_index)
             setStages(sortedStages)
+        }
+        if (!open) {
+            setNewStageName('')
+            setAddingStage(false)
         }
     }, [pipeline, open])
 
@@ -141,6 +146,17 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
         setStages(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s))
     }
 
+    const handleAddStage = () => {
+        const name = newStageName.trim()
+        if (!name) return
+        // Temp id prefixed so we can identify new stages on save
+        const tempId = `__new__${Date.now()}`
+        const maxOrder = stages.length > 0 ? Math.max(...stages.map(s => s.order_index ?? 0)) : -1
+        setStages(prev => [...prev, { id: tempId, name, order_index: maxOrder + 1, lead_count: 0, is_default: false, _isNew: true }])
+        setNewStageName('')
+        setAddingStage(false)
+    }
+
     const handleDelete = async (id) => {
         if (stages.length <= 1) {
             toast.error('Pipeline must have at least one stage')
@@ -152,32 +168,43 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
     }
 
     const handleSave = async () => {
+        if (!pipeline?.id) return
         setSaving(true)
         try {
-            // Calculate final order_index for all stages
-            const updatedStages = stages.map((s, idx) => ({
+            // 1. POST any new stages first to get real ids
+            let resolvedStages = [...stages]
+            const newStages = resolvedStages.filter(s => s._isNew)
+            for (const ns of newStages) {
+                const res = await fetch('/api/pipeline/stages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline_id: pipeline.id, name: ns.name, order_index: 999 }),
+                })
+                if (!res.ok) throw new Error(`Failed to create stage "${ns.name}"`)
+                const { stage } = await res.json()
+                // Replace temp entry with real stage
+                resolvedStages = resolvedStages.map(s => s.id === ns.id ? { ...stage, _isNew: false } : s)
+            }
+
+            // 2. PUT full list with final order_index values
+            const updatedStages = resolvedStages.map((s, idx) => ({
                 id: s.id,
                 name: s.name,
-                order_index: idx
+                order_index: idx,
             }))
 
-            // We need to handle deletions as well. 
-            // In a real app, you might want a separate API for deletion or handle it in the bulk update.
-            // For now, we'll assume the API handles partial lists or we can send the full desired state.
-            
             const res = await fetch('/api/pipeline/stages', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ stages: updatedStages, fullSync: true }),
             })
-
             if (!res.ok) throw new Error('Save failed')
-            
+
             toast.success('Pipeline stages updated')
             onRefresh?.()
             onClose()
         } catch (error) {
-            toast.error('Failed to save changes')
+            toast.error(error.message || 'Failed to save changes')
             console.error(error)
         } finally {
             setSaving(false)
@@ -189,7 +216,7 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
             <SheetContent className="w-full sm:max-w-md flex flex-col h-full p-0">
                 <SheetHeader className="p-6 border-b">
                     <SheetTitle>Manage Pipeline Stages</SheetTitle>
-                    <SheetDescription>
+                    <SheetDescription className='!mt-0'>
                         Reorder, rename, or remove stages from your CRM pipeline.
                     </SheetDescription>
                 </SheetHeader>
@@ -216,6 +243,36 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
                             </div>
                         </SortableContext>
                     </DndContext>
+                </div>
+
+                {/* Add Stage */}
+                <div className="px-6 pb-0">
+                    {addingStage ? (
+                        <div className="flex items-center gap-2">
+                            <Input
+                                autoFocus
+                                value={newStageName}
+                                onChange={e => setNewStageName(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') handleAddStage()
+                                    if (e.key === 'Escape') { setAddingStage(false); setNewStageName('') }
+                                }}
+                                placeholder="Stage name…"
+                                className="h-9 flex-1"
+                            />
+                            <Button size="sm" onClick={handleAddStage} disabled={!newStageName.trim()} className="h-9">Add</Button>
+                            <Button size="sm" variant="ghost" className="h-9" onClick={() => { setAddingStage(false); setNewStageName('') }}>Cancel</Button>
+                        </div>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            className="w-full border-dashed text-muted-foreground hover:text-primary hover:border-primary gap-2"
+                            onClick={() => setAddingStage(true)}
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Stage
+                        </Button>
+                    )}
                 </div>
 
                 <div className="p-6 border-t bg-muted/20 flex gap-3">

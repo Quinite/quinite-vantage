@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { DealService } from '@/services/deal.service'
+import { firePipelineTrigger, TRIGGER_KEYS } from '@/lib/pipeline-triggers'
 
 export async function GET(request, { params }) {
     try {
@@ -98,6 +99,9 @@ export async function POST(request, { params }) {
                 // Non-blocking — site visit is saved regardless
             }
         }
+
+        // Fire pipeline trigger — non-blocking
+        firePipelineTrigger(TRIGGER_KEYS.SITE_VISIT_BOOKED, id, profile.organization_id).catch(() => {})
 
         return NextResponse.json({ visit: data, dealCreated }, { status: 201 })
     } catch (error) {

@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { withPermission } from '@/lib/middleware/withAuth'
 import { DealService } from '@/services/deal.service'
+import { firePipelineTrigger, TRIGGER_KEYS } from '@/lib/pipeline-triggers'
 
 function dealStatusToUnitStatus(status) {
     if (status === 'won')  return 'sold'
@@ -82,6 +83,9 @@ export const POST = withPermission('manage_deals', async (request, context) => {
         } else if (project_id) {
             await adminClient.from('leads').update({ project_id }).eq('id', lead_id).is('project_id', null)
         }
+
+        // Fire pipeline trigger — non-blocking
+        firePipelineTrigger(TRIGGER_KEYS.DEAL_CREATED, lead_id, orgId).catch(() => {})
 
         return NextResponse.json({ deal })
     } catch (error) {

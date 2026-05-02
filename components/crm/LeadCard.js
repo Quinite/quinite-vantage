@@ -6,7 +6,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Phone, AlertTriangle, Clock, Flame, Timer, Zap, Snowflake } from 'lucide-react'
+import { Phone, AlertTriangle, Clock, Flame, Timer, Zap, Snowflake, PhoneMissed } from 'lucide-react'
 import { getDefaultAvatar } from '@/lib/avatar-utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -228,6 +228,21 @@ function LeadCardInner({ lead }) {
                                 </Tooltip>
                             </TooltipProvider>
                         )}
+                        {lead.call_failed_at && (
+                            <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-destructive/10 text-destructive border border-destructive/20 shrink-0">
+                                            <PhoneMissed className="w-2.5 h-2.5" />
+                                            Call Failed
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-[10px] py-1 px-2">
+                                        All call attempts exhausted
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
                     </div>
                 </div>
             </div>
@@ -243,7 +258,8 @@ export const LeadCard = memo(LeadCardInner, (prev, next) => {
         prev.lead.interest_level === next.lead.interest_level &&
         prev.lead.days_in_current_stage === next.lead.days_in_current_stage &&
         prev.lead.assigned_to === next.lead.assigned_to &&
-        prev.lead.upcomingVisit?.id === next.lead.upcomingVisit?.id
+        prev.lead.upcomingVisit?.id === next.lead.upcomingVisit?.id &&
+        prev.lead.call_failed_at === next.lead.call_failed_at
     )
 })
 LeadCard.displayName = 'LeadCard'
