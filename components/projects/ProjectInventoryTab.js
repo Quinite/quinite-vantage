@@ -890,6 +890,7 @@ export default function ProjectInventoryTab({ projectId, project, onMetricsUpdat
                 onClose={() => setDrawerState(s => ({ ...s, open: false }))}
                 mode={drawerState.mode}
                 unit={drawerState.unit}
+                project={project}
                 projectId={projectId}
                 unitConfigs={unitConfigs}
                 onSave={async (payload) => {

@@ -195,6 +195,123 @@ export function AnalyticsView({ units = [], projects = [] }) {
                 ))}
             </div>
 
+            {/* ── Full Project Performance Table ─────────────────────────── */}
+            <SectionCard
+                title="Full Project Performance"
+                subtitle="Detailed metrics for each project"
+                action={
+                    <Link href="/dashboard/admin/inventory/projects" className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                        Manage <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
+                }
+            >
+                {projectRows.length === 0 ? (
+                    <div className="py-16 text-center text-slate-400">
+                        <FolderKanban className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                        <p className="text-sm font-medium text-slate-500">No projects yet</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b bg-slate-50/50">
+                                    {['Project', 'Status', 'Total', 'Sold', 'Reserved', 'Available', 'Avg Price', 'Portfolio Value', 'Sold Value', 'Sales %'].map(h => (
+                                        <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap first:sticky first:left-0 first:bg-slate-50/50 first:z-10">
+                                            {h}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {projectRows.map(p => {
+                                    const sc = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning
+                                    const barWidth = pct(p.sold + p.reserved, p.pTotal)
+                                    return (
+                                        <tr
+                                            key={p.id}
+                                            className="hover:bg-slate-50/60 transition-colors group"
+                                        >
+                                            {/* Project name — sticky */}
+                                            <td className="px-5 py-3.5 sticky left-0 bg-white group-hover:bg-slate-50/60 z-10">
+                                                <div className="flex items-center gap-2.5 min-w-[160px]">
+                                                    <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center text-[10px] font-black text-blue-700 shrink-0">
+                                                        {p.name?.substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <Link
+                                                        href={`/dashboard/admin/inventory/projects/${p.id}`}
+                                                        className="font-semibold text-slate-800 hover:text-blue-600 transition-colors truncate max-w-[140px]"
+                                                    >
+                                                        {p.name}
+                                                    </Link>
+                                                </div>
+                                            </td>
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sc.bg, sc.text, sc.border)}>
+                                                    {sc.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-center font-bold text-slate-700 tabular-nums">{p.pTotal}</td>
+                                            <td className="px-5 py-3.5 text-center">
+                                                <span className="font-bold text-indigo-600 tabular-nums">{p.sold}</span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-center">
+                                                <span className="font-bold text-amber-600 tabular-nums">{p.reserved}</span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-center">
+                                                <span className="font-bold text-emerald-600 tabular-nums">{p.available}</span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-slate-600 font-medium whitespace-nowrap tabular-nums">
+                                                {p.avgPrice > 0 ? formatINR(p.avgPrice) : '—'}
+                                            </td>
+                                            <td className="px-5 py-3.5 text-slate-700 font-semibold whitespace-nowrap tabular-nums">
+                                                {p.totalValue > 0 ? formatINR(p.totalValue) : '—'}
+                                            </td>
+                                            <td className="px-5 py-3.5 text-indigo-700 font-semibold whitespace-nowrap tabular-nums">
+                                                {p.soldValue > 0 ? formatINR(p.soldValue) : '—'}
+                                            </td>
+                                            <td className="px-5 py-3.5 w-[160px]">
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                        <span className="text-slate-400">{p.sold + p.reserved} / {p.pTotal}</span>
+                                                        <span className={cn('font-bold tabular-nums', p.salesPct >= 80 ? 'text-rose-500' : 'text-slate-700')}>
+                                                            {p.salesPct}%
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                                        <div className="h-full bg-indigo-500" style={{ width: `${pct(p.sold, p.pTotal)}%`     }} />
+                                                        <div className="h-full bg-amber-400"  style={{ width: `${pct(p.reserved, p.pTotal)}%` }} />
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                            {/* Footer totals */}
+                            <tfoot>
+                                <tr className="border-t-2 border-slate-200 bg-slate-50/80">
+                                    <td className="px-5 py-3 sticky left-0 bg-slate-50/80 z-10">
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Totals</span>
+                                    </td>
+                                    <td />
+                                    <td className="px-5 py-3 text-center font-black text-slate-800 tabular-nums">{totalUnits}</td>
+                                    <td className="px-5 py-3 text-center font-black text-indigo-700 tabular-nums">{sold}</td>
+                                    <td className="px-5 py-3 text-center font-black text-amber-600 tabular-nums">{reserved}</td>
+                                    <td className="px-5 py-3 text-center font-black text-emerald-700 tabular-nums">{available}</td>
+                                    <td />
+                                    <td className="px-5 py-3 font-black text-slate-800 whitespace-nowrap tabular-nums">{formatINR(totalValue)}</td>
+                                    <td className="px-5 py-3 font-black text-indigo-700 whitespace-nowrap tabular-nums">{formatINR(soldValue)}</td>
+                                    <td className="px-5 py-3">
+                                        <span className="text-sm font-black text-slate-700 tabular-nums">{convRate}%</span>
+                                        <span className="text-[11px] text-slate-400 ml-1">overall</span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                )}
+            </SectionCard>
+
             {/* ── Two-col: Project Inventory Chart + Conversion ──────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
@@ -441,122 +558,7 @@ export function AnalyticsView({ units = [], projects = [] }) {
                 </SectionCard>
             )}
 
-            {/* ── Full Project Performance Table ─────────────────────────── */}
-            <SectionCard
-                title="Full Project Performance"
-                subtitle="Detailed metrics for each project"
-                action={
-                    <Link href="/dashboard/admin/inventory/projects" className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-                        Manage <ArrowUpRight className="w-3.5 h-3.5" />
-                    </Link>
-                }
-            >
-                {projectRows.length === 0 ? (
-                    <div className="py-16 text-center text-slate-400">
-                        <FolderKanban className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                        <p className="text-sm font-medium text-slate-500">No projects yet</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b bg-slate-50/50">
-                                    {['Project', 'Status', 'Total', 'Sold', 'Reserved', 'Available', 'Avg Price', 'Portfolio Value', 'Sold Value', 'Sales %'].map(h => (
-                                        <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap first:sticky first:left-0 first:bg-slate-50/50 first:z-10">
-                                            {h}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {projectRows.map(p => {
-                                    const sc = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning
-                                    const barWidth = pct(p.sold + p.reserved, p.pTotal)
-                                    return (
-                                        <tr
-                                            key={p.id}
-                                            className="hover:bg-slate-50/60 transition-colors group"
-                                        >
-                                            {/* Project name — sticky */}
-                                            <td className="px-5 py-3.5 sticky left-0 bg-white group-hover:bg-slate-50/60 z-10">
-                                                <div className="flex items-center gap-2.5 min-w-[160px]">
-                                                    <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center text-[10px] font-black text-blue-700 shrink-0">
-                                                        {p.name?.substring(0, 2).toUpperCase()}
-                                                    </div>
-                                                    <Link
-                                                        href={`/dashboard/admin/inventory/projects/${p.id}`}
-                                                        className="font-semibold text-slate-800 hover:text-blue-600 transition-colors truncate max-w-[140px]"
-                                                    >
-                                                        {p.name}
-                                                    </Link>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
-                                                <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sc.bg, sc.text, sc.border)}>
-                                                    {sc.label}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-center font-bold text-slate-700 tabular-nums">{p.pTotal}</td>
-                                            <td className="px-5 py-3.5 text-center">
-                                                <span className="font-bold text-indigo-600 tabular-nums">{p.sold}</span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-center">
-                                                <span className="font-bold text-amber-600 tabular-nums">{p.reserved}</span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-center">
-                                                <span className="font-bold text-emerald-600 tabular-nums">{p.available}</span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-slate-600 font-medium whitespace-nowrap tabular-nums">
-                                                {p.avgPrice > 0 ? formatINR(p.avgPrice) : '—'}
-                                            </td>
-                                            <td className="px-5 py-3.5 text-slate-700 font-semibold whitespace-nowrap tabular-nums">
-                                                {p.totalValue > 0 ? formatINR(p.totalValue) : '—'}
-                                            </td>
-                                            <td className="px-5 py-3.5 text-indigo-700 font-semibold whitespace-nowrap tabular-nums">
-                                                {p.soldValue > 0 ? formatINR(p.soldValue) : '—'}
-                                            </td>
-                                            <td className="px-5 py-3.5 w-[160px]">
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center justify-between text-[11px]">
-                                                        <span className="text-slate-400">{p.sold + p.reserved} / {p.pTotal}</span>
-                                                        <span className={cn('font-bold tabular-nums', p.salesPct >= 80 ? 'text-rose-500' : 'text-slate-700')}>
-                                                            {p.salesPct}%
-                                                        </span>
-                                                    </div>
-                                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
-                                                        <div className="h-full bg-indigo-500" style={{ width: `${pct(p.sold, p.pTotal)}%`     }} />
-                                                        <div className="h-full bg-amber-400"  style={{ width: `${pct(p.reserved, p.pTotal)}%` }} />
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )
-                                })}
-                            </tbody>
-                            {/* Footer totals */}
-                            <tfoot>
-                                <tr className="border-t-2 border-slate-200 bg-slate-50/80">
-                                    <td className="px-5 py-3 sticky left-0 bg-slate-50/80 z-10">
-                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Totals</span>
-                                    </td>
-                                    <td />
-                                    <td className="px-5 py-3 text-center font-black text-slate-800 tabular-nums">{totalUnits}</td>
-                                    <td className="px-5 py-3 text-center font-black text-indigo-700 tabular-nums">{sold}</td>
-                                    <td className="px-5 py-3 text-center font-black text-amber-600 tabular-nums">{reserved}</td>
-                                    <td className="px-5 py-3 text-center font-black text-emerald-700 tabular-nums">{available}</td>
-                                    <td />
-                                    <td className="px-5 py-3 font-black text-slate-800 whitespace-nowrap tabular-nums">{formatINR(totalValue)}</td>
-                                    <td className="px-5 py-3 font-black text-indigo-700 whitespace-nowrap tabular-nums">{formatINR(soldValue)}</td>
-                                    <td className="px-5 py-3">
-                                        <span className="text-sm font-black text-slate-700 tabular-nums">{convRate}%</span>
-                                        <span className="text-[11px] text-slate-400 ml-1">overall</span>
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                )}
-            </SectionCard>
+
         </div>
     )
 }

@@ -218,6 +218,11 @@ export function UnitsView({ projectId = null }) {
         return result
     }, [units, search, selStatuses, selTypes, selProjects, selBHK, priceRange, areaRange, projectId, sortCol, sortDir])
 
+    const activeProject = useMemo(() => {
+        const pid = projectId || drawerState.unit?.project_id
+        return projects.find(p => p.id === pid)
+    }, [projectId, drawerState.unit?.project_id, projects])
+
     // ── Selection helpers ──
     const allSelected  = filteredUnits.length > 0 && filteredUnits.every(u => selected.has(u.id))
     const someSelected = filteredUnits.some(u => selected.has(u.id))
@@ -702,6 +707,7 @@ export function UnitsView({ projectId = null }) {
                 onClose={() => setDrawerState(s => ({ ...s, open: false }))}
                 mode={drawerState.mode}
                 unit={drawerState.unit}
+                project={activeProject}
                 projectId={projectId || drawerState.unit?.project_id}
                 onSave={async (payload) => {
                     const isNew = drawerState.mode === 'add'

@@ -47,8 +47,9 @@ const EMPTY_FORM = {
 
 function normalizeProjectStatus(status) {
   const s = (status || '').toLowerCase()
-  if (s.includes('ready') || s.includes('move')) return 'ready_to_move'
-  if (s.includes('complete') || s.includes('finished')) return 'completed'
+  if (s === 'ready_to_move' || s.includes('ready') || s.includes('move')) return 'ready_to_move'
+  if (s === 'completed' || s.includes('complete') || s.includes('finished')) return 'completed'
+  // Planning or anything else defaults to under_construction for the unit
   return 'under_construction'
 }
 
@@ -142,13 +143,27 @@ export default function UnitDialog({
       })
     } else {
       const generated = tower ? generateUnitNumber(tower.name, floorNumber, slotIndex || 0) : ''
-      const projectStatus = normalizeProjectStatus(project?.status)
+      const pStatus = project?.status || project?.project_status || ''
+      const projectStatus = normalizeProjectStatus(pStatus)
+      const projectPossession = project?.possession_date || null
+      const projectCompletion = project?.completion_date || null
+      
+      console.log('[UnitDialog] project detected:', {
+        hasProject: !!project,
+        pStatus,
+        projectStatus,
+        projectPossession,
+        projectCompletion,
+        projectKeys: project ? Object.keys(project) : []
+      })
+
       setFormData({
         ...EMPTY_FORM,
         unit_number: generated,
         construction_status: projectStatus,
-        possession_date: project?.possession_date || null,
-        completion_date: project?.completion_date || null,
+        // If ready/complete, we prefer completion_date, otherwise possession_date
+        possession_date: projectPossession,
+        completion_date: projectCompletion || (['ready_to_move', 'completed'].includes(projectStatus) ? projectPossession : null),
         metadata: { slot_index: slotIndex },
       })
     }

@@ -317,6 +317,31 @@ export default function InventoryOverviewPage() {
 
                     {/* Right 1/3: Donut + Quick Access */}
                     <div className="space-y-4">
+                        {/* Quick access */}
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/80">
+                                <h2 className="text-sm font-semibold text-slate-800">Quick Access</h2>
+                            </div>
+                            <div className="p-3 space-y-1">
+                                {[
+                                    { label: 'Browse All Units',   href: '/dashboard/admin/inventory/units',     icon: Home,         desc: `${available} available`,      text: 'text-emerald-600' },
+                                    { label: 'Manage Projects',    href: '/dashboard/admin/inventory/projects',  icon: FolderKanban, desc: `${projects.length} projects`,  text: 'text-blue-600'    },
+                                    { label: 'View Analytics',     href: '/dashboard/admin/inventory/analytics', icon: BarChart3,    desc: 'Charts & performance',         text: 'text-violet-600'  },
+                                ].map(({ label, href, icon: Icon, desc, text }) => (
+                                    <Link key={href} href={href} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors group">
+                                        <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-white transition-colors">
+                                            <Icon className={cn('w-4 h-4', text)} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-slate-700 group-hover:text-blue-600 transition-colors">{label}</p>
+                                            <p className="text-[11px] text-slate-400">{desc}</p>
+                                        </div>
+                                        <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 transition-colors" />
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+
                         {/* Status donut */}
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/80">
@@ -377,31 +402,6 @@ export default function InventoryOverviewPage() {
                                         <p className="text-sm">No units data</p>
                                     </div>
                                 )}
-                            </div>
-                        </div>
-
-                        {/* Quick access */}
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/80">
-                                <h2 className="text-sm font-semibold text-slate-800">Quick Access</h2>
-                            </div>
-                            <div className="p-3 space-y-1">
-                                {[
-                                    { label: 'Browse All Units',   href: '/dashboard/admin/inventory/units',     icon: Home,         desc: `${available} available`,      text: 'text-emerald-600' },
-                                    { label: 'Manage Projects',    href: '/dashboard/admin/inventory/projects',  icon: FolderKanban, desc: `${projects.length} projects`,  text: 'text-blue-600'    },
-                                    { label: 'View Analytics',     href: '/dashboard/admin/inventory/analytics', icon: BarChart3,    desc: 'Charts & performance',         text: 'text-violet-600'  },
-                                ].map(({ label, href, icon: Icon, desc, text }) => (
-                                    <Link key={href} href={href} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors group">
-                                        <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-white transition-colors">
-                                            <Icon className={cn('w-4 h-4', text)} />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-slate-700 group-hover:text-blue-600 transition-colors">{label}</p>
-                                            <p className="text-[11px] text-slate-400">{desc}</p>
-                                        </div>
-                                        <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 transition-colors" />
-                                    </Link>
-                                ))}
                             </div>
                         </div>
                     </div>
