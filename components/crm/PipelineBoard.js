@@ -95,6 +95,36 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
     const [filterProject, setFilterProject] = useState('__all__')
     const [filterStaleOnly, setFilterStaleOnly] = useState(false)
 
+    const boardRef = useRef(null)
+    const dragScroll = useRef({ isDown: false, startX: 0, scrollLeft: 0 })
+
+    const onMouseDown = useCallback((e) => {
+        // Don't hijack clicks on interactive elements or when a dnd drag is active
+        if (e.target.closest('button, a, input, [data-radix-collection-item]')) return
+        const el = boardRef.current
+        if (!el) return
+        dragScroll.current = { isDown: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft }
+        el.style.cursor = 'grabbing'
+        el.style.userSelect = 'none'
+    }, [])
+
+    const onMouseLeaveOrUp = useCallback(() => {
+        if (!dragScroll.current.isDown) return
+        dragScroll.current.isDown = false
+        const el = boardRef.current
+        if (el) { el.style.cursor = ''; el.style.userSelect = '' }
+    }, [])
+
+    const onMouseMove = useCallback((e) => {
+        if (!dragScroll.current.isDown) return
+        e.preventDefault()
+        const el = boardRef.current
+        if (!el) return
+        const x = e.pageX - el.offsetLeft
+        const walk = (x - dragScroll.current.startX) * 1.5
+        el.scrollLeft = dragScroll.current.scrollLeft - walk
+    }, [])
+
     const canManageDeals = usePermission('manage_deals')
     const canManageSettings = usePermission('manage_crm_settings')
     const router = useRouter()
@@ -385,7 +415,14 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                             >
-                <div className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-380px)]">
+                <div
+                    ref={boardRef}
+                    className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-380px)] cursor-grab"
+                    onMouseDown={onMouseDown}
+                    onMouseMove={onMouseMove}
+                    onMouseUp={onMouseLeaveOrUp}
+                    onMouseLeave={onMouseLeaveOrUp}
+                >
                     {Array.isArray(activePipeline?.stages) && activePipeline.stages.map(stage => {
                         const stageLeads = filteredLeads
                             .filter(l => l.stage_id === stage.id || (!l.stage_id && stage.order_index === 0))
