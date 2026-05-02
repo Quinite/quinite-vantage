@@ -112,29 +112,41 @@ export default function WebsiteSettingsPage() {
     return (
         <div className="h-full bg-gray-50/50 overflow-y-auto">
             <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-8">
-                <div className="mb-6 flex items-center justify-between">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 mt-4">Website Settings</h1>
-                        <p className="text-muted-foreground text-slate-500 mt-2">
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Website Settings</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">
                             Configure your public profile and website appearance.
                         </p>
                     </div>
-                    <div className="flex gap-2">
-                        <Link href="/dashboard/admin/website-builder">
-                            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <Link href="/dashboard/admin/website-builder" className="w-full md:w-auto">
+                            <Button variant="outline" className="w-full md:w-auto h-10 border-slate-200 text-slate-600 font-bold rounded-xl px-6">
                                 <Layout className="w-4 h-4 mr-2" />
-                                Open Visual Editor
+                                Visual Editor
                             </Button>
                         </Link>
+                        
+                        <PermissionTooltip hasPermission={canManage}>
+                            <Button
+                                onClick={handleSave}
+                                disabled={saving || !canManage}
+                                className="w-full md:w-auto h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl px-8 shadow-md transition-all duration-200"
+                            >
+                                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                Save Changes
+                            </Button>
+                        </PermissionTooltip>
+
                         {organization?.slug && organization?.public_profile_enabled && (
                             <a
                                 href={`/p/${organization.slug}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                className="hidden md:block"
                             >
-                                <Button variant="outline">
-                                    <ExternalLink className="w-4 h-4 mr-2" />
-                                    View Live Site
+                                <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl" title="View Live Site">
+                                    <ExternalLink className="w-4 h-4" />
                                 </Button>
                             </a>
                         )}
@@ -248,19 +260,6 @@ export default function WebsiteSettingsPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Save Button */}
-                    <div className="flex justify-end">
-                        <PermissionTooltip hasPermission={canManage}>
-                            <Button
-                                onClick={handleSave}
-                                disabled={saving || !canManage}
-                                size="lg"
-                            >
-                                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                                Save Changes
-                            </Button>
-                        </PermissionTooltip>
-                    </div>
                 </div>
             </div>
         </div>

@@ -1442,15 +1442,15 @@ export default function TasksPageView() {
         <TooltipProvider delayDuration={0}>
             <div className="flex-1 space-y-6 p-8 pt-6 min-h-0 overflow-y-auto bg-slate-50/30">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                     <div>
-                        <h1 className="text-3xl font-semibold tracking-tight text-foreground">Task Management</h1>
-                        <p className="text-muted-foreground mt-1">Track and manage your daily activities and follow-ups</p>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Task Management</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">Track and manage your daily activities and follow-ups.</p>
                     </div>
                     {canCreate && (
                         <Button 
                             onClick={() => setCreateOpen(true)} 
-                            className="h-10 gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6 font-bold shadow-md w-full sm:w-auto justify-center"
+                            className="h-10 gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6 font-bold shadow-md w-full md:w-auto justify-center"
                         >
                             <Plus className="w-4 h-4" /> Add Task
                         </Button>
@@ -1458,31 +1458,34 @@ export default function TasksPageView() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
-                        { label: 'Pending',       value: pendingCount,       icon: Clock,        color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-blue-100' },
-                        { label: 'Overdue',       value: overdueCount,       icon: AlertCircle,  color: 'text-red-600',     bg: 'bg-red-50',     border: 'border-red-100' },
-                        { label: 'High Priority', value: highPriorityCount,  icon: Zap,          color: 'text-rose-600',    bg: 'bg-rose-50',    border: 'border-rose-100' },
-                        { label: 'Completed',     value: completedCount,     icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-                    ].map(({ label, value, icon: Icon, color, bg, border }) => (
-                        <Card key={label} className={cn("border bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden", border)}>
-                            <CardContent className="p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</p>
-                                    <div className={cn("p-1.5 rounded-lg", bg)}>
-                                        <Icon className={cn("w-4 h-4", color)} />
-                                    </div>
+                        { label: 'Pending',       value: pendingCount,       icon: Clock,        color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-blue-100', shadow: 'shadow-blue-50' },
+                        { label: 'Overdue',       value: overdueCount,       icon: AlertCircle,  color: 'text-red-600',     bg: 'bg-red-50',     border: 'border-red-100', shadow: 'shadow-red-50' },
+                        { label: 'High Priority', value: highPriorityCount,  icon: Zap,          color: 'text-rose-600',    bg: 'bg-rose-50',    border: 'border-rose-100', shadow: 'shadow-rose-50' },
+                        { label: 'Completed',     value: completedCount,     icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', shadow: 'shadow-emerald-50' },
+                    ].map(({ label, value, icon: Icon, color, bg, border, shadow }) => (
+                        <div key={label} className={cn("relative bg-white rounded-2xl p-5 border shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5", border, shadow)}>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className={cn("p-2 rounded-xl", bg)}>
+                                    <Icon className={cn("w-5 h-5", color)} />
                                 </div>
-                                <div>
-                                    <p className={cn("text-2xl font-black tabular-nums leading-none", label === 'Overdue' && value > 0 ? 'text-red-600' : 'text-gray-900')}>
+                                {label === 'Overdue' && value > 0 && (
+                                    <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{label}</p>
+                                <div className="flex items-baseline gap-2">
+                                    <p className={cn("text-3xl font-black tabular-nums leading-none", label === 'Overdue' && value > 0 ? 'text-red-600' : 'text-slate-900')}>
                                         {value}
                                     </p>
                                     {label === 'Overdue' && value > 0 && (
-                                        <p className="text-[9px] font-bold text-red-500 mt-1 uppercase tracking-tight">Requires Attention</p>
+                                        <p className="text-[10px] font-bold text-red-500 uppercase tracking-tight">Attention</p>
                                     )}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     ))}
                 </div>
 

@@ -244,11 +244,40 @@ export default function OrganizationSettingsPage() {
     return (
         <div className="h-full bg-gray-50/50 overflow-y-auto">
             <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-8">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">Organization Settings</h1>
-                    <p className="text-muted-foreground text-slate-500 mt-2">
-                        Manage your organization profile, branding, and regional preferences.
-                    </p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Organization Settings</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">
+                            Manage your organization profile, branding, and regional preferences.
+                        </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <PermissionTooltip
+                            hasPermission={canEdit}
+                            message="You need 'Manage Settings' permission to save changes."
+                        >
+                            <Button
+                                onClick={() => {
+                                    if (!canEdit) return
+                                    handleSave()
+                                }}
+                                disabled={loading || uploading || !canEdit}
+                                className="w-full md:w-auto h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl px-8 shadow-md transition-all duration-200"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        {!canEdit && <Lock className="w-4 h-4 mr-2" />}
+                                        Save Changes
+                                    </>
+                                )}
+                            </Button>
+                        </PermissionTooltip>
+                    </div>
                 </div>
 
                 <Card>
@@ -435,31 +464,6 @@ export default function OrganizationSettingsPage() {
                         )}
 
                         <div className="pt-4 flex justify-end">
-                            <PermissionTooltip
-                                hasPermission={canEdit}
-                                message="You need 'Manage Settings' permission to save changes."
-                            >
-                                <Button
-                                    onClick={() => {
-                                        if (!canEdit) return
-                                        handleSave()
-                                    }}
-                                    disabled={loading || uploading || !canEdit}
-                                    className="w-full sm:w-auto sm:min-w-[120px]"
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        <>
-                                            {!canEdit && <Lock className="w-4 h-4 mr-2" />}
-                                            Save Changes
-                                        </>
-                                    )}
-                                </Button>
-                            </PermissionTooltip>
                         </div>
                     </CardContent>
                 </Card>

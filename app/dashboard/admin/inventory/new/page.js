@@ -90,15 +90,17 @@ export default function NewPropertyPage() {
 
     return (
         <div className="max-w-4xl mx-auto p-6 space-y-6">
-            <div className="flex items-center gap-4 mb-6">
-                <Link href="/dashboard/admin/inventory">
-                    <Button variant="ghost" size="icon">
-                        <ChevronLeft className="w-5 h-5" />
-                    </Button>
-                </Link>
-                <div className="flex-1">
-                    <h1 className="text-2xl font-bold text-slate-900">Add New Property</h1>
-                    <p className="text-sm text-muted-foreground">Create a new listing for your inventory</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div className="flex items-center gap-4">
+                    <Link href="/dashboard/admin/inventory">
+                        <Button variant="ghost" size="icon" className="h-10 w-10 border border-slate-200 hover:bg-slate-50">
+                            <ChevronLeft className="w-5 h-5" />
+                        </Button>
+                    </Link>
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Add New Property</h1>
+                        <p className="text-sm text-slate-500 mt-1">Create a new inventory listing for your CRM and website.</p>
+                    </div>
                 </div>
             </div>
 

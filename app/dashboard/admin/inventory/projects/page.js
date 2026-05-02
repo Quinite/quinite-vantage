@@ -95,14 +95,14 @@ export default function InventoryProjectsPage() {
             <div className="space-y-5">
 
                 {/* ── Header ──────────────────────────────────────────────── */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground">Projects</h1>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                            {enriched.length} project{enriched.length !== 1 ? 's' : ''} in inventory
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Project Inventory</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">
+                            {enriched.length} project{enriched.length !== 1 ? 's' : ''} managed in your inventory.
                         </p>
                     </div>
-                    <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0 w-full md:w-auto">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                         {/* View toggle */}
                         <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5 w-full sm:w-auto justify-center">
                             <button

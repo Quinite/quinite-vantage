@@ -39,11 +39,13 @@ export default function AnalyticsPage() {
             fallbackMessage="You do not have permission to view inventory analytics."
         >
             <div className="animate-in fade-in duration-300">
-                <div className="px-6 pt-6 pb-0">
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">Analytics</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                        Revenue intelligence, conversion rates, and portfolio performance
-                    </p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-6 pt-6 pb-2">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Inventory Analytics</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">
+                            Revenue intelligence, conversion rates, and portfolio performance
+                        </p>
+                    </div>
                 </div>
                 <AnalyticsView units={units} projects={projects} />
             </div>

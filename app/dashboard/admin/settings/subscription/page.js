@@ -228,8 +228,22 @@ export default function SubscriptionPage() {
     const monthlyBarColor = monthlyUsedPct >= 90 ? 'bg-red-500' : monthlyUsedPct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
 
     return (
-        <div className="h-full bg-gray-50/50 overflow-y-auto">
-            <div className="max-w-7xl mx-auto p-6 space-y-5">
+        <div className="flex-1 space-y-6 p-8 pt-6 bg-slate-50/30 min-h-screen">
+            <div className="max-w-7xl mx-auto space-y-8">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl bg-indigo-50 flex items-center justify-center">
+                            <Zap className="w-7 h-7 text-indigo-600" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Subscription & Billing</h1>
+                            <p className="text-sm md:text-base text-slate-500 mt-1">
+                                Manage your plan, call credits, and usage limits.
+                            </p>
+                        </div>
+                    </div>
+                </div>
 
                 {/* ── Tabs ─────────────────────────────────────────────────── */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>

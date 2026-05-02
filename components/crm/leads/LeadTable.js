@@ -99,15 +99,25 @@ export function LeadTable({
             {/* Mobile Card View */}
             <div className="block sm:hidden space-y-4">
                 {leads.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground border border-dashed border-slate-200 rounded-2xl bg-slate-50/30">
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="p-3 bg-white rounded-full shadow-sm">
-                                <User className="w-6 h-6 text-slate-300" />
+                    <div className="mx-4 my-8 text-center py-16 px-6 text-muted-foreground border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50 animate-in fade-in zoom-in duration-300">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-20 h-20 bg-white rounded-full shadow-xl flex items-center justify-center ring-8 ring-slate-50">
+                                <Users className="w-10 h-10 text-slate-200" />
                             </div>
-                            <div>
-                                <p className="text-sm font-bold text-slate-600">No leads found</p>
-                                <p className="text-[11px] text-slate-400 mt-0.5">Try adjusting your filters or search query</p>
+                            <div className="max-w-[240px] mx-auto">
+                                <h4 className="text-lg font-bold text-slate-900 leading-tight">No leads discovered</h4>
+                                <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                                    We couldn't find any leads matching your current criteria. Try broading your search or filters.
+                                </p>
                             </div>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="mt-2 rounded-xl border-slate-200 font-bold text-xs"
+                                onClick={() => window.location.reload()}
+                            >
+                                Refresh Leads
+                            </Button>
                         </div>
                     </div>
                 ) : (
@@ -355,11 +365,17 @@ export function LeadTable({
                     <TableBody>
                         {leads.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center py-16 text-muted-foreground">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <User className="w-8 h-8 text-slate-200" />
-                                        <p className="text-sm font-medium text-slate-500">No leads found</p>
-                                        <p className="text-xs text-slate-400">Try adjusting your filters</p>
+                                <TableCell colSpan={7} className="h-96 text-center">
+                                    <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-300">
+                                        <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center shadow-inner">
+                                            <Users className="w-12 h-12 text-slate-200" />
+                                        </div>
+                                        <div className="max-w-sm mx-auto">
+                                            <h3 className="text-xl font-bold text-slate-900">No matching leads</h3>
+                                            <p className="text-sm text-slate-500 mt-2">
+                                                Your current filters didn't return any results. Try adjusting your search query or removing some filters to see more leads.
+                                            </p>
+                                        </div>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -532,22 +548,22 @@ export function LeadTable({
             </div>
 
             {/* Pagination Footer */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 bg-white">
                 <div className="text-sm text-slate-500 font-medium order-2 sm:order-1">
-                    <span className="font-bold text-slate-900">{totalLeads}</span> leads found
+                    Showing <span className="font-bold text-slate-900">{leads.length}</span> of <span className="font-bold text-slate-900">{totalLeads}</span> leads
                 </div>
                 
-                <div className="flex flex-wrap items-center justify-center gap-3 order-1 sm:order-2">
-                    <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">Rows</span>
+                <div className="flex items-center gap-4 order-1 sm:order-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <div className="hidden md:flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-xl border border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Rows</span>
                         <Select
                             value={String(limit)}
                             onValueChange={(val) => onLimitChange?.(parseInt(val))}
                         >
-                            <SelectTrigger className="h-7 w-[65px] border-0 bg-transparent p-0 focus:ring-0 text-xs font-bold">
+                            <SelectTrigger className="h-7 w-[65px] border-0 bg-transparent p-0 focus:ring-0 text-xs font-bold text-slate-700">
                                 <SelectValue placeholder={limit} />
                             </SelectTrigger>
-                            <SelectContent side="top">
+                            <SelectContent side="top" className="rounded-xl shadow-xl border-slate-100">
                                 {[10, 20, 50, 100].map((pageSize) => (
                                     <SelectItem key={pageSize} value={String(pageSize)} className="text-xs">
                                         {pageSize}
@@ -557,17 +573,17 @@ export function LeadTable({
                         </Select>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => onPageChange(page - 1)}
                             disabled={page === 1 || loading || isLoadingMore}
-                            className="h-8 px-3 rounded-lg border-slate-200 bg-white shadow-sm disabled:opacity-30"
+                            className="h-9 px-4 rounded-xl border-slate-200 bg-white shadow-sm disabled:opacity-50 flex-1 sm:flex-none font-semibold text-xs"
                         >
                             Previous
                         </Button>
-                        <div className="bg-white border border-slate-200 rounded-lg h-8 px-3 flex items-center justify-center min-w-[70px] shadow-sm">
+                        <div className="bg-slate-50 border border-slate-100 rounded-xl h-9 px-4 flex items-center justify-center min-w-[90px] shadow-inner">
                             <span className="text-xs font-bold text-slate-600">Page {page}</span>
                         </div>
                         <Button
@@ -575,7 +591,7 @@ export function LeadTable({
                             size="sm"
                             onClick={() => onPageChange(page + 1)}
                             disabled={!hasMore || loading || isLoadingMore}
-                            className="h-8 px-3 rounded-lg border-slate-200 bg-white shadow-sm disabled:opacity-30"
+                            className="h-9 px-4 rounded-xl border-slate-200 bg-white shadow-sm disabled:opacity-50 flex-1 sm:flex-none font-semibold text-xs"
                         >
                             Next
                         </Button>

@@ -236,25 +236,27 @@ export default function AdminDashboardPage() {
     }
 
     return (
-        <div className="p-4 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500">
+        <div className="flex-1 space-y-6 p-8 pt-6 bg-slate-50/30 min-h-screen">
             <div className="mb-2">
                 <CustomBreadcrumbs />
             </div>
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard Overview</h1>
-                    <p className="text-muted-foreground mt-1">Welcome back. Here's what's happening today.</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Dashboard Overview</h1>
+                    <p className="text-sm md:text-base text-slate-500 mt-1">Welcome back. Here's a summary of your workspace performance.</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                    <Button variant="outline" onClick={handleExport} className="gap-2 text-xs w-full sm:w-auto justify-center">
-                        <Download className="w-3.5 h-3.5" />
-                        Export
+                    <Button variant="outline" onClick={handleExport} className="h-10 gap-2 font-bold text-xs w-full sm:w-auto justify-center rounded-xl border-slate-200 bg-white">
+                        <Download className="w-4 h-4" /> Export CSV
+                    </Button>
+                    <Button onClick={handleDownloadPDF} className="h-10 gap-2 font-bold text-xs w-full sm:w-auto justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md">
+                        <FileText className="w-4 h-4" /> Download Report
                     </Button>
                     {hasPermission('view_inventory') && (
                         <Link href="/dashboard/admin/inventory/new" className="w-full sm:w-auto">
-                            <Button className="gap-2 text-xs w-full justify-center">
-                                <Plus className="w-3.5 h-3.5" />
+                            <Button className="h-10 gap-2 font-bold text-xs w-full justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-800">
+                                <Plus className="w-4 h-4" />
                                 New Property
                             </Button>
                         </Link>
