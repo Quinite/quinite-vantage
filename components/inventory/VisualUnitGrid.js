@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus,
   Building2,
@@ -84,6 +84,7 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [targetFloor, setTargetFloor] = useState(null);
   const [dialogConfigFilter, setDialogConfigFilter] = useState(null); // 'villa' | 'land' | null
+  const pendingSlots = useRef(new Set());
 
   useEffect(() => {
     if (towers.length > 0 && !activeTowerId) {
@@ -139,7 +140,11 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
     if (!selectedConfig) return;
     if (selectedConfig.property_type === 'Villa') return;
     if (selectedConfig.category === 'land') return;
-    
+
+    const slotKey = `${activeTowerId}-${floorNum}-${slotIndex}`;
+    if (slotIndex !== null && pendingSlots.current.has(slotKey)) return;
+    if (slotIndex !== null) pendingSlots.current.add(slotKey);
+
     try {
       const currentFloorUnits = towerUnits.filter(u => Number(u.floor_number) === Number(floorNum));
       const nextIndex = slotIndex !== null ? slotIndex : currentFloorUnits.length;
@@ -170,6 +175,8 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
     } catch (error) {
       console.error('Painting error:', error);
       return false;
+    } finally {
+      if (slotIndex !== null) pendingSlots.current.delete(slotKey);
     }
   };
 

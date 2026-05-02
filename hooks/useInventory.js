@@ -120,6 +120,7 @@ export function useInventory({ projectId, organizationId }) {
                 .eq('project_id', projectId)
                 .eq('organization_id', organizationId)
                 .order('floor_number', { ascending: false })
+                .order('created_at', { ascending: true })
             if (error) throw new Error(error.message)
 
             // Return as object keyed by tower_id

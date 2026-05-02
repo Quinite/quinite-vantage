@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { calculateFinalPrice, generateUnitNumber, getStatusConfig } from '@/lib/inventory'
@@ -16,6 +16,7 @@ import ConstructionSection from './unit-dialog/ConstructionSection'
 import SiteVisitsPanel from './unit-dialog/SiteVisitsPanel'
 import UnitDealsPanel from './unit-dialog/UnitDealsPanel'
 import { useUnitDeals } from '@/hooks/useUnitDeals'
+import { createClient } from '@/lib/supabase/client'
 
 const EMPTY_FORM = {
   unit_number: '',
@@ -72,6 +73,37 @@ export default function UnitDialog({
   const [activeTab, setActiveTab] = useState('details')
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // Tower/floor picker — only used when mode==='add' and no towerId prop supplied
+  const needsTowerPicker = mode === 'add' && !towerId
+  const [towers, setTowers] = useState([])
+  const [towersLoading, setTowersLoading] = useState(false) // used in JSX below
+  const [pickedTowerId, setPickedTowerId] = useState('')
+  const [pickedFloor, setPickedFloor] = useState('')
+
+  useEffect(() => {
+    if (!open || !needsTowerPicker || !projectId) return
+    setPickedTowerId(''); setPickedFloor('')
+    setTowersLoading(true)
+    createClient()
+      .from('towers')
+      .select('id, name, total_floors, units_per_floor')
+      .eq('project_id', projectId)
+      .order('order_index')
+      .then(({ data }) => { setTowers(data || []); setTowersLoading(false) })
+  }, [open, needsTowerPicker, projectId])
+
+  // Auto-regenerate unit number when tower or floor changes
+  useEffect(() => {
+    if (!needsTowerPicker) return
+    const t = towers.find(t => t.id === pickedTowerId)
+    const floor = parseInt(pickedFloor)
+    if (t && !isNaN(floor)) {
+      setFormData(prev => ({ ...prev, unit_number: generateUnitNumber(t.name, floor, 0) }))
+    } else {
+      setFormData(prev => ({ ...prev, unit_number: '' }))
+    }
+  }, [pickedTowerId, pickedFloor, towers, needsTowerPicker])
 
   const { data: dealsData } = useUnitDeals(unit?.id)
   const activeDeal = dealsData?.deals?.find(d => d.status === 'reserved' || d.status === 'won')
@@ -149,10 +181,23 @@ export default function UnitDialog({
       toast.error('Unit number and config are required')
       return
     }
+
+    // For tower units added via picker, require tower + floor selection
+    const isLandOrVilla = ['land', 'villa'].includes(selectedConfig?.category) || selectedConfig?.property_type === 'Villa'
+    const resolvedTowerId = needsTowerPicker ? (isLandOrVilla ? null : pickedTowerId || null) : towerId
+    const resolvedFloor   = needsTowerPicker ? (isLandOrVilla ? null : (pickedFloor !== '' ? parseInt(pickedFloor) : null)) : floorNumber
+    if (needsTowerPicker && !isLandOrVilla && !resolvedTowerId) {
+      toast.error('Please select a tower')
+      return
+    }
+    if (needsTowerPicker && !isLandOrVilla && resolvedFloor === null) {
+      toast.error('Please select a floor')
+      return
+    }
+
     const finalPrice = calculateFinalPrice(formData.base_price || 0, formData.floor_rise_price || 0, formData.plc_price || 0)
     const numericFields = ['base_price', 'floor_rise_price', 'plc_price', 'carpet_area', 'built_up_area', 'super_built_up_area', 'plot_area', 'bedrooms', 'bathrooms', 'balconies']
     const cleaned = { ...formData }
-    // strip internal cache keys
     delete cleaned._lead_name
     delete cleaned._lead_phone
     numericFields.forEach(f => {
@@ -162,8 +207,8 @@ export default function UnitDialog({
     const payload = {
       ...cleaned,
       total_price: finalPrice,
-      tower_id: towerId,
-      floor_number: floorNumber,
+      tower_id: resolvedTowerId,
+      floor_number: resolvedFloor,
       project_id: projectId,
       organization_id: organizationId,
     }
@@ -195,6 +240,10 @@ export default function UnitDialog({
   const isLand = selectedCategory === 'land'
   const finalPrice = calculateFinalPrice(formData.base_price || 0, formData.floor_rise_price || 0, formData.plc_price || 0)
   const statusCfg = getStatusConfig(formData.status)
+
+  const isLandOrVilla = selectedConfig?.category === 'land' || selectedConfig?.property_type === 'Villa'
+  const towerPickerComplete = !needsTowerPicker || isLandOrVilla || (!!pickedTowerId && pickedFloor !== '')
+  const canSubmit = !!formData.unit_number && !!formData.config_id && towerPickerComplete
 
   const siteVisitCount = 0 // will be populated by panel itself; badge is informational
 
@@ -369,6 +418,14 @@ export default function UnitDialog({
                     unitConfigs={unitConfigs}
                     onConfigChange={handleConfigChange}
                     selectedConfig={selectedConfig}
+                    towerPicker={needsTowerPicker ? {
+                      towers,
+                      towersLoading,
+                      pickedTowerId,
+                      pickedFloor,
+                      setPickedTowerId,
+                      setPickedFloor,
+                    } : null}
                   />
                   <PricingSection
                     formData={formData}
@@ -424,8 +481,8 @@ export default function UnitDialog({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={saving}
-                  className="h-9 px-5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all disabled:opacity-60"
+                  disabled={saving || !canSubmit}
+                  className="h-9 px-5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving…' : mode === 'add' ? 'Create Unit' : 'Save Changes'}
                 </Button>

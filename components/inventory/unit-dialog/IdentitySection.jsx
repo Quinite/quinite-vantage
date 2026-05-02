@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-import { Sparkles, ChevronRight, ChevronDown, Check, LayoutGrid, Info } from 'lucide-react'
+import { Sparkles, ChevronRight, ChevronDown, Check, LayoutGrid, Info, Layers, AlertTriangle } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { getStatusConfig, formatINR } from '@/lib/inventory'
@@ -151,7 +151,10 @@ export default function IdentitySection({
   unitConfigs,
   onConfigChange,
   selectedConfig,
+  towerPicker = null,
 }) {
+  const isLandOrVilla = selectedConfig?.category === 'land' || selectedConfig?.property_type === 'Villa'
+  const showTowerPicker = towerPicker !== null && !isLandOrVilla
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
       {/* Section header */}
@@ -166,6 +169,80 @@ export default function IdentitySection({
           <span className="text-rose-400">*</span> Required
         </span>
       </div>
+
+      {/* Tower / Floor picker — only shown when adding from list view */}
+      {towerPicker !== null && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Placement</span>
+            {isLandOrVilla && (
+              <span className="ml-auto text-[10px] font-semibold text-slate-400 italic">Not required for {selectedConfig?.property_type || 'land'}</span>
+            )}
+          </div>
+
+          {isLandOrVilla ? null : towerPicker.towersLoading ? (
+            <p className="text-xs text-slate-400 py-1">Loading towers…</p>
+          ) : towerPicker.towers.length === 0 ? (
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-800">No towers created yet</p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  Go to the <span className="font-bold">Visual View</span> tab to add towers first, then come back to add units.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                  Tower <span className="text-rose-400">*</span>
+                </Label>
+                <Select value={towerPicker.pickedTowerId} onValueChange={towerPicker.setPickedTowerId}>
+                  <SelectTrigger className="h-9 bg-white border-slate-200 rounded-xl font-semibold text-sm">
+                    <SelectValue placeholder="Select tower…" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {towerPicker.towers.map(t => (
+                      <SelectItem key={t.id} value={t.id} className="font-semibold text-xs cursor-pointer">
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                  Floor <span className="text-rose-400">*</span>
+                </Label>
+                {(() => {
+                  const pickedTower = towerPicker.towers.find(t => t.id === towerPicker.pickedTowerId)
+                  const maxFloors = pickedTower?.total_floors ?? 0
+                  return (
+                    <Select
+                      value={towerPicker.pickedFloor}
+                      onValueChange={towerPicker.setPickedFloor}
+                      disabled={!towerPicker.pickedTowerId}
+                    >
+                      <SelectTrigger className="h-9 bg-white border-slate-200 rounded-xl font-semibold text-sm disabled:opacity-50">
+                        <SelectValue placeholder={towerPicker.pickedTowerId ? 'Select floor…' : 'Pick tower first'} />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl max-h-48">
+                        {Array.from({ length: maxFloors }, (_, i) => i + 1).map(f => (
+                          <SelectItem key={f} value={String(f)} className="font-semibold text-xs cursor-pointer">
+                            Floor {f}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Row 1: Unit number + Config + Transaction */}
       <div className="grid grid-cols-3 gap-3">

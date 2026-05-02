@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
-    Search, X, Filter, Plus,
-    IndianRupee, Building2, BedDouble, Info, Home,
-    MoreHorizontal, Edit, RefreshCcw, Table as TableIcon
+    Search, X, Plus, ChevronUp, ChevronDown, ChevronsUpDown,
+    Building2, BedDouble, Home, MoreHorizontal, Edit, RefreshCcw,
+    Filter, SlidersHorizontal, ArrowUpDown, Layers, IndianRupee,
+    MapPin, CheckSquare, Square
 } from 'lucide-react'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Label } from '@/components/ui/label'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -27,7 +27,8 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table"
+} from '@/components/ui/table'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { usePermission } from '@/contexts/PermissionContext'
 import { useInventoryProjects, useInventoryUnits } from '@/hooks/useInventory'
 import UnitDialog from './UnitDialog'
@@ -35,499 +36,685 @@ import StatusChangeModal from './StatusChangeModal'
 import { formatINR, getStatusConfig } from '@/lib/inventory'
 import { cn } from '@/lib/utils'
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const STATUSES = [
+    { value: 'available',         label: 'Available',    dot: 'bg-emerald-500' },
+    { value: 'reserved',          label: 'Reserved',     dot: 'bg-amber-500'   },
+    { value: 'sold',              label: 'Sold',         dot: 'bg-rose-500'    },
+    { value: 'blocked',           label: 'Blocked',      dot: 'bg-slate-400'   },
+    { value: 'under_maintenance', label: 'Maintenance',  dot: 'bg-purple-500'  },
+]
+
+const UNIT_TYPES = [
+    'Apartment', 'Villa', 'Villa Bungalow', 'Penthouse',
+    'Office', 'Retail', 'Showroom', 'Industrial', 'Plot', 'Land', 'Studio',
+]
+
+const BHK_OPTIONS = ['1', '2', '3', '4', '5']
+
+const SORTABLE_COLS = {
+    unit_number:  { label: 'Unit #',      get: u => u.unit_number ?? '' },
+    floor_number: { label: 'Floor',       get: u => u.floor_number ?? 0 },
+    carpet_area:  { label: 'Area',        get: u => u.carpet_area ?? u.config?.carpet_area ?? 0 },
+    total_price:  { label: 'Price',       get: u => u.total_price ?? u.base_price ?? 0 },
+    status:       { label: 'Status',      get: u => u.status ?? '' },
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SortIcon({ col, sortCol, sortDir }) {
+    if (sortCol !== col) return <ChevronsUpDown className="w-3 h-3 ml-1 text-slate-300 shrink-0" />
+    return sortDir === 'asc'
+        ? <ChevronUp className="w-3 h-3 ml-1 text-slate-700 shrink-0" />
+        : <ChevronDown className="w-3 h-3 ml-1 text-slate-700 shrink-0" />
+}
+
+function StatusBadge({ status }) {
+    const cfg = getStatusConfig(status || 'available')
+    return (
+        <span className={cn(
+            'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
+            cfg.bg, cfg.text
+        )}>
+            <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', cfg.dot)} />
+            {cfg.label}
+        </span>
+    )
+}
+
+function FilterChip({ label, count, icon: Icon, active, children }) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button className={cn(
+                    'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium transition-all select-none',
+                    active
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900'
+                )}>
+                    {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
+                    {label}
+                    {count > 0 && (
+                        <span className={cn(
+                            'ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold',
+                            active ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-700'
+                        )}>
+                            {count}
+                        </span>
+                    )}
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="rounded-xl shadow-xl border-slate-100 min-w-[180px]">
+                {children}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
+function TableSkeleton() {
+    return Array.from({ length: 8 }).map((_, i) => (
+        <TableRow key={i} className="border-slate-100">
+            {Array.from({ length: 8 }).map((_, j) => (
+                <TableCell key={j} className={j === 0 ? 'pl-5' : ''}>
+                    <Skeleton className={cn('h-4 rounded', j === 0 ? 'w-16' : j === 7 ? 'w-8 ml-auto' : 'w-24')} />
+                </TableCell>
+            ))}
+        </TableRow>
+    ))
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export function UnitsView({ projectId = null }) {
     const canManage = usePermission('manage_inventory')
-    const canEdit = usePermission('edit_inventory')
+    const canEdit   = usePermission('edit_inventory')
 
-    // Data fetching logic
-    const { 
-        data: units = [], 
-        isLoading: unitsLoading,
-        refetch: refetchUnits
-    } = useInventoryUnits(projectId)
-
-    const { 
-        data: projects = [], 
-        isLoading: projectsLoading 
-    } = useInventoryProjects()
-
+    const { data: units = [], isLoading: unitsLoading, refetch: refetchUnits } = useInventoryUnits(projectId)
+    const { data: projects = [], isLoading: projectsLoading } = useInventoryProjects()
     const loading = unitsLoading || projectsLoading
 
-    // Search & Filter state
-    const [search, setSearch] = useState('')
-    const [selectedTypes, setSelectedTypes] = useState([])
-    const [selectedStatuses, setSelectedStatuses] = useState([])
-    const [selectedProjects, setSelectedProjects] = useState([])
-    const [priceRange, setPriceRange] = useState({ min: '', max: '' })
-    const [areaRange, setAreaRange] = useState({ min: '', max: '' })
-    const [bedrooms, setBedrooms] = useState([])
+    // ── Filter state ──
+    const [search,           setSearch]           = useState('')
+    const [selStatuses,      setSelStatuses]      = useState([])
+    const [selTypes,         setSelTypes]         = useState([])
+    const [selProjects,      setSelProjects]      = useState([])
+    const [selBHK,           setSelBHK]           = useState([])
+    const [priceRange,       setPriceRange]       = useState({ min: '', max: '' })
+    const [areaRange,        setAreaRange]        = useState({ min: '', max: '' })
+    const [rangePopoverOpen, setRangePopoverOpen] = useState(false)
 
-    // UI States
-    const [drawerState, setDrawerState] = useState({ open: false, mode: 'add', unit: null })
+    // ── Sort state ──
+    const [sortCol, setSortCol] = useState('unit_number')
+    const [sortDir, setSortDir] = useState('asc')
+
+    // ── Selection state ──
+    const [selected, setSelected] = useState(new Set())
+
+    // ── Dialog state ──
+    const [drawerState,      setDrawerState]      = useState({ open: false, mode: 'add', unit: null })
     const [statusModalState, setStatusModalState] = useState({ open: false, unit: null })
 
-    const unitTypes = [
-        { value: 'apartment', label: 'Apartment' },
-        { value: 'villa', label: 'Villa' },
-        { value: 'plot', label: 'Plot' },
-        { value: 'commercial', label: 'Commercial' },
-        { value: 'penthouse', label: 'Penthouse' },
-        { value: 'studio', label: 'Studio' }
-    ]
+    // ── Toggle helpers ──
+    const toggle = useCallback((setter, value) => {
+        setter(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
+    }, [])
 
-    const statuses = [
-        { value: 'available', label: 'Available', key: 'available' },
-        { value: 'sold', label: 'Sold', key: 'sold' },
-        { value: 'reserved', label: 'Reserved', key: 'reserved' },
-        { value: 'blocked', label: 'Blocked', key: 'blocked' },
-        { value: 'under_maintenance', label: 'Maintenance', key: 'under_maintenance' }
-    ]
+    const clearAll = useCallback(() => {
+        setSearch(''); setSelStatuses([]); setSelTypes([])
+        setSelProjects([]); setSelBHK([])
+        setPriceRange({ min: '', max: '' }); setAreaRange({ min: '', max: '' })
+        setSelected(new Set())
+    }, [])
 
-    // Memoized filtered units
+    const hasFilters = search || selStatuses.length || selTypes.length ||
+        selProjects.length || selBHK.length ||
+        priceRange.min || priceRange.max || areaRange.min || areaRange.max
+
+    // ── Sort handler ──
+    const handleSort = (col) => {
+        if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+        else { setSortCol(col); setSortDir('asc') }
+    }
+
+    // ── Derived data ──
     const filteredUnits = useMemo(() => {
-        return units.filter(unit => {
-            const matchesSearch = !search ||
-                unit.unit_number?.toLowerCase().includes(search.toLowerCase()) ||
-                unit.title?.toLowerCase().includes(search.toLowerCase())
-
-            const unitType = unit.config?.property_type || unit.type
-            const matchesType = selectedTypes.length === 0 || selectedTypes.includes(unitType)
-
-            const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(unit.status)
-
-            const matchesProject = !projectId ? (selectedProjects.length === 0 || selectedProjects.includes(unit.project_id)) : true
-
-            const price = parseInt(unit.total_price || unit.base_price) || 0
-            const matchesPriceMin = !priceRange.min || price >= parseInt(priceRange.min)
-            const matchesPriceMax = !priceRange.max || price <= parseInt(priceRange.max)
-
-            const area = parseInt(unit.carpet_area || unit.size_sqft) || 0
-            const matchesAreaMin = !areaRange.min || area >= parseInt(areaRange.min)
-            const matchesAreaMax = !areaRange.max || area <= parseInt(areaRange.max)
-
-            const unitBeds = unit.bedrooms || unit.config?.bedrooms || 0
-            const matchesBeds = bedrooms.length === 0 || bedrooms.includes(unitBeds.toString())
-
-            return matchesSearch && matchesType && matchesStatus && matchesProject &&
-                matchesPriceMin && matchesPriceMax && matchesAreaMin && matchesAreaMax &&
-                matchesBeds
+        let result = units.filter(unit => {
+            if (search) {
+                const q = search.toLowerCase()
+                const matches =
+                    unit.unit_number?.toLowerCase().includes(q) ||
+                    unit.tower?.name?.toLowerCase().includes(q) ||
+                    unit.config?.config_name?.toLowerCase().includes(q) ||
+                    unit.project?.name?.toLowerCase().includes(q)
+                if (!matches) return false
+            }
+            if (selStatuses.length && !selStatuses.includes(unit.status)) return false
+            if (selTypes.length) {
+                const t = unit.config?.property_type || unit.type || ''
+                if (!selTypes.includes(t)) return false
+            }
+            if (!projectId && selProjects.length && !selProjects.includes(unit.project_id)) return false
+            if (selBHK.length) {
+                const beds = String(unit.bedrooms ?? unit.config?.bedrooms ?? '')
+                if (!selBHK.includes(beds)) return false
+            }
+            const price = Number(unit.total_price || unit.base_price) || 0
+            if (priceRange.min && price < Number(priceRange.min)) return false
+            if (priceRange.max && price > Number(priceRange.max)) return false
+            const area = Number(unit.carpet_area ?? unit.config?.carpet_area) || 0
+            if (areaRange.min && area < Number(areaRange.min)) return false
+            if (areaRange.max && area > Number(areaRange.max)) return false
+            return true
         })
-    }, [units, search, selectedTypes, selectedStatuses, selectedProjects, priceRange, areaRange, bedrooms, projectId])
 
-    const toggleFilter = (filterArray, setFilterArray, value) => {
-        if (filterArray.includes(value)) {
-            setFilterArray(filterArray.filter(v => v !== value))
-        } else {
-            setFilterArray([...filterArray, value])
-        }
+        const { get } = SORTABLE_COLS[sortCol] || SORTABLE_COLS.unit_number
+        result.sort((a, b) => {
+            const av = get(a), bv = get(b)
+            if (av < bv) return sortDir === 'asc' ? -1 : 1
+            if (av > bv) return sortDir === 'asc' ?  1 : -1
+            return 0
+        })
+        return result
+    }, [units, search, selStatuses, selTypes, selProjects, selBHK, priceRange, areaRange, projectId, sortCol, sortDir])
+
+    // ── Selection helpers ──
+    const allSelected  = filteredUnits.length > 0 && filteredUnits.every(u => selected.has(u.id))
+    const someSelected = filteredUnits.some(u => selected.has(u.id))
+    const toggleAll    = () => {
+        if (allSelected) setSelected(new Set())
+        else setSelected(new Set(filteredUnits.map(u => u.id)))
     }
+    const toggleRow    = (id) => setSelected(prev => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+    })
 
-    const clearAllFilters = () => {
-        setSelectedTypes([])
-        setSelectedStatuses([])
-        setPriceRange({ min: '', max: '' })
-        setAreaRange({ min: '', max: '' })
-        setBedrooms([])
-        if (!projectId) setSelectedProjects([])
-        setSearch('')
-    }
+    const selectedCount = selected.size
 
-    const hasActiveFilters = selectedTypes.length > 0 ||
-        selectedStatuses.length > 0 ||
-        selectedProjects.length > 0 ||
-        search ||
-        priceRange.min || priceRange.max ||
-        areaRange.min || areaRange.max ||
-        bedrooms.length > 0
+    // ── Stats (for status summary row) ──
+    const stats = useMemo(() => {
+        const counts = {}
+        for (const s of STATUSES) counts[s.value] = 0
+        for (const u of filteredUnits) counts[u.status] = (counts[u.status] || 0) + 1
+        return counts
+    }, [filteredUnits])
 
-    const openEditDrawer = (unit) => {
-        setDrawerState({ open: true, mode: 'edit', unit })
-    }
+    // ── SortableHead helper ──
+    const SortHead = ({ col, children, className }) => (
+        <TableHead
+            className={cn('select-none cursor-pointer group', className)}
+            onClick={() => handleSort(col)}
+        >
+            <div className="flex items-center gap-0.5">
+                {children}
+                <SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+            </div>
+        </TableHead>
+    )
 
-    const openAddDrawer = () => {
-        setDrawerState({ open: true, mode: 'add', unit: null })
-    }
-
-    const openStatusModal = (unit) => {
-        setStatusModalState({ open: true, unit })
-    }
+    const rangeActive = priceRange.min || priceRange.max || areaRange.min || areaRange.max
 
     return (
-        <div className="flex flex-col h-full bg-slate-50/30">
-            {/* Minimal Header/Filters Bar */}
-            <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-10">
-                <div className="flex flex-col gap-4">
-                    <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                        <div className="relative flex-1 w-full max-w-md">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <Input
-                                placeholder="Search by unit number..."
-                                className="pl-10 h-10 bg-slate-50 border-slate-200 focus:bg-white transition-all text-sm rounded-lg"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                            {search && (
-                                <button 
-                                    onClick={() => setSearch('')}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                >
-                                    <X className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                        </div>
+        <div className="flex flex-col h-full bg-slate-50/40">
 
-                        <div className="flex items-center gap-2 w-full md:w-auto">
-                            {canManage && (
-                                <Button 
-                                    onClick={openAddDrawer} 
-                                    className="h-10 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-all"
-                                >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Add Unit
-                                </Button>
-                            )}
-                        </div>
+            {/* ── Toolbar ── */}
+            <div className="bg-white border-b border-slate-200 px-5 py-3 flex flex-col gap-3 sticky top-0 z-10">
+
+                {/* Row 1: search + add */}
+                <div className="flex items-center gap-3">
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        <Input
+                            placeholder="Search unit, tower, config…"
+                            className="pl-9 h-9 bg-slate-50 border-slate-200 text-sm rounded-lg focus:bg-white transition-colors"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
+                        {search && (
+                            <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        {/* Project Filter */}
-                        {!projectId && projects.length > 0 && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-8 rounded-md border-slate-200 text-slate-600">
-                                        <Building2 className="w-3.5 h-3.5 mr-2" />
-                                        Project
-                                        {selectedProjects.length > 0 && (
-                                            <Badge variant="secondary" className="ml-2 h-4 px-1 text-[10px] bg-slate-100 text-slate-900 border-0">
-                                                {selectedProjects.length}
-                                            </Badge>
-                                        )}
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-56 rounded-xl shadow-xl border-slate-100">
-                                    <DropdownMenuLabel className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Filtered Projects</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <div className="max-h-64 overflow-y-auto">
-                                        {projects.map(project => (
-                                            <DropdownMenuCheckboxItem
-                                                key={project.id}
-                                                checked={selectedProjects.includes(project.id)}
-                                                onCheckedChange={() => toggleFilter(selectedProjects, setSelectedProjects, project.id)}
-                                                className="text-sm py-2"
-                                            >
-                                                {project.name}
-                                            </DropdownMenuCheckboxItem>
-                                        ))}
-                                    </div>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                    <div className="flex items-center gap-2 ml-auto">
+                        {selectedCount > 0 && (
+                            <span className="text-xs font-medium text-slate-500 mr-1">
+                                {selectedCount} selected
+                            </span>
                         )}
-
-                        {/* Status Filter */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-8 rounded-md border-slate-200 text-slate-600">
-                                    <Info className="w-3.5 h-3.5 mr-2" />
-                                    Status
-                                    {selectedStatuses.length > 0 && (
-                                        <Badge variant="secondary" className="ml-2 h-4 px-1 text-[10px] bg-slate-100 text-slate-900 border-0">
-                                            {selectedStatuses.length}
-                                        </Badge>
-                                    )}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-48 rounded-xl shadow-xl border-slate-100">
-                                <DropdownMenuLabel className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {statuses.map(status => (
-                                    <DropdownMenuCheckboxItem
-                                        key={status.value}
-                                        checked={selectedStatuses.includes(status.value)}
-                                        onCheckedChange={() => toggleFilter(selectedStatuses, setSelectedStatuses, status.value)}
-                                        className="text-sm py-2"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <div className={cn("w-1.5 h-1.5 rounded-full", getStatusConfig(status.key).dot)} />
-                                            {status.label}
-                                        </div>
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {/* Type Filter */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-8 rounded-md border-slate-200 text-slate-600">
-                                    <Home className="w-3.5 h-3.5 mr-2" />
-                                    Type
-                                    {selectedTypes.length > 0 && (
-                                        <Badge variant="secondary" className="ml-2 h-4 px-1 text-[10px] bg-slate-100 text-slate-900 border-0">
-                                            {selectedTypes.length}
-                                        </Badge>
-                                    )}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-48 rounded-xl shadow-xl border-slate-100">
-                                <DropdownMenuLabel className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Unit Type</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {unitTypes.map(type => (
-                                    <DropdownMenuCheckboxItem
-                                        key={type.value}
-                                        checked={selectedTypes.includes(type.value)}
-                                        onCheckedChange={() => toggleFilter(selectedTypes, setSelectedTypes, type.value)}
-                                        className="text-sm py-2"
-                                    >
-                                        {type.label}
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {/* Bedrooms Filter */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-8 rounded-md border-slate-200 text-slate-600">
-                                    <BedDouble className="w-3.5 h-3.5 mr-2" />
-                                    Beds
-                                    {bedrooms.length > 0 && (
-                                        <Badge variant="secondary" className="ml-2 h-4 px-1 text-[10px] bg-slate-100 text-slate-900 border-0">
-                                            {bedrooms.length}
-                                        </Badge>
-                                    )}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-48 rounded-xl shadow-xl border-slate-100">
-                                <DropdownMenuLabel className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Config</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {[1, 2, 3, 4, 5].map(num => (
-                                    <DropdownMenuCheckboxItem
-                                        key={num}
-                                        checked={bedrooms.includes(num.toString())}
-                                        onCheckedChange={() => toggleFilter(bedrooms, setBedrooms, num.toString())}
-                                        className="text-sm py-2"
-                                    >
-                                        {num} {num === 5 ? '+' : ''} BHK
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {/* More Filters */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-8 rounded-md border-slate-200 text-slate-600">
-                                    <Filter className="w-3.5 h-3.5 mr-2" />
-                                    More
-                                    {(priceRange.min || priceRange.max || areaRange.min || areaRange.max) && (
-                                        <Badge variant="secondary" className="ml-2 h-4 px-1 text-[10px] bg-blue-100 text-blue-600 border-0">
-                                            Active
-                                        </Badge>
-                                    )}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-72 p-4 rounded-xl shadow-xl border-slate-100 space-y-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest pl-1">Price Range (₹)</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input 
-                                            placeholder="Min" 
-                                            type="number" 
-                                            className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md" 
-                                            value={priceRange.min}
-                                            onChange={e => setPriceRange(prev => ({ ...prev, min: e.target.value }))}
-                                        />
-                                        <Input 
-                                            placeholder="Max" 
-                                            type="number" 
-                                            className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md" 
-                                            value={priceRange.max}
-                                            onChange={e => setPriceRange(prev => ({ ...prev, max: e.target.value }))}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest pl-1">Area Range (SQFT)</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input 
-                                            placeholder="Min" 
-                                            type="number" 
-                                            className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md" 
-                                            value={areaRange.min}
-                                            onChange={e => setAreaRange(prev => ({ ...prev, min: e.target.value }))}
-                                        />
-                                        <Input 
-                                            placeholder="Max" 
-                                            type="number" 
-                                            className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md" 
-                                            value={areaRange.max}
-                                            onChange={e => setAreaRange(prev => ({ ...prev, max: e.target.value }))}
-                                        />
-                                    </div>
-                                </div>
-                                <Button 
-                                    className="w-full h-8 text-xs bg-slate-900 hover:bg-slate-800 rounded-md" 
-                                    onClick={() => {}}
-                                >
-                                    Apply Ranges
-                                </Button>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {hasActiveFilters && (
+                        {canManage && (
                             <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md px-2"
-                                onClick={clearAllFilters}
+                                onClick={() => setDrawerState({ open: true, mode: 'add', unit: null })}
+                                className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium gap-1.5"
                             >
-                                <X className="w-3.5 h-3.5 mr-1" />
-                                Reset
+                                <Plus className="w-3.5 h-3.5" />
+                                Add Unit
                             </Button>
                         )}
                     </div>
                 </div>
-            </div>
 
-            {/* List Table Content */}
-            <div className="flex-1 overflow-hidden flex flex-col p-4 md:p-6">
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col flex-1">
-                    {loading ? (
-                        <div className="flex items-center justify-center h-64">
-                            <LoadingSpinner />
+                {/* Row 2: filters */}
+                <div className="flex items-center gap-2 flex-wrap">
+
+                    {/* Status */}
+                    <FilterChip
+                        label="Status"
+                        count={selStatuses.length}
+                        active={selStatuses.length > 0}
+                    >
+                        <DropdownMenuLabel className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {STATUSES.map(s => (
+                            <DropdownMenuCheckboxItem
+                                key={s.value}
+                                checked={selStatuses.includes(s.value)}
+                                onCheckedChange={() => toggle(setSelStatuses, s.value)}
+                                className="text-xs py-2"
+                            >
+                                <span className={cn('w-2 h-2 rounded-full mr-2 shrink-0 inline-block', s.dot)} />
+                                {s.label}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                    </FilterChip>
+
+                    {/* Type */}
+                    <FilterChip
+                        label="Type"
+                        icon={Home}
+                        count={selTypes.length}
+                        active={selTypes.length > 0}
+                    >
+                        <DropdownMenuLabel className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unit Type</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <div className="max-h-56 overflow-y-auto">
+                            {UNIT_TYPES.map(t => (
+                                <DropdownMenuCheckboxItem
+                                    key={t}
+                                    checked={selTypes.includes(t)}
+                                    onCheckedChange={() => toggle(setSelTypes, t)}
+                                    className="text-xs py-2"
+                                >
+                                    {t}
+                                </DropdownMenuCheckboxItem>
+                            ))}
                         </div>
-                    ) : (
-                        <div className="overflow-x-auto custom-scrollbar flex-1">
-                            <Table>
-                                <TableHeader className="bg-slate-50/50 sticky top-0 bg-white z-[5]">
-                                    <TableRow className="hover:bg-transparent border-slate-100">
-                                        <TableHead className="w-[120px] font-semibold text-slate-500 text-[10px] uppercase tracking-wider pl-6">Unit #</TableHead>
-                                        <TableHead className="font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Tower / Floor</TableHead>
-                                        <TableHead className="font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Type / Configuration</TableHead>
-                                        <TableHead className="font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Area (SQFT)</TableHead>
-                                        <TableHead className="font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Total Value</TableHead>
-                                        <TableHead className="font-semibold text-slate-500 text-[10px] uppercase tracking-wider text-center">Status</TableHead>
-                                        <TableHead className="w-[80px] text-right pr-6"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredUnits.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="h-64 text-center">
-                                                <div className="flex flex-col items-center justify-center p-8">
-                                                    <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300">
-                                                        <Search className="w-6 h-6" />
-                                                    </div>
-                                                    <p className="font-semibold text-slate-900">No units found</p>
-                                                    <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or search query.</p>
-                                                    <Button variant="link" size="sm" onClick={clearAllFilters} className="mt-2 text-blue-600">Clear all filters</Button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        filteredUnits.map((unit) => {
-                                            const status = getStatusConfig(unit.status || 'available');
-                                            return (
-                                                <TableRow key={unit.id} className="group hover:bg-slate-50/50 transition-colors border-slate-100">
-                                                    <TableCell className="pl-6 font-bold text-slate-900 text-sm">
-                                                        {unit.unit_number}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-semibold text-slate-600">{unit.tower?.name || 'Main Tower'}</span>
-                                                            <span className="text-[10px] text-slate-400 font-medium">Floor {unit.floor_number ?? 'N/A'}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-semibold text-slate-700 capitalize">
-                                                                {unit.config?.config_name || unit.config?.property_type || 'Residential'}
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-400 font-medium">
-                                                                {(unit.bedrooms || unit.config?.bedrooms) ? `${unit.bedrooms || unit.config?.bedrooms} BHK` : 'N/A'} • {(unit.facing || unit.config?.facing) || 'N/A'}
-                                                            </span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-xs font-semibold text-slate-600 tabular-nums">
-                                                        {unit.carpet_area || unit.config?.carpet_area || 0}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm font-bold text-slate-900 tabular-nums">
-                                                        {formatINR(unit.total_price || unit.base_price || 0)}
-                                                    </TableCell>
-                                                    <TableCell className="text-center">
-                                                        <Badge 
-                                                            variant="outline" 
-                                                            className={cn(
-                                                                "border-0 font-bold text-[10px] uppercase h-6 px-3 rounded-full inline-flex items-center gap-1.5",
-                                                                status.badge
-                                                            )}
-                                                        >
-                                                            <div className={cn("w-1.5 h-1.5 rounded-full", status.dot)} />
-                                                            {unit.status?.replace('_', ' ')}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right pr-6">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900 rounded-lg">
-                                                                    <MoreHorizontal className="w-4 h-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-xl border-slate-100">
-                                                                {canEdit && (
-                                                                    <DropdownMenuItem onClick={() => openEditDrawer(unit)} className="text-xs font-medium py-2 cursor-pointer flex items-center gap-2">
-                                                                        <Edit className="w-3.5 h-3.5 text-slate-400" /> 
-                                                                        Edit Details
-                                                                    </DropdownMenuItem>
-                                                                )}
-                                                                {canManage && (
-                                                                    <DropdownMenuItem onClick={() => openStatusModal(unit)} className="text-xs font-medium py-2 cursor-pointer flex items-center gap-2">
-                                                                        <RefreshCcw className="w-3.5 h-3.5 text-slate-400" /> 
-                                                                        Update Status
-                                                                    </DropdownMenuItem>
-                                                                )}
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </TableCell>
-                                                </TableRow>
-                                            )
-                                        })
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
+                    </FilterChip>
+
+                    {/* BHK */}
+                    <FilterChip
+                        label="BHK"
+                        icon={BedDouble}
+                        count={selBHK.length}
+                        active={selBHK.length > 0}
+                    >
+                        <DropdownMenuLabel className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Config</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {BHK_OPTIONS.map(n => (
+                            <DropdownMenuCheckboxItem
+                                key={n}
+                                checked={selBHK.includes(n)}
+                                onCheckedChange={() => toggle(setSelBHK, n)}
+                                className="text-xs py-2"
+                            >
+                                {n}{n === '5' ? '+' : ''} BHK
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                    </FilterChip>
+
+                    {/* Project (only on all-units page) */}
+                    {!projectId && projects.length > 0 && (
+                        <FilterChip
+                            label="Project"
+                            icon={Building2}
+                            count={selProjects.length}
+                            active={selProjects.length > 0}
+                        >
+                            <DropdownMenuLabel className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Project</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <div className="max-h-56 overflow-y-auto">
+                                {projects.map(p => (
+                                    <DropdownMenuCheckboxItem
+                                        key={p.id}
+                                        checked={selProjects.includes(p.id)}
+                                        onCheckedChange={() => toggle(setSelProjects, p.id)}
+                                        className="text-xs py-2"
+                                    >
+                                        {p.name}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
+                            </div>
+                        </FilterChip>
                     )}
-                    <div className="bg-white border-t border-slate-100 p-3 px-6 shrink-0 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Found {filteredUnits.length} results
-                        </span>
+
+                    {/* Price / Area ranges */}
+                    <Popover open={rangePopoverOpen} onOpenChange={setRangePopoverOpen}>
+                        <PopoverTrigger asChild>
+                            <button className={cn(
+                                'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium transition-all select-none',
+                                rangeActive
+                                    ? 'bg-slate-900 text-white border-slate-900'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900'
+                            )}>
+                                <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+                                Ranges
+                                {rangeActive && (
+                                    <span className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-white text-slate-900">
+                                        !
+                                    </span>
+                                )}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-72 p-4 rounded-xl shadow-xl border-slate-100 space-y-4">
+                            <div className="space-y-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Price Range (₹)</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Input placeholder="Min" type="number" className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md"
+                                        value={priceRange.min} onChange={e => setPriceRange(p => ({ ...p, min: e.target.value }))} />
+                                    <Input placeholder="Max" type="number" className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md"
+                                        value={priceRange.max} onChange={e => setPriceRange(p => ({ ...p, max: e.target.value }))} />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Carpet Area (sq.ft)</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Input placeholder="Min" type="number" className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md"
+                                        value={areaRange.min} onChange={e => setAreaRange(p => ({ ...p, min: e.target.value }))} />
+                                    <Input placeholder="Max" type="number" className="h-8 text-xs bg-slate-50 border-slate-100 rounded-md"
+                                        value={areaRange.max} onChange={e => setAreaRange(p => ({ ...p, max: e.target.value }))} />
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button size="sm" className="flex-1 h-8 text-xs rounded-md bg-slate-900 hover:bg-slate-800"
+                                    onClick={() => setRangePopoverOpen(false)}>
+                                    Apply
+                                </Button>
+                                {rangeActive && (
+                                    <Button size="sm" variant="ghost" className="h-8 text-xs rounded-md text-slate-400 hover:text-rose-500"
+                                        onClick={() => { setPriceRange({ min: '', max: '' }); setAreaRange({ min: '', max: '' }) }}>
+                                        Clear
+                                    </Button>
+                                )}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+
+                    {hasFilters && (
+                        <button
+                            onClick={clearAll}
+                            className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                        >
+                            <X className="w-3 h-3" />
+                            Clear all
+                        </button>
+                    )}
+
+                    {/* Status summary pills */}
+                    <div className="ml-auto flex items-center gap-2">
+                        {STATUSES.map(s => stats[s.value] > 0 && (
+                            <button
+                                key={s.value}
+                                onClick={() => toggle(setSelStatuses, s.value)}
+                                className={cn(
+                                    'inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11px] font-semibold transition-all border',
+                                    selStatuses.includes(s.value)
+                                        ? 'bg-slate-900 text-white border-slate-900'
+                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                                )}
+                            >
+                                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', s.dot)} />
+                                {stats[s.value]}
+                            </button>
+                        ))}
                     </div>
                 </div>
             </div>
 
-            {/* Reuse Refactored Drawer Component */}
+            {/* ── Table ── */}
+            <div className="flex-1 overflow-hidden flex flex-col px-5 py-4">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col flex-1 overflow-hidden">
+                    <div className="overflow-auto flex-1">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-slate-100">
+                                    {/* Checkbox */}
+                                    <TableHead className="w-10 pl-4">
+                                        <button onClick={toggleAll} className="text-slate-400 hover:text-slate-700 transition-colors">
+                                            {allSelected
+                                                ? <CheckSquare className="w-4 h-4 text-slate-700" />
+                                                : someSelected
+                                                    ? <CheckSquare className="w-4 h-4 text-slate-400" />
+                                                    : <Square className="w-4 h-4" />
+                                            }
+                                        </button>
+                                    </TableHead>
+
+                                    <SortHead col="unit_number" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider w-28">
+                                        Unit #
+                                    </SortHead>
+
+                                    <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                        Project / Tower
+                                    </TableHead>
+
+                                    <SortHead col="floor_number" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider w-20">
+                                        Floor
+                                    </SortHead>
+
+                                    <TableHead className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                        Configuration
+                                    </TableHead>
+
+                                    <SortHead col="carpet_area" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider w-28 text-right">
+                                        Area (sq.ft)
+                                    </SortHead>
+
+                                    <SortHead col="total_price" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider w-32 text-right">
+                                        Price
+                                    </SortHead>
+
+                                    <SortHead col="status" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider w-32">
+                                        Status
+                                    </SortHead>
+
+                                    <TableHead className="w-12 pr-4" />
+                                </TableRow>
+                            </TableHeader>
+
+                            <TableBody>
+                                {loading ? (
+                                    <TableSkeleton />
+                                ) : filteredUnits.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={9} className="h-64 text-center">
+                                            <div className="flex flex-col items-center justify-center gap-2">
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+                                                    <Search className="w-4 h-4 text-slate-400" />
+                                                </div>
+                                                <p className="text-sm font-semibold text-slate-900">No units found</p>
+                                                <p className="text-xs text-slate-400">Adjust filters or search to find units.</p>
+                                                {hasFilters && (
+                                                    <button onClick={clearAll} className="mt-1 text-xs text-blue-600 hover:underline font-medium">
+                                                        Clear all filters
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    filteredUnits.map(unit => {
+                                        const isSelected = selected.has(unit.id)
+                                        const area = unit.carpet_area ?? unit.config?.carpet_area
+                                        const beds = unit.bedrooms ?? unit.config?.bedrooms
+                                        const facing = unit.facing
+
+                                        return (
+                                            <TableRow
+                                                key={unit.id}
+                                                className={cn(
+                                                    'border-slate-100 transition-colors group',
+                                                    isSelected ? 'bg-slate-50' : 'hover:bg-slate-50/60'
+                                                )}
+                                            >
+                                                {/* Checkbox */}
+                                                <TableCell className="pl-4 w-10">
+                                                    <button
+                                                        onClick={() => toggleRow(unit.id)}
+                                                        className="text-slate-300 hover:text-slate-600 transition-colors"
+                                                    >
+                                                        {isSelected
+                                                            ? <CheckSquare className="w-4 h-4 text-slate-700" />
+                                                            : <Square className="w-4 h-4" />
+                                                        }
+                                                    </button>
+                                                </TableCell>
+
+                                                {/* Unit # */}
+                                                <TableCell>
+                                                    <span className="font-bold text-slate-900 text-sm tracking-tight">
+                                                        {unit.unit_number}
+                                                    </span>
+                                                </TableCell>
+
+                                                {/* Project / Tower */}
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        {!projectId && unit.project?.name && (
+                                                            <span className="text-[11px] text-slate-400 font-medium truncate max-w-[160px]">
+                                                                {unit.project.name}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                                                            {unit.tower?.name
+                                                                ? <><Layers className="w-3 h-3 text-slate-400 shrink-0" />{unit.tower.name}</>
+                                                                : <span className="text-slate-400 italic text-[11px]">Unassigned</span>
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+
+                                                {/* Floor */}
+                                                <TableCell>
+                                                    <span className="text-sm text-slate-700 font-medium tabular-nums">
+                                                        {unit.floor_number != null ? unit.floor_number : '—'}
+                                                    </span>
+                                                </TableCell>
+
+                                                {/* Config */}
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-xs font-semibold text-slate-800">
+                                                            {unit.config?.config_name || unit.config?.property_type || '—'}
+                                                        </span>
+                                                        <span className="text-[11px] text-slate-400">
+                                                            {[
+                                                                beds ? `${beds} BHK` : null,
+                                                                facing || null,
+                                                            ].filter(Boolean).join(' · ') || '—'}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+
+                                                {/* Area */}
+                                                <TableCell className="text-right">
+                                                    <span className="text-sm font-semibold text-slate-700 tabular-nums">
+                                                        {area ? area.toLocaleString('en-IN') : '—'}
+                                                    </span>
+                                                </TableCell>
+
+                                                {/* Price */}
+                                                <TableCell className="text-right">
+                                                    <span className="text-sm font-bold text-slate-900 tabular-nums">
+                                                        {formatINR(unit.total_price || unit.base_price || 0)}
+                                                    </span>
+                                                </TableCell>
+
+                                                {/* Status */}
+                                                <TableCell>
+                                                    <StatusBadge status={unit.status} />
+                                                </TableCell>
+
+                                                {/* Actions */}
+                                                <TableCell className="pr-4 text-right">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 rounded-md text-slate-400 hover:text-slate-900 hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-all"
+                                                            >
+                                                                <MoreHorizontal className="w-4 h-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-xl border-slate-100">
+                                                            {canEdit && (
+                                                                <DropdownMenuItem
+                                                                    onClick={() => setDrawerState({ open: true, mode: 'edit', unit })}
+                                                                    className="text-xs font-medium py-2 cursor-pointer gap-2"
+                                                                >
+                                                                    <Edit className="w-3.5 h-3.5 text-slate-400" />
+                                                                    Edit Details
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {canManage && (
+                                                                <DropdownMenuItem
+                                                                    onClick={() => setStatusModalState({ open: true, unit })}
+                                                                    className="text-xs font-medium py-2 cursor-pointer gap-2"
+                                                                >
+                                                                    <RefreshCcw className="w-3.5 h-3.5 text-slate-400" />
+                                                                    Update Status
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="border-t border-slate-100 px-5 py-2.5 flex items-center justify-between shrink-0 bg-white">
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                            {filteredUnits.length} {filteredUnits.length === 1 ? 'unit' : 'units'}
+                            {units.length !== filteredUnits.length && (
+                                <span className="font-normal"> of {units.length}</span>
+                            )}
+                        </span>
+                        {selectedCount > 0 && (
+                            <span className="text-[11px] font-semibold text-slate-500">
+                                {selectedCount} selected
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Dialogs ── */}
             <UnitDialog
                 open={drawerState.open}
-                onClose={() => setDrawerState({ ...drawerState, open: false })}
+                onClose={() => setDrawerState(s => ({ ...s, open: false }))}
                 mode={drawerState.mode}
                 unit={drawerState.unit}
                 projectId={projectId || drawerState.unit?.project_id}
                 onSave={async (payload) => {
                     const isNew = drawerState.mode === 'add'
                     const url = isNew ? '/api/inventory/units' : `/api/inventory/units/${drawerState.unit?.id}`
-                    const method = isNew ? 'POST' : 'PATCH'
-                    
                     const res = await fetch(url, {
-                        method,
+                        method: isNew ? 'POST' : 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payload),
                     })
-                    
                     if (!res.ok) {
                         const err = await res.json()
                         throw new Error(err.error || 'Failed to save unit')
                     }
-                    
                     refetchUnits()
                     return true
                 }}
@@ -536,10 +723,8 @@ export function UnitsView({ projectId = null }) {
             <StatusChangeModal
                 isOpen={statusModalState.open}
                 property={statusModalState.unit}
-                onClose={() => setStatusModalState({ ...statusModalState, open: false })}
-                onStatusChanged={() => {
-                    refetchUnits()
-                }}
+                onClose={() => setStatusModalState(s => ({ ...s, open: false }))}
+                onStatusChanged={refetchUnits}
             />
         </div>
     )
