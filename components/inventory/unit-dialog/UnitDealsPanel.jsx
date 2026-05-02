@@ -5,13 +5,16 @@ import { toast } from 'react-hot-toast'
 import {
     Plus, User, Phone, Trash2, ExternalLink, Mail, MapPin, Tag,
     Star, IndianRupee, AlertCircle, Search, Loader2, CheckCheck, TrendingDown, TrendingUp,
+    ChevronDown, Pencil,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useUnitDeals, useUnitDealsInvalidate } from '@/hooks/useUnitDeals'
 import { usePermission } from '@/contexts/PermissionContext'
@@ -31,15 +34,20 @@ const STATUS_META = {
     lost:        { color: 'bg-gray-100 text-gray-500 border-gray-200',        dot: 'bg-gray-400',    accent: 'bg-gray-300' },
 }
 
-function StatusPill({ status }) {
+function StatusPill({ status, interactive }) {
     const meta = STATUS_META[status] || STATUS_META.interested
     const label = DEAL_STATUSES.find(s => s.value === status)?.label || status
     return (
-        <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold', meta.color)}>
+        <span className={cn(
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all',
+            meta.color,
+            interactive && 'hover:brightness-95 cursor-pointer shadow-sm active:scale-[0.98]'
+        )}>
             {status === 'reserved' && <Star className="w-2.5 h-2.5 fill-current" />}
             {status === 'won'      && <CheckCheck className="w-3 h-3" />}
             {status !== 'reserved' && status !== 'won' && <span className={cn('w-1.5 h-1.5 rounded-full', meta.dot)} />}
-            {label}
+            <span>{label}</span>
+            {interactive && <ChevronDown className="w-3 h-3 opacity-60 ml-0.5" />}
         </span>
     )
 }
@@ -94,7 +102,8 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
         if (isOpen) {
             setSearch('')
             setSelectedLead(null)
-            setAmount('')
+            const totalPrice = Number(unit?.total_price || unit?.base_price || 0)
+            setAmount(totalPrice > 0 ? totalPrice.toString() : '')
             setNotes('')
             fetchLeads('', projectId)
         }
@@ -107,7 +116,7 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
     }
 
     const handleSave = async () => {
-        if (!selectedLead) return
+        if (!selectedLead || !amount) return
         setSaving(true)
         try {
             const name = `${selectedLead.name} — Unit ${unit?.unit_number || ''}`
@@ -146,7 +155,7 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
                 onInteractOutside={(e) => e.stopPropagation()}
             >
                 <DialogHeader>
-                    <DialogTitle>Link a Lead to this Unit</DialogTitle>
+                    <DialogTitle>Add New Deal</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
                     <div className="relative">
@@ -179,21 +188,36 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
                                         : 'border-transparent bg-card hover:bg-accent/50 hover:border-border'
                                 )}
                             >
-                                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
-                                    {lead.name?.[0]?.toUpperCase() + lead.name?.split(' ')?.[1]?.[0]?.toUpperCase() || '?'}
-                                </div>
+                                {lead.avatar_url ? (
+                                    <img src={lead.avatar_url} alt={lead.name} className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-100" />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                        {lead.name?.[0]?.toUpperCase() + lead.name?.split(' ')?.[1]?.[0]?.toUpperCase() || '?'}
+                                    </div>
+                                )}
                                 <div className="min-w-0 flex-1">
-                                    <p className="font-medium text-sm truncate">{lead.name}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-medium text-sm truncate">{lead.name}</p>
+                                        {lead.stage?.name && (
+                                            <Badge 
+                                                variant="secondary" 
+                                                className="px-1.5 py-0 text-[8px] h-3.5 font-bold uppercase tracking-tight"
+                                                style={{ 
+                                                    backgroundColor: lead.stage.color ? `${lead.stage.color}15` : '#f1f5f9',
+                                                    color: lead.stage.color || '#475569',
+                                                    borderColor: lead.stage.color ? `${lead.stage.color}33` : '#e2e8f0',
+                                                    borderWidth: '1px'
+                                                }}
+                                            >
+                                                {lead.stage.name}
+                                            </Badge>
+                                        )}
+                                    </div>
                                     <div className="flex flex-wrap gap-x-2 gap-y-1 mt-0.5">
                                         {lead.phone && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Phone className="w-2.5 h-2.5" />{lead.phone}</span>}
                                         {lead.email && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Mail className="w-2.5 h-2.5" />{lead.email}</span>}
                                     </div>
-                                    <div className="flex flex-wrap gap-1 mt-1.5">
-                                        {lead.stage?.name && (
-                                            <Badge variant="secondary" className="px-1.5 py-0 text-[9px] h-4 bg-indigo-50 text-indigo-600 border-indigo-100 font-medium">
-                                                {lead.stage.name}
-                                            </Badge>
-                                        )}
+                                    <div className="flex flex-wrap gap-1 mt-1">
                                         {lead.project?.name && lead.project.id !== projectId && (
                                             <Badge variant="outline" className="px-1.5 py-0 text-[9px] h-4 border-slate-200 text-slate-500 font-medium">
                                                 <MapPin className="w-2 h-2 mr-0.5" />{lead.project.name}
@@ -208,11 +232,12 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
                         <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input
                             type="number"
-                            placeholder="Amount (optional)"
+                            placeholder="Deal Amount *"
                             className="pl-8 pr-28"
                             value={amount}
                             onChange={e => setAmount(e.target.value)}
                             min={0}
+                            required
                         />
                         {amount && Number(amount) > 0 && (
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-emerald-600 pointer-events-none">
@@ -230,8 +255,108 @@ function AddLeadDealDialog({ unitId, unit, projectId, isOpen, onClose, onSuccess
                 </div>
                 <DialogFooter>
                     <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-                    <Button type="button" onClick={handleSave} disabled={!selectedLead || saving}>
-                        {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Linking...</> : 'Link Lead'}
+                    <Button type="button" onClick={handleSave} disabled={!selectedLead || !amount || saving}>
+                        {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding...</> : 'Add Deal'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+// ── Edit deal dialog ─────────────────────────────────────────────────────────
+function EditDealDialog({ deal, unit, isOpen, onClose, onSuccess, targetStatus }) {
+    const [amount, setAmount] = useState('')
+    const [notes, setNotes] = useState('')
+    const [saving, setSaving] = useState(false)
+
+    useEffect(() => {
+        if (isOpen && deal) {
+            setAmount(deal.amount?.toString() || '')
+            setNotes(deal.notes || '')
+        }
+    }, [isOpen, deal])
+
+    const handleSave = async () => {
+        if (!amount) {
+            toast.error('Deal amount is mandatory')
+            return
+        }
+        setSaving(true)
+        try {
+            const res = await fetch(`/api/deals/${deal.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount: Number(amount),
+                    notes: notes.trim(),
+                    ...(targetStatus ? { status: targetStatus } : {}),
+                }),
+            })
+            if (!res.ok) throw new Error('Failed to update deal')
+            toast.success(targetStatus ? 'Status updated' : 'Deal updated')
+            onSuccess()
+            onClose()
+        } catch (e) {
+            toast.error(e.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose() }}>
+            <DialogContent className="sm:max-w-sm" onPointerDownOutside={(e) => e.stopPropagation()} onInteractOutside={(e) => e.stopPropagation()}>
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-base">
+                        <Pencil className="w-4 h-4" />
+                        {targetStatus ? 'Confirm Status Change' : 'Edit Deal'}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    {targetStatus && (
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-bold text-blue-700 uppercase">Updating status to:</span>
+                            <StatusPill status={targetStatus} />
+                        </div>
+                    )}
+                    <div className="space-y-1.5">
+                        <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                            Deal Amount <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                            <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                            <Input
+                                type="number"
+                                className="pl-8 pr-28"
+                                value={amount}
+                                onChange={e => setAmount(e.target.value)}
+                                min={0}
+                                placeholder="0"
+                            />
+                            {amount && Number(amount) > 0 && (
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-emerald-600">
+                                    {formatINR(Number(amount))}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Notes</Label>
+                        <Textarea
+                            placeholder="Add notes..."
+                            className="resize-none text-sm"
+                            rows={3}
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                        />
+                    </div>
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+                    <Button type="button" onClick={handleSave} disabled={saving || !amount}>
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        {targetStatus ? 'Update Status' : 'Save Changes'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -270,7 +395,8 @@ function PriceComparison({ dealAmount, listedPrice }) {
 
 // ── Deal card ────────────────────────────────────────────────────────────────
 function DealCard({ deal, unit, unitId, onRefresh, canManage, canDelete }) {
-    const [changingStatus, setChangingStatus] = useState(false)
+    const [editOpen, setEditOpen] = useState(false)
+    const [targetStatus, setTargetStatus] = useState(null)
     const [deleting, setDeleting] = useState(false)
 
     const lead = deal.lead
@@ -282,24 +408,12 @@ function DealCard({ deal, unit, unitId, onRefresh, canManage, canDelete }) {
     const isLost = deal.status === 'lost'
     const accentColor = STATUS_META[deal.status]?.accent || 'bg-gray-300'
 
-    const handleStatusChange = async (newStatus) => {
+    const handleStatusChange = (newStatus) => {
         if (newStatus === 'reserved') {
             if (!confirm('This will move any existing reserved deal for this unit to Negotiation. Continue?')) return
         }
-        setChangingStatus(true)
-        try {
-            const res = await fetch(`/api/deals/${deal.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || 'Failed')
-            toast.success('Status updated')
-            onRefresh()
-        } catch (e) {
-            toast.error(e.message || 'Failed to update status')
-        } finally { setChangingStatus(false) }
+        setTargetStatus(newStatus)
+        setEditOpen(true)
     }
 
     const handleDelete = async () => {
@@ -326,11 +440,59 @@ function DealCard({ deal, unit, unitId, onRefresh, canManage, canDelete }) {
             {/* Header: lead info + status */}
             <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
-                        {lead?.name?.[0]?.toUpperCase() + lead?.name?.split(' ')?.[1]?.[0]?.toUpperCase() || '?'}
-                    </div>
-                    <div className="min-w-0">
-                        <p className="font-semibold text-sm text-gray-900 truncate">{lead?.name || 'Unknown Lead'}</p>
+                    {lead?.avatar_url ? (
+                        <img 
+                            src={lead.avatar_url} 
+                            alt={lead.name} 
+                            className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-100"
+                        />
+                    ) : (
+                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {lead?.name?.[0]?.toUpperCase() + lead?.name?.split(' ')?.[1]?.[0]?.toUpperCase() || '?'}
+                        </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-sm text-gray-900 truncate">{lead?.name || 'Unknown Lead'}</p>
+                            {lead?.stage?.name && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Badge 
+                                                variant="secondary" 
+                                                className="px-1.5 py-0 text-[9px] font-bold uppercase tracking-tight cursor-default"
+                                                style={{ 
+                                                    backgroundColor: lead.stage.color ? `${lead.stage.color}15` : '#f1f5f9',
+                                                    color: lead.stage.color || '#475569',
+                                                    borderColor: lead.stage.color ? `${lead.stage.color}33` : '#e2e8f0',
+                                                    borderWidth: '1px'
+                                                }}
+                                            >
+                                                {lead.stage.name}
+                                            </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                            <p className="text-xs">Pipeline Stage</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
+                            {lead?.assigned_to_user && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center gap-1 px-1.5 py-0 rounded-md bg-slate-50 border border-slate-100 text-[9px] font-medium text-slate-500 cursor-default">
+                                                <User className="w-2.5 h-2.5" />
+                                                {lead.assigned_to_user.full_name.split(' ')[0]}
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                            <p className="text-xs">Assigned To</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
+                        </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                             {lead?.phone && (
                                 <p className="text-[11px] text-gray-500 flex items-center gap-1">
@@ -352,10 +514,9 @@ function DealCard({ deal, unit, unitId, onRefresh, canManage, canDelete }) {
                             <DropdownMenuTrigger asChild>
                                 <button
                                     type="button"
-                                    disabled={changingStatus}
-                                    className="focus:outline-none disabled:opacity-50 cursor-pointer"
+                                    className="focus:outline-none disabled:opacity-50"
                                 >
-                                    <StatusPill status={deal.status} />
+                                    <StatusPill status={deal.status} interactive />
                                 </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-40 p-1">
@@ -384,6 +545,16 @@ function DealCard({ deal, unit, unitId, onRefresh, canManage, canDelete }) {
                             </Button>
                         </Link>
                     )}
+                    {canManage && (
+                        <Button
+                            type="button"
+                            variant="ghost" size="icon"
+                            className="h-6 w-6 p-0 text-gray-300 hover:text-gray-700"
+                            onClick={() => { setTargetStatus(null); setEditOpen(true); }}
+                        >
+                            <Pencil className="w-3 h-3" />
+                        </Button>
+                    )}
                     {canDelete && (
                         <Button
                             type="button"
@@ -397,31 +568,50 @@ function DealCard({ deal, unit, unitId, onRefresh, canManage, canDelete }) {
                 </div>
             </div>
 
-            {/* Lead Meta: Stage, Source, Assigned To */}
-            <div className="flex items-center gap-2 flex-wrap">
-                {lead?.stage?.name && (
-                    <Badge variant="secondary" className="px-2 py-0.5 text-[10px] bg-slate-100 text-slate-600 border-slate-200 font-semibold uppercase tracking-wider">
-                        {lead.stage.name}
-                    </Badge>
-                )}
-                {lead?.assigned_to_user && (
-                    <span className="text-[10px] text-gray-500 flex items-center gap-1 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">
-                        <User className="w-2.5 h-2.5" />{lead.assigned_to_user.full_name}
-                    </span>
-                )}
-            </div>
+            <EditDealDialog
+                deal={deal}
+                unit={unit}
+                isOpen={editOpen}
+                onClose={() => { setEditOpen(false); setTargetStatus(null); }}
+                onSuccess={onRefresh}
+                targetStatus={targetStatus}
+            />
 
-            {/* Amount + notes */}
-            {(deal.amount || deal.notes) && (
-                <div className="flex items-center gap-3 flex-wrap">
-                    {deal.amount && (
-                        <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-800">
-                            <IndianRupee className="w-3 h-3 text-orange-400" />{formatCurrency(deal.amount)}
-                        </span>
+            {/* Deal financial row */}
+            {deal.amount > 0 && (
+                <div className="flex items-center justify-between bg-slate-50/80 border border-slate-100 rounded-xl px-3 py-2.5">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Deal Value</span>
+                        <span className="text-sm font-extrabold text-slate-900 leading-none mt-1">{formatINR(deal.amount)}</span>
+                    </div>
+                    {unit && (
+                        <div className="flex flex-col items-end">
+                             {/* Compact price diff badge */}
+                             {(() => {
+                                 const listedPrice = Number(unit.total_price || unit.base_price || 0)
+                                 if (listedPrice <= 0) return null
+                                 const diff = deal.amount - listedPrice
+                                 const pct = Math.abs(diff / listedPrice * 100).toFixed(1)
+                                 if (Math.abs(diff) < 1) return <span className="text-[9px] font-bold text-slate-400 uppercase">Listed Price</span>
+                                 return (
+                                     <div className={cn(
+                                         "flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold",
+                                         diff < 0 ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+                                     )}>
+                                         {diff < 0 ? <TrendingDown className="w-2.5 h-2.5" /> : <TrendingUp className="w-2.5 h-2.5" />}
+                                         {pct}% {diff < 0 ? 'Off' : 'More'}
+                                     </div>
+                                 )
+                             })()}
+                        </div>
                     )}
-                    {deal.notes && (
-                        <span className="text-[11px] text-gray-400 italic truncate max-w-[200px]">"{deal.notes}"</span>
-                    )}
+                </div>
+            )}
+
+            {/* Notes row */}
+            {deal.notes && (
+                <div className="flex items-start gap-2 text-gray-500 bg-amber-50/30 border border-amber-100/50 rounded-lg px-2.5 py-2">
+                    <span className="text-[11px] leading-relaxed italic">"{deal.notes}"</span>
                 </div>
             )}
 

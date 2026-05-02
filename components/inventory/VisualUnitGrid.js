@@ -538,8 +538,8 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
             ? unitConfigs.filter(c => c.category === 'land')
             : unitConfigs
         }
-        floorNumber={targetFloor}
-        towerId={activeTowerId}
+        floorNumber={selectedUnit ? selectedUnit.floor_number : targetFloor}
+        towerId={selectedUnit ? selectedUnit.tower_id : activeTowerId}
         projectId={projectId}
         organizationId={organizationId}
         onSave={drawerMode?.includes('add') ? addUnit : (data) => updateUnit(selectedUnit.id, data)}

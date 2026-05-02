@@ -477,6 +477,18 @@ export function LeadTable({
                                     </TableCell>
                                     <TableCell className="pr-4">
                                         <div className="flex items-center justify-end gap-1">
+                                            {lead.phone && (
+                                                <a href={`tel:${lead.phone}`}>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="icon" 
+                                                        className="h-7 w-7 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg"
+                                                        title={`Call ${lead.name}`}
+                                                    >
+                                                        <Phone className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </a>
+                                            )}
                                             <Link href={`/dashboard/admin/crm/leads/${lead.id}`}>
                                                 <Button 
                                                     variant="ghost" 

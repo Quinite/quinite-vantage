@@ -50,11 +50,11 @@ export default function SiteVisitCard({ visit, onEdit, onDelete, onMarkComplete,
                     </Badge>
                     <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-0.5 -ml-1">
                         {visit.status === 'scheduled' && (
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => onEdit?.(visit)}>
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); onEdit?.(visit) }}>
                                 <Edit2 className="w-3.5 h-3.5" />
                             </Button>
                         )}
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => onDelete?.(visit)}>
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); onDelete?.(visit) }}>
                             <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                     </div>
@@ -75,6 +75,31 @@ export default function SiteVisitCard({ visit, onEdit, onDelete, onMarkComplete,
                     )}
                 </div>
             )}
+
+            {/* Lead / Client Info */}
+            {(() => {
+                const l = visit.lead || visit.leads
+                if (!l) return null
+                return (
+                    <div className="mt-3 flex items-center gap-2.5 p-2 rounded-lg bg-slate-50/50 border border-slate-100">
+                        {l.avatar_url ? (
+                            <img src={l.avatar_url} className="w-8 h-8 rounded-full object-cover border border-white shadow-sm" alt="" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold shrink-0">
+                                {l.name?.[0]?.toUpperCase() || 'L'}
+                            </div>
+                        )}
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-bold text-slate-900 truncate uppercase tracking-tight">{l.name}</p>
+                            {(l.phone || l.email) && (
+                                <p className="text-[9px] text-slate-500 truncate leading-none mt-0.5">
+                                    {l.phone || l.email}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )
+            })()}
 
             {/* Notes */}
             {visit.visit_notes && (
@@ -103,20 +128,22 @@ export default function SiteVisitCard({ visit, onEdit, onDelete, onMarkComplete,
                                     <TooltipTrigger asChild>
                                         <div className="flex items-center gap-2">
                                             <Button 
+                                                type="button" 
                                                 variant="ghost" 
                                                 size="sm" 
                                                 disabled={!isPast}
-                                                onClick={() => onMarkNoShow?.(visit)}
+                                                onClick={(e) => { e.stopPropagation(); onMarkNoShow?.(visit) }}
                                                 className="h-7 text-[11px] font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 px-2.5 disabled:opacity-50"
                                             >
                                                 <XCircle className="w-3.5 h-3.5 mr-1" />
                                                 No Show
                                             </Button>
                                             <Button 
+                                                type="button" 
                                                 variant="outline" 
                                                 size="sm" 
                                                 disabled={!isPast}
-                                                onClick={() => onMarkComplete?.(visit)}
+                                                onClick={(e) => { e.stopPropagation(); onMarkComplete?.(visit) }}
                                                 className="h-7 text-[11px] font-medium border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 px-3 shadow-sm disabled:opacity-50"
                                             >
                                                 <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />

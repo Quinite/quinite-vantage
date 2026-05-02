@@ -6,7 +6,8 @@ import { toast } from 'react-hot-toast'
 import {
     Plus, Building, ExternalLink, Trash2, Pencil, Search,
     Star, IndianRupee, Layers, Maximize2, AlertCircle,
-    BedDouble, CheckCheck, CheckCircle2, Loader2, Handshake, XCircle
+    BedDouble, CheckCheck, CheckCircle2, Loader2, Handshake, XCircle,
+    TrendingUp, TrendingDown, ChevronDown, AlertTriangle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +23,7 @@ import AddDealDialog, { DEAL_STATUSES } from '@/components/crm/AddDealDialog'
 import UnitDetailSheet from '@/components/inventory/UnitDetailSheet'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils/date'
 import { formatCurrency } from '@/lib/utils/currency'
+import { formatINR } from '@/lib/inventory'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -37,22 +39,27 @@ function formatPrice(val) {
 
 // ── Status pill config ──────────────────────────────────────────────────────
 const STATUS_META = {
-    interested:  { color: 'bg-violet-50 text-violet-700 border-violet-200',  dot: 'bg-violet-400' },
-    negotiation: { color: 'bg-blue-50 text-blue-700 border-blue-200',        dot: 'bg-blue-400' },
-    reserved:    { color: 'bg-orange-50 text-orange-700 border-orange-200',  dot: 'bg-orange-400' },
-    won:         { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-400' },
-    lost:        { color: 'bg-gray-100 text-gray-500 border-gray-200',       dot: 'bg-gray-400' },
+    interested:  { color: 'bg-violet-50 text-violet-700 border-violet-200',   dot: 'bg-violet-400',  accent: 'bg-violet-400' },
+    negotiation: { color: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-400',    accent: 'bg-blue-400' },
+    reserved:    { color: 'bg-orange-50 text-orange-700 border-orange-200',   dot: 'bg-orange-400',  accent: 'bg-orange-400' },
+    won:         { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-400', accent: 'bg-emerald-400' },
+    lost:        { color: 'bg-gray-100 text-gray-500 border-gray-200',        dot: 'bg-gray-400',    accent: 'bg-gray-300' },
 }
 
-function StatusPill({ status }) {
+function StatusPill({ status, interactive }) {
     const meta = STATUS_META[status] || STATUS_META.interested
     const label = DEAL_STATUSES.find(s => s.value === status)?.label || status
     return (
-        <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold', meta.color)}>
+        <span className={cn(
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all',
+            meta.color,
+            interactive && 'hover:brightness-95 cursor-pointer shadow-sm active:scale-[0.98]'
+        )}>
             {status === 'reserved' && <Star className="w-2.5 h-2.5 fill-current" />}
             {status === 'won'      && <CheckCheck className="w-3 h-3" />}
-            <span className={cn('w-1.5 h-1.5 rounded-full', meta.dot, status === 'reserved' || status === 'won' ? 'hidden' : '')} />
-            {label}
+            {status !== 'reserved' && status !== 'won' && <span className={cn('w-1.5 h-1.5 rounded-full', meta.dot)} />}
+            <span>{label}</span>
+            {interactive && <ChevronDown className="w-3 h-3 opacity-60 ml-0.5" />}
         </span>
     )
 }
@@ -84,10 +91,10 @@ function StatusChanger({ deal, onStatusChange, disabled }) {
                 <button
                     type="button"
                     disabled={disabled}
-                    className="focus:outline-none disabled:opacity-50 cursor-pointer"
+                    className="focus:outline-none disabled:opacity-50"
                     title="Change status"
                 >
-                    <StatusPill status={deal.status} />
+                    <StatusPill status={deal.status} interactive />
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-40 p-1">
@@ -140,6 +147,13 @@ function EditDealDialog({ deal, isOpen, onClose, onSuccess }) {
         fetchProjects()
     }, [isOpen, deal])
 
+    // Auto-fill amount when unit is selected
+    useEffect(() => {
+        if (selectedUnit && !amount) {
+            setAmount(selectedUnit.total_price || selectedUnit.base_price || '')
+        }
+    }, [selectedUnit])
+
     const fetchUnits = async () => {
         setLoadingUnits(true)
         try {
@@ -171,6 +185,10 @@ function EditDealDialog({ deal, isOpen, onClose, onSuccess }) {
     )
 
     const handleSave = async () => {
+        if (!amount) {
+            toast.error('Deal amount is mandatory')
+            return
+        }
         setSaving(true)
         try {
             const projectId = selectedProject?.id || selectedUnit?.project_id || unitProjectFilter?.id || null
@@ -180,8 +198,8 @@ function EditDealDialog({ deal, isOpen, onClose, onSuccess }) {
                 body: JSON.stringify({
                     unit_id: selectedUnit?.id || null,
                     project_id: projectId,
-                    amount: amount || null,
-                    notes: notes || null,
+                    amount: Number(amount),
+                    notes: notes.trim() || null,
                 }),
             })
             if (!res.ok) throw new Error('Failed')
@@ -299,7 +317,7 @@ function EditDealDialog({ deal, isOpen, onClose, onSuccess }) {
                                                         {unit.bedrooms && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><BedDouble className="w-3 h-3" />{unit.bedrooms} BHK</span>}
                                                         {unit.floor_number != null && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Layers className="w-3 h-3" />Floor {unit.floor_number === 0 ? 'G' : unit.floor_number}</span>}
                                                         {unit.carpet_area && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Maximize2 className="w-3 h-3" />{unit.carpet_area} sqft</span>}
-                                                        {(unit.base_price || unit.total_price) && <span className="text-[11px] font-semibold text-foreground">{formatPrice(unit.total_price || unit.base_price)}</span>}
+                                                        {(unit.base_price || unit.total_price) && <span className="text-[11px] font-semibold text-foreground">{formatINR(unit.total_price || unit.base_price)}</span>}
                                                     </div>
                                                     {unit.project_name && <p className="text-[10px] text-muted-foreground mt-1 truncate">{unit.project_name}</p>}
                                                 </div>
@@ -361,10 +379,22 @@ function EditDealDialog({ deal, isOpen, onClose, onSuccess }) {
                             </div>
                         )}
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium">Amount <span className="text-muted-foreground font-normal">(optional)</span></label>
+                            <label className="text-sm font-medium">Deal Amount <span className="text-red-500">*</span></label>
                             <div className="relative">
                                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                                <Input type="number" className="pl-8" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
+                                <Input 
+                                    type="number" 
+                                    className="pl-8 pr-24" 
+                                    value={amount} 
+                                    onChange={e => setAmount(e.target.value)} 
+                                    placeholder="0"
+                                    required 
+                                />
+                                {amount && (
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-orange-700 bg-orange-50/80 px-2 py-1 rounded border border-orange-200 pointer-events-none">
+                                        {formatINR(amount)}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="space-y-1.5">
@@ -436,6 +466,32 @@ function LostReasonDialog({ deal, isOpen, onClose, onSuccess }) {
     )
 }
 
+// ── Confirmation Dialog ─────────────────────────────────────────────────────
+function ConfirmationDialog({ isOpen, onClose, onConfirm, title, message, confirmText = 'Continue', loading }) {
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-base">
+                        <AlertTriangle className="w-5 h-5 text-orange-500" />
+                        {title}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="py-2">
+                    <p className="text-sm text-gray-600 leading-relaxed">{message}</p>
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
+                    <Button onClick={onConfirm} disabled={loading} className="bg-orange-600 hover:bg-orange-700">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        {confirmText}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 // ── Deal card ────────────────────────────────────────────────────────────────
 function DealCard({ deal, onRefresh, canManage, canDelete }) {
     const [editOpen, setEditOpen] = useState(false)
@@ -453,11 +509,10 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
     const isReserved = deal.status === 'reserved'
     const isLost = deal.status === 'lost'
 
-    const handleStatusChange = async (newStatus) => {
-        if (newStatus === 'lost') { setLostOpen(true); return }
-        if (newStatus === 'reserved') {
-            if (!confirm('This will move any existing reserved deal for this unit to Negotiation. Continue?')) return
-        }
+    const [reservedConfirmOpen, setReservedConfirmOpen] = useState(false)
+    const [pendingStatus, setPendingStatus] = useState(null)
+
+    const performStatusUpdate = async (newStatus) => {
         setChangingStatus(true)
         try {
             const res = await fetch(`/api/deals/${deal.id}`, {
@@ -467,13 +522,24 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || 'Failed')
-            toast.success('Status updated')
+            toast.success(`Deal marked as ${DEAL_STATUSES.find(s => s.value === newStatus)?.label || newStatus}`)
             onRefresh()
+            setReservedConfirmOpen(false)
         } catch (e) {
             toast.error(e.message || 'Failed to update status')
         } finally {
             setChangingStatus(false)
         }
+    }
+
+    const handleStatusChange = async (newStatus) => {
+        if (newStatus === 'lost') { setLostOpen(true); return }
+        if (newStatus === 'reserved') {
+            setPendingStatus(newStatus)
+            setReservedConfirmOpen(true)
+            return
+        }
+        performStatusUpdate(newStatus)
     }
 
     const handleDelete = async () => {
@@ -491,20 +557,16 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
         }
     }
 
+    const accentColor = STATUS_META[deal.status]?.accent || 'bg-gray-300'
+
     return (
         <>
             <div className={cn(
                 'rounded-xl border bg-white p-4 space-y-3 transition-all hover:shadow-sm relative overflow-hidden',
-                isReserved && 'border-orange-200',
                 isLost && 'opacity-55',
             )}>
-                {/* Won indicator strip — left border accent, no bg tint */}
-                {isWon && (
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-400 rounded-l-xl" />
-                )}
-                {isReserved && (
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-orange-400 rounded-l-xl" />
-                )}
+                {/* Left accent bar */}
+                <div className={cn('absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl', accentColor)} />
 
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-3">
@@ -513,7 +575,7 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
                         {unit ? (
                             <>
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-semibold text-sm text-gray-900">Unit {unit.unit_number}</span>
+                                    <span className="font-bold text-sm text-gray-900">Unit {unit.unit_number}</span>
                                     {unit.tower?.name && (
                                         <span className="text-[11px] text-gray-400 font-medium">· {unit.tower.name}</span>
                                     )}
@@ -526,7 +588,7 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
                                 )}
                             </>
                         ) : (
-                            <p className="font-semibold text-sm text-gray-900">{deal.project?.name || deal.name}</p>
+                            <p className="font-bold text-sm text-gray-900">{deal.project?.name || deal.name}</p>
                         )}
                     </div>
 
@@ -563,7 +625,7 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
 
                 {/* Unit stats grid */}
                 {unit && (
-                    <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-4 flex-wrap px-1">
                         {unit.bedrooms && (
                             <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
                                 <BedDouble className="w-3.5 h-3.5 text-violet-400" />
@@ -582,18 +644,47 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
                                 <span>{unit.carpet_area} sqft</span>
                             </span>
                         )}
-                        {deal.amount ? (
-                            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                                <IndianRupee className="w-3.5 h-3.5 text-orange-400" />
-                                {formatCurrency(deal.amount)}
+                    </div>
+                )}
+
+                {/* Deal financial row */}
+                {(deal.amount > 0 || unit?.total_price || unit?.base_price) && (
+                    <div className="flex items-center justify-between bg-slate-50/80 border border-slate-100 rounded-xl px-3 py-2.5">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                {deal.amount > 0 ? 'Deal Value' : 'Listed Price'}
                             </span>
-                        ) : (unit.total_price || unit.base_price) ? (
-                            <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                                <IndianRupee className="w-3.5 h-3.5 text-orange-300" />
-                                {formatCurrency(unit.total_price || unit.base_price)}
-                                <span className="text-[10px]">(listed)</span>
+                            <span className={cn(
+                                "text-sm font-extrabold leading-none mt-1",
+                                deal.amount > 0 ? "text-slate-900" : "text-slate-500"
+                            )}>
+                                {formatCurrency(deal.amount || unit?.total_price || unit?.base_price)}
                             </span>
-                        ) : null}
+                        </div>
+                        {unit && (
+                            <div className="flex flex-col items-end">
+                                {(() => {
+                                    const listedPrice = Number(unit.total_price || unit.base_price || 0)
+                                    if (listedPrice <= 0) return null
+                                    
+                                    if (!deal.amount || Math.abs(deal.amount - listedPrice) < 1) {
+                                        return <span className="text-[9px] font-bold text-slate-400 uppercase">Listed Price</span>
+                                    }
+
+                                    const diff = deal.amount - listedPrice
+                                    const pct = Math.abs(diff / listedPrice * 100).toFixed(1)
+                                    return (
+                                        <div className={cn(
+                                            "flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold",
+                                            diff < 0 ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+                                        )}>
+                                            {diff < 0 ? <TrendingDown className="w-2.5 h-2.5" /> : <TrendingUp className="w-2.5 h-2.5" />}
+                                            {pct}% {diff < 0 ? 'Off' : 'More'}
+                                        </div>
+                                    )
+                                })()}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -608,12 +699,14 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
 
                 {/* Notes */}
                 {deal.notes && (
-                    <p className="text-[12px] text-gray-500 italic border-l-2 border-gray-200 pl-2 leading-relaxed">{deal.notes}</p>
+                    <div className="flex items-start gap-2 text-gray-500 bg-amber-50/30 border border-amber-100/50 rounded-lg px-2.5 py-2">
+                        <span className="text-[11px] leading-relaxed italic">"{deal.notes}"</span>
+                    </div>
                 )}
 
                 {/* Lost reason */}
                 {isLost && deal.lost_reason && (
-                    <div className="flex items-start gap-1.5 text-[11px] text-red-500 bg-red-50 rounded-lg px-2.5 py-1.5">
+                    <div className="flex items-start gap-1.5 text-[11px] text-red-500 bg-red-50 rounded-xl px-2.5 py-1.5">
                         <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
                         <span>{deal.lost_reason}</span>
                     </div>
@@ -662,6 +755,15 @@ function DealCard({ deal, onRefresh, canManage, canDelete }) {
 
             <EditDealDialog deal={deal} isOpen={editOpen} onClose={() => setEditOpen(false)} onSuccess={onRefresh} />
             <LostReasonDialog deal={deal} isOpen={lostOpen} onClose={() => setLostOpen(false)} onSuccess={onRefresh} />
+            <ConfirmationDialog 
+                isOpen={reservedConfirmOpen}
+                onClose={() => setReservedConfirmOpen(false)}
+                onConfirm={() => performStatusUpdate(pendingStatus)}
+                loading={changingStatus}
+                title="Reserve Unit?"
+                message="This will move any existing reserved deal for this unit to Negotiation. Are you sure you want to proceed?"
+                confirmText="Reserve Unit"
+            />
             {unit && (
                 <UnitDetailSheet
                     unit={unit}

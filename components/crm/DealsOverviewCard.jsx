@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,8 @@ import {
     BedDouble, Layers, Maximize2, CheckCheck, Plus,
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
-import { DEAL_STATUSES } from '@/components/crm/AddDealDialog'
+import AddDealDialog, { DEAL_STATUSES } from '@/components/crm/AddDealDialog'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatRelativeTime } from '@/lib/utils/date'
 import { formatCurrency } from '@/lib/utils/currency'
 import { cn } from '@/lib/utils'
@@ -112,11 +113,11 @@ function MiniDealRow({ deal }) {
                     )}
                     {deal.amount ? (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-gray-800">
-                            <IndianRupee className="w-3 h-3 text-orange-400" />{formatCurrency(deal.amount)}
+                            {formatCurrency(deal.amount)}
                         </span>
                     ) : (unit.total_price || unit.base_price) ? (
                         <span className="flex items-center gap-1 text-[10px] text-gray-400">
-                            <IndianRupee className="w-3 h-3 text-orange-300" />{formatCurrency(unit.total_price || unit.base_price)}
+                            {formatCurrency(unit.total_price || unit.base_price)}
                         </span>
                     ) : null}
                 </div>
@@ -126,7 +127,7 @@ function MiniDealRow({ deal }) {
             {!unit && deal.amount && (
                 <div className="mt-2">
                     <span className="flex items-center gap-1 text-[10px] font-bold text-gray-800">
-                        <IndianRupee className="w-3 h-3 text-orange-400" />{formatCurrency(deal.amount)}
+                        {formatCurrency(deal.amount)}
                     </span>
                 </div>
             )}
@@ -173,8 +174,9 @@ function MiniDealRow({ deal }) {
     )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
 export default function DealsOverviewCard({ leadId, onViewAllDeals }) {
+    const queryClient = useQueryClient()
+    const [isAddDealOpen, setIsAddDealOpen] = useState(false)
     const canViewDeals = usePermission('view_deals')
 
     const { data, isLoading } = useQuery({
@@ -222,7 +224,8 @@ export default function DealsOverviewCard({ leadId, onViewAllDeals }) {
     }
 
     return (
-        <Card className="h-full border-0 shadow-sm ring-1 ring-gray-200 flex flex-col">
+        <>
+            <Card className="h-full border-0 shadow-sm ring-1 ring-gray-200 flex flex-col">
             <CardHeader className="pb-4 shrink-0 border-b border-gray-100 mb-2">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -231,22 +234,9 @@ export default function DealsOverviewCard({ leadId, onViewAllDeals }) {
                         </div>
                         <div>
                             <CardTitle className="text-sm font-bold text-gray-900">Deals</CardTitle>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                {activeDeals.length > 0 ? `${activeDeals.length} active` : 'No active deals'}
-                                {lostDeals.length > 0 && ` · ${lostDeals.length} lost`}
-                            </p>
-                        </div>
-                    </div>
-                    {deals.length > 0 && (
-                        <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-semibold">
-                            {deals.length}
-                        </Badge>
-                    )}
-                </div>
-
                 {/* Status summary bar */}
                 {activeDeals.length > 0 && (
-                    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                         {Object.entries(statusCounts).map(([status, count]) => {
                             const meta = STATUS_META[status]
                             if (!meta) return null
@@ -255,18 +245,33 @@ export default function DealsOverviewCard({ leadId, onViewAllDeals }) {
                                     'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-semibold',
                                     meta.color,
                                 )}>
-                                    <span className={cn('w-1.5 h-1.5 rounded-full', meta.dot)} />
                                     {count} {DEAL_STATUSES.find(s => s.value === status)?.label || status}
                                 </span>
                             )
                         })}
                         {totalAmount > 0 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-[9px] font-bold text-orange-700">
-                                <IndianRupee className="w-2.5 h-2.5" />{formatCurrency(totalAmount)}
+                                {formatCurrency(totalAmount)}
                             </span>
                         )}
                     </div>
                 )}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-full"
+                            onClick={() => setIsAddDealOpen(true)}
+                            title="Add Deal"
+                        >
+                            <Plus className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+
+
             </CardHeader>
 
             <CardContent className="flex-1 overflow-y-auto px-4 pb-4">
@@ -300,5 +305,12 @@ export default function DealsOverviewCard({ leadId, onViewAllDeals }) {
                 )}
             </CardContent>
         </Card>
+        <AddDealDialog
+            leadId={leadId}
+            isOpen={isAddDealOpen}
+            onClose={() => setIsAddDealOpen(false)}
+            onSuccess={() => queryClient.invalidateQueries(['lead-deals', leadId])}
+        />
+    </>
     )
 }

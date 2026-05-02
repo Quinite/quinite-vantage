@@ -103,6 +103,10 @@ export default function AddDealDialog({ leadId, leadName, isOpen, onClose, onSuc
     )
 
     const handleSave = async () => {
+        if (!dealDetails.amount) {
+            toast.error('Please enter a deal amount')
+            return
+        }
         setSaving(true)
         try {
             const unitLabel = selectedUnit?.unit_number || ''
@@ -231,7 +235,11 @@ export default function AddDealDialog({ leadId, leadName, isOpen, onClose, onSuc
                                     return (
                                         <div
                                             key={unit.id}
-                                            onClick={() => { setSelectedUnit(unit); setSelectedProject(null) }}
+                                            onClick={() => { 
+                                                setSelectedUnit(unit); 
+                                                setSelectedProject(null);
+                                                setDealDetails(d => ({ ...d, amount: unit.total_price || unit.base_price || '' }));
+                                            }}
                                             className={cn(
                                                 'p-3 rounded-lg border cursor-pointer transition-all',
                                                 selected
@@ -292,7 +300,11 @@ export default function AddDealDialog({ leadId, leadName, isOpen, onClose, onSuc
                                 ) : filteredProjects.map(project => (
                                     <div
                                         key={project.id}
-                                        onClick={() => { setSelectedProject(project); setSelectedUnit(null) }}
+                                        onClick={() => { 
+                                            setSelectedProject(project); 
+                                            setSelectedUnit(null);
+                                            setDealDetails(d => ({ ...d, amount: '' }));
+                                        }}
                                         className={cn(
                                             'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all',
                                             selectedProject?.id === project.id
@@ -320,7 +332,12 @@ export default function AddDealDialog({ leadId, leadName, isOpen, onClose, onSuc
                                 variant="link"
                                 size="sm"
                                 className="text-xs text-muted-foreground"
-                                onClick={() => { setSelectedUnit(null); setSelectedProject(null); setStep(2) }}
+                                onClick={() => { 
+                                    setSelectedUnit(null); 
+                                    setSelectedProject(null); 
+                                    setDealDetails(d => ({ ...d, amount: '' }));
+                                    setStep(2);
+                                }}
                             >
                                 Skip — add without a unit
                             </Button>
@@ -366,16 +383,22 @@ export default function AddDealDialog({ leadId, leadName, isOpen, onClose, onSuc
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Deal Amount <span className="text-muted-foreground font-normal">(optional)</span></label>
+                            <label className="text-sm font-medium">Deal Amount <span className="text-red-500">*</span></label>
                             <div className="relative">
                                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                     type="number"
-                                    placeholder="0"
-                                    className="pl-9"
+                                    placeholder="Enter deal amount"
+                                    className="pl-9 pr-24"
                                     value={dealDetails.amount}
                                     onChange={e => setDealDetails(d => ({ ...d, amount: e.target.value }))}
+                                    required
                                 />
+                                {dealDetails.amount && (
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-orange-700 bg-orange-50/80 px-2 py-1 rounded border border-orange-200 pointer-events-none">
+                                        {formatPrice(dealDetails.amount)}
+                                    </div>
+                                )}
                             </div>
                         </div>
 

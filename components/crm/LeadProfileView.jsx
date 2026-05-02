@@ -222,7 +222,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0 bg-muted/10">
                 <div className="border-b bg-background px-6">
-                    <div className="text-xs text-red-500 font-mono py-1">DEBUG: Tabs Updated</div>
+
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
                         <TabsList className="h-14 w-full justify-start bg-transparent p-0 space-x-6">
                             {['overview', 'notes', 'timeline'].map(tab => (
@@ -287,11 +287,19 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
 
                             {/* Row 2 */}
                             <div className="col-span-12 md:col-span-6 lg:col-span-5">
-                                <UnitDealsCard deals={lead.deals || []} />
+                                <UnitDealsCard 
+                                    deals={lead.deals || []} 
+                                    leadId={leadId} 
+                                    onUpdate={fetchLeadData} 
+                                />
                             </div>
                             <div className="col-span-12 md:col-span-6 lg:col-span-7 grid grid-rows-2 gap-6">
                                 <div className="row-span-1">
-                                    <ComingUpNextCard tasks={[]} />
+                                    <ComingUpNextCard 
+                                        leadId={leadId} 
+                                        leadName={lead.name} 
+                                        onShowAll={() => setActiveTab('timeline')} 
+                                    />
                                 </div>
                                 <div className="row-span-1">
                                     <BestTimeToContactCard profile={profile} />

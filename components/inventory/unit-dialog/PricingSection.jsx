@@ -1,14 +1,29 @@
 'use client'
 
 import { Label } from '@/components/ui/label'
-import { IndianRupee, TrendingUp, EyeOff } from 'lucide-react'
+import { IndianRupee, TrendingUp, EyeOff, Info } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { formatINR } from '@/lib/inventory'
 
 function NumInput({ label, value, onChange, placeholder, hint }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">{label}</Label>
+        {hint && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="w-3.5 h-3.5 text-slate-400 hover:text-blue-500 transition-colors cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs">{hint}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
       <div className="relative">
         <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
         <input
@@ -20,7 +35,6 @@ function NumInput({ label, value, onChange, placeholder, hint }) {
           className="w-full h-9 pl-7 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:bg-white transition-all"
         />
       </div>
-      {hint && <p className="text-[10px] text-slate-400">{hint}</p>}
     </div>
   )
 }
@@ -173,12 +187,12 @@ export default function PricingSection({
 
       {/* Computed total */}
       {finalPrice > 0 && (
-        <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-emerald-50 border border-blue-200 rounded-xl px-4 py-3">
+        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
           <div>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Computed Total Price</p>
             <p className="text-[10px] text-slate-400 mt-0.5">Base Price + Floor Rise + PLC</p>
           </div>
-          <p className="text-lg font-extrabold text-blue-700" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
+          <p className="text-lg font-extrabold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
             {formatINR(finalPrice)}
           </p>
         </div>
@@ -189,13 +203,18 @@ export default function PricingSection({
         <>
           <div className="border-t border-slate-50" />
           {selectedConfig && (
-            <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-violet-50 border border-blue-200 rounded-xl px-3 py-2.5">
-              <span className="text-base">🛏️</span>
-              <p className="text-xs text-slate-600">
-                Residential config —{' '}
-                <span className="font-semibold">pre-filled from {selectedConfig.config_name || selectedConfig.property_type}</span>
-                , override per unit if needed.
-              </p>
+            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center shrink-0">
+                <span className="text-sm">🛏️</span>
+              </div>
+              <div className="flex flex-col">
+                <p className="text-[11px] font-bold text-slate-700 leading-tight">
+                  Pre-filled from {selectedConfig.config_name || selectedConfig.property_type}
+                </p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Configuration inherited from unit type. You can override per unit if needed.
+                </p>
+              </div>
             </div>
           )}
           <div className="grid grid-cols-3 gap-3">

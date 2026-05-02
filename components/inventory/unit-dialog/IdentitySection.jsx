@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-import { Sparkles, ChevronRight, ChevronDown, Check, LayoutGrid } from 'lucide-react'
+import { Sparkles, ChevronRight, ChevronDown, Check, LayoutGrid, Info } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { getStatusConfig, formatINR } from '@/lib/inventory'
 import AmenitiesDisplay from '@/components/amenities/AmenitiesDisplay'
@@ -217,32 +218,29 @@ export default function IdentitySection({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Status</Label>
-            <Select
-              value={formData.status || 'available'}
-              onValueChange={(v) => setFormData(p => ({ ...p, status: v }))}
-            >
-              <SelectTrigger
-                className={cn(
-                  'h-9 rounded-xl border font-bold text-sm transition-all px-3',
-                  getStatusConfig(formData.status).bg,
-                  getStatusConfig(formData.status).text,
-                  'border-current/20'
-                )}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                {STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt} className="py-1.5 rounded-lg">
-                    <div className="flex items-center gap-2 font-semibold text-xs capitalize">
-                      <div className={cn('w-1.5 h-1.5 rounded-full', getStatusConfig(opt).dot)} />
-                      {opt.replace(/_/g, ' ')}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Status</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3.5 h-3.5 text-slate-400 hover:text-blue-500 transition-colors cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-xs">Managed via Deals tab</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className={cn(
+              'h-9 rounded-xl border font-bold text-sm flex items-center px-3',
+              getStatusConfig(formData.status).bg,
+              getStatusConfig(formData.status).text,
+              'border-current/20 opacity-80'
+            )}>
+              <div className="flex items-center capitalize">
+                {(formData.status || 'available').replace(/_/g, ' ')}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -256,7 +254,7 @@ export default function IdentitySection({
               </SelectTrigger>
               <SelectContent className="rounded-xl">
                 {FACING_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt} className="font-semibold text-xs">{opt}</SelectItem>
+                  <SelectItem key={opt} value={opt} className="font-semibold text-xs cursor-pointer">{opt}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

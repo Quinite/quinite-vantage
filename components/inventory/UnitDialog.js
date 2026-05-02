@@ -5,15 +5,17 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { calculateFinalPrice, generateUnitNumber, getStatusConfig } from '@/lib/inventory'
 import { toast } from 'react-hot-toast'
-import { Trash2, X, MapPin, Home, Layout, ClipboardList, CalendarDays } from 'lucide-react'
+import { Trash2, X, MapPin, Home, Layout, ClipboardList, CalendarDays, UserCheck, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import Link from 'next/link'
 
 import IdentitySection from './unit-dialog/IdentitySection'
 import PricingSection from './unit-dialog/PricingSection'
 import ConstructionSection from './unit-dialog/ConstructionSection'
 import SiteVisitsPanel from './unit-dialog/SiteVisitsPanel'
 import UnitDealsPanel from './unit-dialog/UnitDealsPanel'
+import { useUnitDeals } from '@/hooks/useUnitDeals'
 
 const EMPTY_FORM = {
   unit_number: '',
@@ -70,6 +72,11 @@ export default function UnitDialog({
   const [activeTab, setActiveTab] = useState('details')
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const { data: dealsData } = useUnitDeals(unit?.id)
+  const activeDeal = dealsData?.deals?.find(d => d.status === 'reserved' || d.status === 'won')
+  const dealLeadName = activeDeal?.lead?.name
+  const dealLeadId = activeDeal?.lead?.id
 
   useEffect(() => {
     if (!open) { setActiveTab('details'); setConfirmDelete(false); return }
@@ -319,6 +326,43 @@ export default function UnitDialog({
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {activeTab === 'details' ? (
                 <>
+                  {(formData.status === 'reserved' || formData.status === 'sold') && (() => {
+                    const isSold = formData.status === 'sold'
+                    const theme = isSold 
+                      ? { bg: 'bg-emerald-50/80', border: 'border-emerald-200', text: 'text-emerald-900', sub: 'text-emerald-700/90', icon: 'text-emerald-600', iconBg: 'bg-white border-emerald-100', hover: 'hover:text-emerald-900' }
+                      : { bg: 'bg-amber-50/80', border: 'border-amber-200', text: 'text-amber-900', sub: 'text-amber-700/90', icon: 'text-amber-600', iconBg: 'bg-white border-amber-100', hover: 'hover:text-amber-900' }
+                    
+                    return (
+                      <div className={cn("rounded-2xl p-4 flex gap-3.5 shadow-sm mb-2 border", theme.bg, theme.border)}>
+                        <div className={cn("w-10 h-10 rounded-xl shadow-sm flex items-center justify-center shrink-0 border", theme.iconBg)}>
+                          <UserCheck className={cn("w-5 h-5", theme.icon)} />
+                        </div>
+                        <div className="flex flex-col justify-center">
+                          <h4 className={cn("text-[13px] font-bold leading-tight flex items-center gap-1.5 flex-wrap", theme.text)}>
+                            <span>Unit is {isSold ? 'Sold' : 'Reserved'}</span>
+                            {dealLeadName && dealLeadId ? (
+                              <span className="flex items-center gap-1">
+                                {isSold ? 'to' : 'by'} 
+                                <Link 
+                                  href={`/dashboard/admin/crm/leads/${dealLeadId}`} 
+                                  target="_blank"
+                                  className="underline decoration-current/40 hover:decoration-current transition-all inline-flex items-center gap-0.5"
+                                >
+                                  {dealLeadName}
+                                  <ExternalLink className="w-3 h-3 opacity-70" />
+                                </Link>
+                              </span>
+                            ) : dealLeadName ? (
+                              <span>{isSold ? `to ${dealLeadName}` : `by ${dealLeadName}`}</span>
+                            ) : null}
+                          </h4>
+                          <p className={cn("text-[12px] mt-0.5 leading-snug", theme.sub)}>
+                            Buyer and transaction details are managed exclusively through the <span className={cn("font-bold underline cursor-pointer transition-colors", theme.hover)} onClick={() => setActiveTab('deals')}>Deals</span> tab.
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })()}
                   <IdentitySection
                     formData={formData}
                     setFormData={setFormData}

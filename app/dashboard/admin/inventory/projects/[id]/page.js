@@ -341,7 +341,7 @@ export default function InventoryProjectDetailsPage() {
                                                             amenityIds={config.amenities}
                                                             context="unit"
                                                             variant="tags"
-                                                            maxVisible={4}
+                                                            maxVisible={3}
                                                         />
                                                     </div>
                                                 )}

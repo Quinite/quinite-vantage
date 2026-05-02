@@ -8,7 +8,7 @@ const DEAL_SELECT = `
         stage:pipeline_stages(id, name, color),
         assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name, avatar_url)
     ),
-    unit:units(id, unit_number, floor_number, bedrooms, carpet_area, facing, status, tower:towers(name), project:projects(id, name)),
+    unit:units(id, unit_number, floor_number, bedrooms, carpet_area, facing, status, base_price, total_price, tower:towers(name), project:projects(id, name)),
     project:projects(id, name)
 `
 

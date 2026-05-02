@@ -140,7 +140,8 @@ export default function SiteVisitsPanel({ unit, project }) {
           onOpenChange={(o) => { setBookOpen(o); if (!o) setEditVisit(null) }}
           leadId={editVisit?.lead_id || unit?.lead_id}
           visit={editVisit}
-          projects={project ? [project] : []}
+          defaultProjectId={project?.id}
+          defaultUnitId={unit?.id}
           onSuccess={invalidate}
         />
       )}

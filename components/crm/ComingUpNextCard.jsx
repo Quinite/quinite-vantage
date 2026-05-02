@@ -199,6 +199,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
     const [teamMembers, setTeamMembers] = useState([])
     const [formData, setFormData] = useState(EMPTY_FORM)
     const [selectedUnitLabel, setSelectedUnitLabel] = useState(null)
+    const [selectedProjectLabel, setSelectedProjectLabel] = useState(null)
 
     useEffect(() => {
         if (leadId) fetchTasks()
@@ -250,6 +251,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
             setIsDialogOpen(false)
             setFormData(EMPTY_FORM)
             setSelectedUnitLabel(null)
+            setSelectedProjectLabel(null)
             fetchTasks()
         } catch (error) {
             console.error('Error creating task:', error)
@@ -386,7 +388,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        {sortedTasks.slice(0, 4).map((task) => (
+                        {sortedTasks.slice(0, 3).map((task) => (
                             <OverviewTaskRow
                                 key={task.id}
                                 task={task}
@@ -402,7 +404,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
                                 onClick={onShowAll}
                                 className="w-full mt-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 text-xs font-semibold py-2 h-auto"
                             >
-                                {tasks.length > 4 ? `Show all ${tasks.length} tasks` : "View all tasks"}
+                                {tasks.length > 3 ? `Show all ${tasks.length} tasks` : "View all tasks"}
                             </Button>
                         )}
                     </div>
@@ -424,7 +426,13 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
                             canAssignOthers={teamMembers.length > 0}
                             fixedLeadId={leadId}
                             fixedLeadLabel={leadName}
-                            showLeadProject={false}
+                            showLeadProject={true}
+                            selectedProjectLabel={selectedProjectLabel}
+                            onProjectChange={(id, label) => {
+                                setFormData(f => ({ ...f, project_id: id, unit_id: null }));
+                                setSelectedProjectLabel(label);
+                                setSelectedUnitLabel(null);
+                            }}
                             selectedUnitLabel={selectedUnitLabel}
                             onUnitChange={(id, label) => setSelectedUnitLabel(label)}
                         />

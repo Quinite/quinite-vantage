@@ -43,7 +43,6 @@ export default function TowerDrawer({
     name: '',
     total_floors: '',
     units_per_floor: '',
-    description: '',
     order_index: 0,
     has_ground_floor: true,
   });
@@ -61,7 +60,6 @@ export default function TowerDrawer({
         name: tower.name || '',
         total_floors: tower.total_floors || '',
         units_per_floor: tower.units_per_floor || '',
-        description: tower.description || '',
         order_index: tower.order_index || 0,
         has_ground_floor: tower.metadata?.has_ground_floor ?? true,
       });
@@ -71,7 +69,6 @@ export default function TowerDrawer({
         name: defaultName,
         total_floors: 10,
         units_per_floor: 4,
-        description: '',
         order_index: existingTowers.length,
         has_ground_floor: true,
       });
@@ -214,16 +211,7 @@ export default function TowerDrawer({
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="tower_desc" className="text-xs font-bold text-slate-500 uppercase">Description (Optional)</Label>
-                <Textarea
-                  id="tower_desc"
-                  value={formData.description}
-                  onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
-                  placeholder="Additional details about this tower..."
-                  className="min-h-[100px] bg-white rounded-lg border-slate-200 shadow-sm"
-                />
-              </div>
+
 
             </div>
 
