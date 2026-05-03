@@ -45,6 +45,7 @@ const ACTION_LABELS = {
     move_stage: 'Move to stage',
     assign_agent: 'Assign to agent',
     create_task: 'Create follow-up task',
+    show_site_visit_form: 'Show site visit booking form',
 }
 
 function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {

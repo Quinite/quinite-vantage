@@ -32,6 +32,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import LeadForm from './LeadForm'
+import BookSiteVisitDialog from './site-visits/BookSiteVisitDialog'
 import { usePermission } from '@/contexts/PermissionContext'
 import { useLeads } from '@/hooks/useLeads'
 import { usePipelines, useUsers } from '@/hooks/usePipelines'
@@ -65,7 +66,7 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
     const [targetStageId, setTargetStageId] = useState(null)
     const [submitting, setSubmitting] = useState(false)
     const [settingsStage, setSettingsStage] = useState(null)
-
+    const [postMoveDialog, setPostMoveDialog] = useState(null) // { type: 'book'|'outcome', lead, visit? }
 
     // Filters
     const [filterAgent, setFilterAgent] = useState('__all__')
@@ -188,19 +189,49 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
         })
 
         try {
-            const res = await fetch(`/api/leads/${leadId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stageId: newStageId }),
-            })
+            // Fire all three requests in parallel — PUT, automations, and site-visits
+            const [res, automationsData, visitsData] = await Promise.all([
+                fetch(`/api/leads/${leadId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stageId: newStageId }),
+                }),
+                activePipeline?.id
+                    ? fetch(`/api/pipeline/automations?pipeline_id=${activePipeline.id}`)
+                        .then(r => r.ok ? r.json() : { automations: [] })
+                        .catch(() => ({ automations: [] }))
+                    : Promise.resolve({ automations: [] }),
+                fetch(`/api/leads/${leadId}/site-visits`)
+                    .then(r => r.ok ? r.json() : { visits: [] })
+                    .catch(() => ({ visits: [] })),
+            ])
+
             if (!res.ok) throw new Error('Update failed')
+            // Await refetch before clearing optimistic override to avoid flicker
             await refetchLeads()
             setOptimisticMoves(prev => { const next = new Map(prev); next.delete(leadId); return next })
+
+            // Check for post-move automation prompts
+            const { automations = [] } = automationsData
+            const stageEnterRules = automations.filter(a =>
+                a.is_active &&
+                a.trigger_type === 'stage_enter' &&
+                (a.trigger_config?.stage_id === newStageId || !a.trigger_config?.stage_id)
+            )
+            const hasBookForm = stageEnterRules.some(a => a.action_type === 'show_site_visit_form')
+
+            if (hasBookForm) {
+                const { visits = [] } = visitsData
+                const scheduledVisit = visits.find(v => v.status === 'scheduled')
+                if (!scheduledVisit) {
+                    setPostMoveDialog({ type: 'book', lead, previousStageId })
+                }
+            }
         } catch {
             rollbackRef.current?.()
             toast.error('Failed to move lead')
         }
-    }, [leads, refetchLeads])
+    }, [leads, refetchLeads, activePipeline])
 
     const handleStageUpdate = useCallback(async (stageId, updates) => {
         try {
@@ -432,6 +463,36 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
                     onClose={() => setSettingsStage(null)}
                     onStageUpdate={handleStageUpdate}
                     onPipelineRefresh={refetchPipelines}
+                />
+            )}
+
+            {/* Post-move site visit prompts */}
+            {postMoveDialog?.type === 'book' && (
+                <BookSiteVisitDialog
+                    open={true}
+                    onOpenChange={open => {
+                        if (!open) {
+                            // User dismissed without booking — snap back visually, then persist rollback
+                            const { lead, previousStageId } = postMoveDialog
+                            setPostMoveDialog(null)
+                            if (previousStageId) {
+                                // Optimistic override to previousStageId so board shows correct stage instantly
+                                setOptimisticMoves(prev => new Map(prev).set(lead.id, previousStageId))
+                                fetch(`/api/leads/${lead.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ stageId: previousStageId }),
+                                })
+                                    .then(() => refetchLeads())
+                                    .then(() => setOptimisticMoves(prev => { const next = new Map(prev); next.delete(lead.id); return next }))
+                                    .catch(() => setOptimisticMoves(prev => { const next = new Map(prev); next.delete(lead.id); return next }))
+                            }
+                        }
+                    }}
+                    leadId={postMoveDialog.lead.id}
+                    lead={postMoveDialog.lead}
+                    agents={users}
+                    onSuccess={() => { setPostMoveDialog(null); refetchLeads() }}
                 />
             )}
 
