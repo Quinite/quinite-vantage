@@ -152,9 +152,12 @@ export default function IdentitySection({
   onConfigChange,
   selectedConfig,
   towerPicker = null,
+  existingUnitNumbers = [],
 }) {
   const isLandOrVilla = selectedConfig?.category === 'land' || selectedConfig?.property_type === 'Villa'
   const showTowerPicker = towerPicker !== null && !isLandOrVilla
+  const unitNumberDuplicate = !!formData.unit_number?.trim() &&
+    existingUnitNumbers.some(n => n?.trim().toLowerCase() === formData.unit_number.trim().toLowerCase())
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
       {/* Section header */}
@@ -311,9 +314,17 @@ export default function IdentitySection({
             onChange={(e) => setFormData(p => ({ ...p, unit_number: e.target.value }))}
             placeholder="e.g. A-F01"
             required
-            className="h-9 bg-slate-50 border-slate-200 rounded-xl font-semibold text-sm focus:bg-white transition-all"
+            className={cn(
+              'h-9 rounded-xl font-semibold text-sm transition-all',
+              unitNumberDuplicate
+                ? 'bg-rose-50 border-rose-300 focus:bg-rose-50 ring-1 ring-rose-200'
+                : 'bg-slate-50 border-slate-200 focus:bg-white'
+            )}
           />
-          <p className="text-[10px] text-slate-400">🔁 Auto-gen · editable</p>
+          {unitNumberDuplicate
+            ? <p className="text-[10px] text-rose-500 font-semibold">Unit number already exists</p>
+            : <p className="text-[10px] text-slate-400">🔁 Auto-gen · editable</p>
+          }
         </div>
         <div className="space-y-1.5">
           <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Facing</Label>

@@ -893,6 +893,7 @@ export default function ProjectInventoryTab({ projectId, project, onMetricsUpdat
                 project={project}
                 projectId={projectId}
                 unitConfigs={unitConfigs}
+                existingUnitNumbers={units.map(u => u.unit_number).filter(Boolean)}
                 onSave={async (payload) => {
                     const isNew = drawerState.mode === 'add'
                     const url = isNew ? '/api/inventory/units' : `/api/inventory/units/${drawerState.unit?.id}`

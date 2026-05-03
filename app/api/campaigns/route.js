@@ -63,7 +63,7 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       }, { status: 403 })
     }
 
-    const { project_id, project_ids, name, description, start_date, end_date, time_start, time_end, metadata, ai_script, call_settings, credit_cap, dnd_compliance, auto_enroll, lead_ids } = body
+    const { project_id, project_ids, name, description, start_date, end_date, time_start, time_end, metadata, ai_script, call_settings, credit_cap, dnd_compliance, auto_enroll, lead_ids, enroll_filters } = body
 
     // Support both legacy project_id (single) and new project_ids (array)
     const canonicalIds = (Array.isArray(project_ids) && project_ids.length > 0)
@@ -111,7 +111,14 @@ export const POST = withPermission('create_campaigns', async (request, context) 
     await admin.from('campaign_projects').insert(cpRows)
 
     let enrollmentSummary = null
-    if (auto_enroll) {
+    if (enroll_filters) {
+      enrollmentSummary = await CampaignService.enrollLeads(
+          campaign.id,
+          profile.organization_id,
+          user.id,
+          { inclusion: enroll_filters.inclusion, exclusion: enroll_filters.exclusion }
+      )
+    } else if (auto_enroll) {
       enrollmentSummary = await CampaignService.enrollLeads(
           campaign.id,
           profile.organization_id,

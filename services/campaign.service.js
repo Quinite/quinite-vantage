@@ -238,27 +238,200 @@ export class CampaignService {
      * Accepts explicit lead_ids array OR a filters object to select leads dynamically.
      * Returns a summary of what was enrolled vs skipped.
      */
-    static async enrollLeads(campaignId, organizationId, enrolledBy, { lead_ids, filters } = {}) {
+    /**
+     * Build a Supabase leads query from a filter spec.
+     * Supports the legacy flat filters shape AND the new inclusion/exclusion shape.
+     */
+    static _applyFilterSpec(query, filters, logic = 'AND') {
+        const conditions = []
+
+        if (filters.stage_ids?.length > 0) {
+            if (logic === 'OR') conditions.push(`stage_id.in.(${filters.stage_ids.join(',')})`)
+            else query = query.in('stage_id', filters.stage_ids)
+        }
+        if (filters.interest_levels?.length > 0) {
+            if (logic === 'OR') conditions.push(`interest_level.in.(${filters.interest_levels.join(',')})`)
+            else query = query.in('interest_level', filters.interest_levels)
+        } else if (filters.interest_level) {
+            // legacy single-value support
+            if (logic === 'OR') conditions.push(`interest_level.eq.${filters.interest_level}`)
+            else query = query.eq('interest_level', filters.interest_level)
+        }
+        if (filters.assigned_to_ids?.length > 0) {
+            if (logic === 'OR') conditions.push(`assigned_to.in.(${filters.assigned_to_ids.join(',')})`)
+            else query = query.in('assigned_to', filters.assigned_to_ids)
+        } else if (filters.assigned_to) {
+            if (logic === 'OR') conditions.push(`assigned_to.eq.${filters.assigned_to}`)
+            else query = query.eq('assigned_to', filters.assigned_to)
+        }
+        if (filters.sources?.length > 0) {
+            if (logic === 'OR') conditions.push(`source.in.(${filters.sources.join(',')})`)
+            else query = query.in('source', filters.sources)
+        } else if (filters.source) {
+            if (logic === 'OR') conditions.push(`source.eq.${filters.source}`)
+            else query = query.eq('source', filters.source)
+        }
+        if (filters.score_min != null) query = query.gte('score', filters.score_min)
+        if (filters.score_max != null) query = query.lte('score', filters.score_max)
+
+        if (logic === 'OR' && conditions.length > 0) {
+            query = query.or(conditions.join(','))
+        }
+
+        return query
+    }
+
+    /**
+     * Fetch leads matching a filter spec (inclusion or exclusion group).
+     * Returns an array of lead IDs.
+     */
+    static async _fetchLeadIdsBySpec(adminClient, organizationId, projectIds, spec, logic) {
+        let q = adminClient
+            .from('leads')
+            .select('id')
+            .eq('organization_id', organizationId)
+            .is('archived_at', null)
+            .eq('do_not_call', false)
+
+        if (projectIds?.length > 0) q = q.in('project_id', projectIds)
+
+        // Apply filter dimensions
+        q = CampaignService._applyFilterSpec(q, spec, logic)
+
+        if (spec.exclude_previously_called) {
+            const { data: called } = await adminClient
+                .from('campaign_leads')
+                .select('lead_id')
+                .eq('organization_id', organizationId)
+                .eq('status', 'completed')
+            const calledIds = (called || []).map(r => r.lead_id)
+            if (calledIds.length > 0) q = q.not('id', 'in', `(${calledIds.join(',')})`)
+        }
+
+        const { data, error } = await q
+        if (error) throw error
+        return (data || []).map(r => r.id)
+    }
+
+    /**
+     * Preview enrollment count for a filter-based enrollment without inserting rows.
+     */
+    static async previewEnrollment(organizationId, { project_ids, inclusion, exclusion }) {
         const adminClient = createAdminClient()
+
+        const inclFilters = inclusion?.filters || {}
+        const inclLogic = inclusion?.logic || 'AND'
+        const exclFilters = exclusion?.filters || {}
+        const exclLogic = exclusion?.logic || 'AND'
+
+        const hasIncl = Object.keys(inclFilters).some(k => {
+            const v = inclFilters[k]
+            return Array.isArray(v) ? v.length > 0 : v != null && v !== false
+        })
+        const hasExcl = Object.keys(exclFilters).some(k => {
+            const v = exclFilters[k]
+            return Array.isArray(v) ? v.length > 0 : v != null && v !== false
+        })
+
+        // Inclusion: if no filters, take all project leads
+        let inclIds
+        if (hasIncl) {
+            inclIds = await CampaignService._fetchLeadIdsBySpec(adminClient, organizationId, project_ids, inclFilters, inclLogic)
+        } else {
+            const { data } = await adminClient
+                .from('leads')
+                .select('id')
+                .eq('organization_id', organizationId)
+                .in('project_id', project_ids || [])
+                .is('archived_at', null)
+                .eq('do_not_call', false)
+            inclIds = (data || []).map(r => r.id)
+        }
+
+        let exclIdSet = new Set()
+        if (hasExcl && inclIds.length > 0) {
+            const exclIds = await CampaignService._fetchLeadIdsBySpec(adminClient, organizationId, project_ids, exclFilters, exclLogic)
+            exclIdSet = new Set(exclIds)
+        }
+
+        const netIds = inclIds.filter(id => !exclIdSet.has(id))
+
+        // Apply hard eligibility checks on net set
+        if (netIds.length === 0) return { included: inclIds.length, excluded: exclIdSet.size, net: 0, leads: [] }
+
+        const { data: leads } = await adminClient
+            .from('leads')
+            .select('id, name, phone, mobile, interest_level, score, avatar_url, source, stage:pipeline_stages(id, name, color), project:projects(archived_at), assigned_to_user:profiles!leads_assigned_to_fkey(id, full_name)')
+            .in('id', netIds)
+
+        const allLeads = []
+        let eligible = 0
+        for (const lead of leads || []) {
+            let ineligibleReason = null
+            if (lead.project?.archived_at) ineligibleReason = 'Project archived'
+            else if (!validateAndNormalizePhone(lead.phone).valid) ineligibleReason = 'Invalid phone'
+            else {
+                const stageName = lead.stage?.name?.toLowerCase()
+                if (stageName === 'won' || stageName === 'lost') ineligibleReason = `Stage: ${lead.stage.name}`
+            }
+            if (!ineligibleReason) eligible++
+            allLeads.push({ id: lead.id, name: lead.name, phone: lead.phone || lead.mobile, interest_level: lead.interest_level, score: lead.score, avatar_url: lead.avatar_url, source: lead.source, stage: lead.stage, assigned_to_user: lead.assigned_to_user, ineligible_reason: ineligibleReason })
+        }
+
+        return { included: inclIds.length, excluded: exclIdSet.size, net: eligible, leads: allLeads }
+    }
+
+    static async enrollLeads(campaignId, organizationId, enrolledBy, { lead_ids, filters, inclusion, exclusion } = {}) {
+        const adminClient = createAdminClient()
+
+        // New inclusion/exclusion shape
+        if (inclusion || exclusion) {
+            const inclFilters = inclusion?.filters || {}
+            const inclLogic = inclusion?.logic || 'AND'
+            const exclFilters = exclusion?.filters || {}
+            const exclLogic = exclusion?.logic || 'AND'
+
+            // Get project_ids from campaign
+            const { data: campaign } = await adminClient.from('campaigns').select('project_ids').eq('id', campaignId).single()
+            const projectIds = campaign?.project_ids || []
+
+            const hasIncl = Object.keys(inclFilters).some(k => {
+                const v = inclFilters[k]; return Array.isArray(v) ? v.length > 0 : v != null && v !== false
+            })
+
+            let inclIds
+            if (hasIncl) {
+                inclIds = await CampaignService._fetchLeadIdsBySpec(adminClient, organizationId, projectIds, inclFilters, inclLogic)
+            } else {
+                const { data } = await adminClient.from('leads').select('id').eq('organization_id', organizationId).in('project_id', projectIds).is('archived_at', null).eq('do_not_call', false)
+                inclIds = (data || []).map(r => r.id)
+            }
+
+            if (inclIds.length > 0 && Object.keys(exclFilters).some(k => { const v = exclFilters[k]; return Array.isArray(v) ? v.length > 0 : v != null && v !== false })) {
+                const exclIds = await CampaignService._fetchLeadIdsBySpec(adminClient, organizationId, projectIds, exclFilters, exclLogic)
+                const exclSet = new Set(exclIds)
+                inclIds = inclIds.filter(id => !exclSet.has(id))
+            }
+
+            if (!inclIds.length) return { enrolled: 0, skipped: 0, skip_details: {}, already_enrolled: 0 }
+
+            // Delegate to lead_ids path
+            return CampaignService.enrollLeads(campaignId, organizationId, enrolledBy, { lead_ids: inclIds })
+        }
 
         let leadsQuery = adminClient
             .from('leads')
-            .select('id, phone, archived_at, do_not_call, project_id, stage:pipeline_stages(name), deals:deals(status), project:projects(archived_at)')
+            .select('id, phone, archived_at, do_not_call, project_id, stage:pipeline_stages(name), project:projects(archived_at)')
             .eq('organization_id', organizationId)
 
         if (lead_ids?.length > 0) {
             leadsQuery = leadsQuery.in('id', lead_ids)
         } else if (filters) {
-            if (filters.stage_ids?.length > 0) leadsQuery = leadsQuery.in('stage_id', filters.stage_ids)
-            if (filters.interest_level) leadsQuery = leadsQuery.eq('interest_level', filters.interest_level)
-            if (filters.source) leadsQuery = leadsQuery.eq('source', filters.source)
-            if (filters.assigned_to) leadsQuery = leadsQuery.eq('assigned_to', filters.assigned_to)
-            if (filters.score_min != null) leadsQuery = leadsQuery.gte('score', filters.score_min)
-            if (filters.score_max != null) leadsQuery = leadsQuery.lte('score', filters.score_max)
+            leadsQuery = CampaignService._applyFilterSpec(leadsQuery, filters, 'AND')
             if (filters.project_ids?.length > 0) leadsQuery = leadsQuery.in('project_id', filters.project_ids)
             else if (filters.project_id) leadsQuery = leadsQuery.eq('project_id', filters.project_id)
         } else {
-            throw new Error('Must provide lead_ids or filters')
+            throw new Error('Must provide lead_ids, filters, or inclusion/exclusion')
         }
 
         const { data: leads, error } = await leadsQuery
@@ -294,12 +467,6 @@ export class CampaignService {
             if (stageName === 'won' || stageName === 'lost') {
                 skipDetails.stage_won_or_lost = (skipDetails.stage_won_or_lost || 0) + 1
                 toEnroll.push({ campaign_id: campaignId, lead_id: lead.id, organization_id: organizationId, enrolled_by: enrolledBy, status: 'skipped', skip_reason: 'stage_won_or_lost' })
-                continue
-            }
-            const hasClosedDeal = lead.deals?.some(d => d.status === 'reserved' || d.status === 'won')
-            if (hasClosedDeal) {
-                skipDetails.deal_reserved_or_won = (skipDetails.deal_reserved_or_won || 0) + 1
-                toEnroll.push({ campaign_id: campaignId, lead_id: lead.id, organization_id: organizationId, enrolled_by: enrolledBy, status: 'skipped', skip_reason: 'deal_reserved_or_won' })
                 continue
             }
             toEnroll.push({ campaign_id: campaignId, lead_id: lead.id, organization_id: organizationId, enrolled_by: enrolledBy, status: 'enrolled' })

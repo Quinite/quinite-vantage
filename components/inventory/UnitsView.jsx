@@ -709,6 +709,7 @@ export function UnitsView({ projectId = null }) {
                 unit={drawerState.unit}
                 project={activeProject}
                 projectId={projectId || drawerState.unit?.project_id}
+                existingUnitNumbers={units.map(u => u.unit_number).filter(Boolean)}
                 onSave={async (payload) => {
                     const isNew = drawerState.mode === 'add'
                     const url = isNew ? '/api/inventory/units' : `/api/inventory/units/${drawerState.unit?.id}`

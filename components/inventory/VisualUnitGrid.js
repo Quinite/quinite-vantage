@@ -551,6 +551,7 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
         organizationId={organizationId}
         onSave={drawerMode?.includes('add') ? addUnit : (data) => updateUnit(selectedUnit.id, data)}
         onDelete={deleteUnit}
+        existingUnitNumbers={Object.values(units).flat().map(u => u.unit_number).filter(Boolean)}
       />
 
       <TowerDrawer

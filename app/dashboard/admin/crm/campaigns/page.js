@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo } from 'react'
+import { LeadEnrollmentDialog } from '@/components/crm/campaigns/LeadEnrollmentDialog'
 import { createClient } from '@/lib/supabase/client'
 import { useSubscription } from '@/contexts/SubscriptionContext'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -64,7 +65,8 @@ import {
   ChevronRight,
   Info,
   X,
-  Search
+  Search,
+  ArrowRight
 } from 'lucide-react'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
@@ -391,10 +393,16 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
   const [creditCap, setCreditCap] = useState('')
   const [aiScript, setAiScript] = useState('')
   const [callSettings, setCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
-  const [enrollMode, setEnrollMode] = useState('auto') // 'auto' | 'manual'
+  const [enrollMode, setEnrollMode] = useState('filter') // 'filter' | 'manual'
   const [selectedLeads, setSelectedLeads] = useState(new Set())
   const [leadSearch, setLeadSearch] = useState('')
   const [projectLeads, setProjectLeads] = useState([])
+  const [inclusionFilters, setInclusionFilters] = useState([])
+  const [exclusionFilters, setExclusionFilters] = useState([])
+  const [inclusionLogic, setInclusionLogic] = useState('AND')
+  const [exclusionLogic, setExclusionLogic] = useState('AND')
+  const [enrollDialogOpen, setEnrollDialogOpen] = useState(false)
+  const [confirmedEnrollCount, setConfirmedEnrollCount] = useState(null)
   const [loadingLeads, setLoadingLeads] = useState(false)
   const [creating, setCreating] = useState(false)
   const [touched, setTouched] = useState(false)
@@ -435,6 +443,39 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
     return projectLeads.filter(l => l.name?.toLowerCase().includes(q) || l.phone?.includes(q))
   }, [projectLeads, leadSearch])
 
+  // Derives unique stages/users/sources from loaded project leads
+  const derivedStages = useMemo(() => {
+    const map = new Map()
+    projectLeads.forEach(l => { if (l.stage?.id) map.set(l.stage.id, l.stage) })
+    return [...map.values()]
+  }, [projectLeads])
+
+  const derivedUsers = useMemo(() => {
+    const map = new Map()
+    projectLeads.forEach(l => { if (l.assigned_to_user?.id) map.set(l.assigned_to_user.id, l.assigned_to_user) })
+    return [...map.values()]
+  }, [projectLeads])
+
+  const derivedSources = useMemo(() => {
+    const set = new Set()
+    projectLeads.forEach(l => { if (l.source) set.add(l.source) })
+    return [...set]
+  }, [projectLeads])
+
+  // Converts filter row objects into a flat spec for the API
+  function buildFilterSpec(rows) {
+    const spec = {}
+    rows.forEach(row => {
+      if (row.dimension === 'stage' && row.stage_ids?.length) spec.stage_ids = [...(spec.stage_ids || []), ...row.stage_ids]
+      if (row.dimension === 'interest_level' && row.interest_levels?.length) spec.interest_levels = [...(spec.interest_levels || []), ...row.interest_levels]
+      if (row.dimension === 'score') { spec.score_min = row.score_min; spec.score_max = row.score_max }
+      if (row.dimension === 'assigned_to' && row.assigned_to_ids?.length) spec.assigned_to_ids = [...(spec.assigned_to_ids || []), ...row.assigned_to_ids]
+      if (row.dimension === 'source' && row.sources?.length) spec.sources = [...(spec.sources || []), ...row.sources]
+      if (row.dimension === 'previously_called') spec.exclude_previously_called = true
+    })
+    return spec
+  }
+
   function toggleLead(id) {
     setSelectedLeads(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
@@ -466,9 +507,12 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
     if (creating) return
     setSelectedProjectIds([]); setName(''); setDescription(''); setStartDate(''); setEndDate('')
     setTimeStart('09:00'); setTimeEnd('21:00'); setDndCompliance(true); setTouched(false)
-    setCreditCap(''); setAiScript(''); setEnrollMode('auto'); setSelectedLeads(new Set()); setLeadSearch('')
+    setCreditCap(''); setAiScript(''); setEnrollMode('filter'); setSelectedLeads(new Set()); setLeadSearch('')
     setCallSettings({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
-    setProjectLeads([]); setCreditBalance(null); onOpenChange(false)
+    setProjectLeads([]); setCreditBalance(null)
+    setInclusionFilters([]); setExclusionFilters([]); setInclusionLogic('AND'); setExclusionLogic('AND')
+    setEnrollDialogOpen(false); setConfirmedEnrollCount(null)
+    onOpenChange(false)
   }
 
   async function handleCreate() {
@@ -481,8 +525,12 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
         creditCap: creditCap !== '' ? parseFloat(creditCap) : null,
         aiScript: aiScript.trim() || null,
         callSettings: { ...callSettings, max_duration: parseInt(callSettings.max_duration), silence_timeout: parseInt(callSettings.silence_timeout) },
-        autoEnroll: enrollMode === 'auto',
-        leadIds: enrollMode === 'manual' ? [...selectedLeads] : []
+        autoEnroll: false,
+        leadIds: enrollMode === 'manual' ? [...selectedLeads] : [],
+        enrollFilters: enrollMode === 'filter' ? {
+          inclusion: { filters: buildFilterSpec(inclusionFilters), logic: inclusionLogic },
+          exclusion: { filters: buildFilterSpec(exclusionFilters), logic: exclusionLogic },
+        } : null,
       })
       handleClose()
     } catch (err) {
@@ -610,6 +658,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
             </div>
 
             <div className="grid gap-3 grid-cols-2">
+              {/* Language selector — temporarily hidden
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">Language</Label>
                 <Select value={callSettings.language} onValueChange={v => setCallSettings(s => ({ ...s, language: v }))}>
@@ -624,6 +673,8 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
                   </SelectContent>
                 </Select>
               </div>
+              */}
+              {/* AI Voice selector — temporarily hidden
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">AI Voice</Label>
                 <Select value={callSettings.voice_id} onValueChange={v => setCallSettings(s => ({ ...s, voice_id: v }))}>
@@ -641,6 +692,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
                   </SelectContent>
                 </Select>
               </div>
+              */}
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">Max Duration</Label>
                 <div className="relative">
@@ -724,7 +776,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
           </div>
 
           {/* ── Lead Enrollment ── */}
-          <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 space-y-3 shadow-sm">
+          <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-green-500/10 rounded-lg">
@@ -732,117 +784,55 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-foreground">Lead Enrollment</h4>
-                  <p className="text-[11px] text-muted-foreground">Select which leads to include in this campaign</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {enrollMode === 'filter'
+                      ? confirmedEnrollCount != null
+                        ? `${confirmedEnrollCount} leads configured via filters`
+                        : (inclusionFilters.length || exclusionFilters.length)
+                          ? 'Filters set — confirm in enrollment panel'
+                          : 'All eligible leads from selected projects'
+                      : selectedLeads.size > 0
+                        ? `${selectedLeads.size} leads selected manually`
+                        : 'No leads selected yet'}
+                  </p>
                 </div>
               </div>
-              {selectedProjectIds.length > 0 && !loadingLeads && (
-                <Badge variant="outline" className="bg-background text-[10px] font-bold px-2 py-0.5">
-                  {enrollMode === 'auto' ? eligibleLeads.length : selectedLeads.size} Total
-                </Badge>
-              )}
-            </div>
-
-            {/* 2-option toggle (Segmented Control) */}
-            <div className="flex p-0.5 bg-background rounded-xl border border-border shadow-sm">
-              {[
-                { key: 'auto', label: 'Automatic', sub: 'All eligible leads' },
-                { key: 'manual', label: 'Manual', sub: 'Pick specific leads' },
-              ].map(m => (
-                <button key={m.key} type="button"
-                  disabled={!selectedProjectIds.length}
-                  onClick={() => setEnrollMode(m.key)}
-                  className={`flex-1 flex flex-col items-center py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed
-                    ${enrollMode === m.key 
-                      ? 'bg-primary text-primary-foreground shadow-md transform scale-[1.01]' 
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-                >
-                  <span className="text-xs font-bold">{m.label}</span>
-                  <span className={`text-[9px] ${enrollMode === m.key ? 'text-primary-foreground/80' : 'text-muted-foreground/70'}`}>{m.sub}</span>
-                </button>
-              ))}
-            </div>
-
-            {!selectedProjectIds.length && (
-              <div className="flex flex-col items-center justify-center py-8 text-center bg-background/50 rounded-lg border border-dashed border-border">
-                <Building2 className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                <p className="text-xs text-muted-foreground px-4">Select at least one project first to see available leads</p>
-              </div>
-            )}
-
-            {/* Auto preview */}
-            {selectedProjectIds.length > 0 && enrollMode === 'auto' && (
-              <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm">
-                <div className="flex items-center justify-between px-4 py-2 bg-muted/40 border-b border-border/60">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
-                    <span className="text-xs font-bold text-foreground">Enrolling Automatically</span>
-                  </div>
-                  {loadingLeads
-                    ? <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" />Syncing…</span>
-                    : <span className="text-[10px] font-bold bg-green-500/10 text-green-700 px-2 py-0.5 rounded-full">{eligibleLeads.length} Leads</span>
-                  }
+              <div className="flex items-center gap-2">
+                {/* Mode toggle pills */}
+                <div className="flex p-0.5 bg-background rounded-lg border border-border shadow-sm">
+                  {[
+                    { key: 'filter', label: 'Filter' },
+                    { key: 'manual', label: 'Manual' },
+                  ].map(m => (
+                    <button key={m.key} type="button"
+                      disabled={!selectedProjectIds.length}
+                      onClick={() => setEnrollMode(m.key)}
+                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed
+                        ${enrollMode === m.key
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="max-h-[250px] overflow-y-auto divide-y divide-border/40 scrollbar-thin">
-                  {loadingLeads
-                    ? <div className="p-3 space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
-                    : eligibleLeads.length === 0
-                      ? <div className="flex flex-col items-center justify-center py-8 opacity-60">
-                          <Users className="w-8 h-8 mb-2 text-muted-foreground" />
-                          <p className="text-xs font-medium">No eligible leads found</p>
-                        </div>
-                      : eligibleLeads.map(lead => (
-                        <div key={lead.id} className="flex items-center gap-3 px-4 py-2 hover:bg-muted/20 transition-colors group">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center shrink-0 border border-primary/10 group-hover:scale-105 transition-transform">
-                            <span className="text-[11px] font-bold text-primary">{lead.name?.[0]?.toUpperCase()}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-foreground truncate">{lead.name}</span>
-                              {lead.interest_level && (
-                                <div className={`w-1.5 h-1.5 rounded-full ${
-                                  lead.interest_level.toLowerCase() === 'hot' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 
-                                  lead.interest_level.toLowerCase() === 'warm' ? 'bg-orange-400' : 'bg-blue-400'
-                                }`} title={`Interest: ${lead.interest_level}`} />
-                              )}
-                              {lead.source && (
-                                <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 uppercase tracking-tighter">
-                                  {lead.source}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] text-muted-foreground font-medium">{lead.phone || lead.mobile}</span>
-                              <span className="text-[10px] text-muted-foreground/40">•</span>
-                              <span className="text-[10px] text-muted-foreground">{lead.preferred_location || lead.mailing_city || 'No Loc'}</span>
-                              {(lead.budget_range || lead.max_budget) && (
-                                <>
-                                  <span className="text-[10px] text-muted-foreground/40">•</span>
-                                  <span className="text-[10px] text-green-600 font-bold">{lead.budget_range || `₹${lead.max_budget}`}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {lead.stage && (
-                            <Badge variant="outline" className="text-[9px] px-2 py-0 shrink-0 h-5 font-bold border-2" style={{ borderColor: lead.stage.color + '40', color: lead.stage.color, backgroundColor: lead.stage.color + '08' }}>
-                              {lead.stage.name}
-                            </Badge>
-                          )}
-                        </div>
-                      ))
-                  }
-                </div>
-                {!loadingLeads && projectLeads.length > eligibleLeads.length && (
-                  <div className="px-4 py-2 bg-amber-50/50 border-t border-amber-100 flex items-center gap-2">
-                    <Info className="w-3 h-3 text-amber-600" />
-                    <p className="text-[10px] text-amber-700 font-medium">
-                      {projectLeads.length - eligibleLeads.length} leads excluded (Closed, DNC, or missing phone)
-                    </p>
-                  </div>
+                {enrollMode === 'filter' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedProjectIds.length}
+                    onClick={() => setEnrollDialogOpen(true)}
+                    className="h-8 text-xs gap-1.5"
+                  >
+                    Configure
+                    <ArrowRight className="w-3 h-3" />
+                  </Button>
                 )}
               </div>
-            )}
+            </div>
 
-            {/* Manual selection */}
+            {/* Manual selection (inline, only shown when manual mode active) */}
             {selectedProjectIds.length > 0 && enrollMode === 'manual' && (
               <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm">
                 <div className="flex items-center gap-3 px-4 py-2 bg-muted/40 border-b border-border/60">
@@ -954,6 +944,25 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
           </Button>
         </div>
       </DialogContent>
+
+      {/* Enrollment configuration dialog */}
+      <LeadEnrollmentDialog
+        open={enrollDialogOpen}
+        onOpenChange={setEnrollDialogOpen}
+        projectIds={selectedProjectIds}
+        stages={derivedStages}
+        users={derivedUsers}
+        sources={derivedSources}
+        inclusionFilters={inclusionFilters}
+        setInclusionFilters={setInclusionFilters}
+        inclusionLogic={inclusionLogic}
+        setInclusionLogic={setInclusionLogic}
+        exclusionFilters={exclusionFilters}
+        setExclusionFilters={setExclusionFilters}
+        exclusionLogic={exclusionLogic}
+        setExclusionLogic={setExclusionLogic}
+        onConfirm={(count) => setConfirmedEnrollCount(count)}
+      />
     </Dialog>
   )
 }
@@ -1095,7 +1104,7 @@ export default function CampaignsPage() {
     }
   }
 
-  async function handleCreate({ projectIds, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, creditCap, aiScript, callSettings, autoEnroll, leadIds }) {
+  async function handleCreate({ projectIds, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, creditCap, aiScript, callSettings, autoEnroll, leadIds, enrollFilters }) {
     if (!canCreate) { toast.error("You do not have permission to create campaigns"); return }
     try {
       const res = await fetch('/api/campaigns', {
@@ -1110,7 +1119,8 @@ export default function CampaignsPage() {
           ai_script: aiScript,
           call_settings: callSettings,
           auto_enroll: autoEnroll,
-          lead_ids: leadIds
+          lead_ids: leadIds,
+          enroll_filters: enrollFilters,
         })
       })
       if (!res.ok) {
@@ -1550,6 +1560,7 @@ export default function CampaignsPage() {
             <div className="pt-2 border-t border-border/50">
               <Label className="text-sm font-semibold mb-3 block text-foreground">AI Call Settings</Label>
               <div className="space-y-4">
+                {/* Language selector — temporarily hidden
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1.5 block">Language</Label>
@@ -1580,6 +1591,7 @@ export default function CampaignsPage() {
                     </select>
                   </div>
                 </div>
+                */}
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1.5 block">Max Call Duration (seconds)</Label>

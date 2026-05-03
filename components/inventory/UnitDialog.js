@@ -69,6 +69,7 @@ export default function UnitDialog({
   organizationId,
   onSave,
   onDelete,
+  existingUnitNumbers = [],
 }) {
   const [formData, setFormData] = useState(EMPTY_FORM)
   const [activeTab, setActiveTab] = useState('details')
@@ -194,6 +195,14 @@ export default function UnitDialog({
     e.preventDefault()
     if (!formData.unit_number || !formData.config_id) {
       toast.error('Unit number and config are required')
+      return
+    }
+
+    const takenNumbers = mode === 'edit' && unit?.unit_number
+      ? existingUnitNumbers.filter(n => n?.toLowerCase() !== unit.unit_number.toLowerCase())
+      : existingUnitNumbers
+    if (takenNumbers.some(n => n?.trim().toLowerCase() === formData.unit_number.trim().toLowerCase())) {
+      toast.error('Unit number already exists — please choose a different one')
       return
     }
 
@@ -441,6 +450,11 @@ export default function UnitDialog({
                       setPickedTowerId,
                       setPickedFloor,
                     } : null}
+                    existingUnitNumbers={
+                      mode === 'edit' && unit?.unit_number
+                        ? existingUnitNumbers.filter(n => n?.toLowerCase() !== unit.unit_number.toLowerCase())
+                        : existingUnitNumbers
+                    }
                   />
                   <PricingSection
                     formData={formData}
