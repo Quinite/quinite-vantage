@@ -106,10 +106,10 @@ export async function GET(request) {
       return corsJSON({ organization: safeOrg })
     }
 
-    console.log('[Platform Orgs API] Fetching all organizations...')
+    console.log('[Platform Orgs API] Fetching all organizations with user counts...')
     const { data, error } = await adminClient
       .from('organizations')
-      .select('*')
+      .select('*, profiles(id)')
       .order('created_at', { ascending: false })
 
     console.log('[Platform Orgs API] Query result:', {
@@ -123,9 +123,10 @@ export async function GET(request) {
       throw error
     }
 
-    // Map status for list view
+    // Map status and user count for list view
     const enhancedData = (data || []).map(org => ({
       ...org,
+      userCount: org.profiles?.length || 0,
       status: org.settings?.status || (org.onboarding_status === 'completed' ? 'active' : 'pending')
     }))
 

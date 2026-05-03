@@ -13,6 +13,7 @@ export async function POST(request) {
   try {
     const supabase = await createServerSupabaseClient()
     const body = await request.json()
+    const { targetUserId, organizationId } = body
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
 
@@ -42,17 +43,60 @@ export async function POST(request) {
     }
 
     try {
-      const { data: targetProfile, error: targetError } = await adminClient.from('profiles').select('*, organization:organizations(name), role:roles(name)').eq('id', targetId).eq('organization_id', organizationId).single()
+      const { data: targetProfile, error: targetError } = await adminClient
+        .from('profiles')
+        .select('*, organization:organizations(name)')
+        .eq('id', targetId)
+        .eq('organization_id', organizationId)
+        .single()
       if (targetError || !targetProfile) throw new Error('Target user not found in specified organization')
 
-      await adminClient.from('impersonation_sessions').update({ is_active: false, ended_at: new Date().toISOString() }).eq('impersonator_user_id', user.id).eq('is_active', true)
+      await adminClient
+        .from('impersonation_sessions')
+        .update({ active: false, ended_at: new Date().toISOString() })
+        .eq('admin_id', user.id)
+        .eq('active', true)
 
-      const { data: session, error: sessionError } = await adminClient.from('impersonation_sessions').insert({ impersonator_user_id: user.id, impersonated_user_id: targetUserId, impersonated_org_id: organizationId, is_active: true }).select().single()
-      if (sessionError) throw new Error('Failed to create impersonation session')
+      const { data: session, error: sessionError } = await adminClient
+        .from('impersonation_sessions')
+        .insert({ 
+          admin_id: user.id, 
+          target_user_id: targetId, 
+          active: true,
+          reason: 'Platform Admin Impersonation'
+        })
+        .select()
+        .single()
+      if (sessionError) {
+        console.error('Session Error:', sessionError)
+        throw new Error('Failed to create impersonation session')
+      }
 
-      await adminClient.from('audit_logs').insert({ user_id: user.id, user_name: 'Platform Admin', action: 'IMPERSONATION_STARTED', entity_type: 'user', entity_id: targetUserId, is_impersonated: false, metadata: { target_user_email: targetProfile.email, target_organization: targetProfile.organization.name, impersonation_session_id: session.id } })
+      await adminClient.from('audit_logs').insert({ 
+        user_id: user.id, 
+        user_name: 'Platform Admin', 
+        action: 'IMPERSONATION_STARTED', 
+        entity_type: 'user', 
+        entity_id: targetId, 
+        is_impersonated: false, 
+        metadata: { 
+          target_user_email: targetProfile.email, 
+          target_organization: targetProfile.organization?.name, 
+          impersonation_session_id: session.id 
+        } 
+      })
 
-      return handleCORS(NextResponse.json({ message: 'Impersonation started', session, targetUser: { id: targetProfile.id, email: targetProfile.email, name: targetProfile.full_name, role: targetProfile.role.name, organization: targetProfile.organization.name } }))
+      return handleCORS(NextResponse.json({ 
+        message: 'Impersonation started', 
+        session, 
+        targetUser: { 
+          id: targetProfile.id, 
+          email: targetProfile.email, 
+          name: targetProfile.full_name, 
+          role: targetProfile.role, 
+          organization: targetProfile.organization?.name 
+        } 
+      }))
     } catch (e) {
       console.error('platform/impersonate error:', e)
       return handleCORS(NextResponse.json({ error: e.message || 'Impersonation failed' }, { status: 500 }))
