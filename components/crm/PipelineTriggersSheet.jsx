@@ -149,7 +149,7 @@ export default function PipelineTriggersSheet({ open, onOpenChange, pipelineId }
                                         const cfg = getConfig(trigger.key)
                                         const showError = cfg.is_enabled && !cfg.target_stage_id
                                         return (
-                                            <div key={trigger.key} className={`rounded-xl border bg-card transition-colors ${showError ? 'border-destructive/50' : cfg.is_enabled ? 'border-border' : 'border-border/50 opacity-60'}`}>
+                                            <div key={trigger.key} className={`rounded-xl border bg-card transition-all ${showError ? 'border-destructive/50' : cfg.is_enabled ? 'border-primary/20 bg-primary/[0.02] shadow-sm' : 'border-border/60'}`}>
                                                 {/* Top row: label + toggle */}
                                                 <div className="flex items-start justify-between gap-3 px-3 pt-3 pb-2">
                                                     <div className="min-w-0">
@@ -164,13 +164,16 @@ export default function PipelineTriggersSheet({ open, onOpenChange, pipelineId }
                                                 </div>
                                                 {/* Bottom row: move to label + stage picker */}
                                                 <div className="flex items-center gap-2 px-3 pb-3">
-                                                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Move to</span>
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+                                                        <span className="w-1 h-1 rounded-full bg-emerald-500" />
+                                                        Then move to
+                                                    </span>
                                                     <Select
                                                         value={cfg.target_stage_id || ''}
                                                         onValueChange={v => update(trigger.key, 'target_stage_id', v)}
                                                         disabled={!cfg.is_enabled}
                                                     >
-                                                        <SelectTrigger className="h-7 flex-1 text-xs">
+                                                        <SelectTrigger className="h-7 flex-1 text-xs bg-white">
                                                             <SelectValue placeholder="Select stage…" />
                                                         </SelectTrigger>
                                                         <SelectContent>

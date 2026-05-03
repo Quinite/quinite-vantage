@@ -31,6 +31,16 @@ import {
     verticalListSortingStrategy,
     useSortable,
 } from '@dnd-kit/sortable'
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Trash2, Save, Loader2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -69,7 +79,7 @@ function SortableStageItem({ stage, onRename, onDelete }) {
                     value={stage.name}
                     onChange={(e) => onRename(stage.id, e.target.value)}
                     disabled={stage.is_default}
-                    className="h-9 w-full bg-background disabled:bg-muted/30 disabled:text-muted-foreground font-medium"
+                    className={`h-9 w-full bg-background disabled:bg-muted/30 disabled:text-muted-foreground font-medium ${!stage.name?.trim() ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                     placeholder="Stage Name"
                 />
             </div>
@@ -111,11 +121,35 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
     const [saving, setSaving] = useState(false)
     const [newStageName, setNewStageName] = useState('')
     const [addingStage, setAddingStage] = useState(false)
+    const [dependencies, setDependencies] = useState({ triggers: [], automations: [] })
+    const [loadingDeps, setLoadingDeps] = useState(false)
+    const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, msg: '', title: '' })
 
     useEffect(() => {
         if (pipeline?.stages) {
             const sortedStages = [...pipeline.stages].sort((a, b) => a.order_index - b.order_index)
             setStages(sortedStages)
+        }
+        if (open && pipeline?.id) {
+            // Fetch dependencies to check before delete
+            const fetchDeps = async () => {
+                setLoadingDeps(true)
+                try {
+                    const [tRes, aRes] = await Promise.all([
+                        fetch('/api/pipeline/triggers').then(r => r.json()),
+                        fetch(`/api/pipeline/automations?pipeline_id=${pipeline.id}`).then(r => r.json())
+                    ])
+                    setDependencies({
+                        triggers: tRes.triggers || [],
+                        automations: aRes.automations || []
+                    })
+                } catch (e) {
+                    console.error('Failed to fetch dependencies', e)
+                } finally {
+                    setLoadingDeps(false)
+                }
+            }
+            fetchDeps()
         }
         if (!open) {
             setNewStageName('')
@@ -157,18 +191,46 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
         setAddingStage(false)
     }
 
-    const handleDelete = async (id) => {
+    const handleDelete = (id) => {
         if (stages.length <= 1) {
             toast.error('Pipeline must have at least one stage')
             return
         }
-        if (!confirm('Are you sure? This will affect leads in this stage.')) return
+
+        const stage = stages.find(s => s.id === id)
+        const inTriggers = dependencies.triggers.filter(t => t.target_stage_id === id)
+        const inAutomations = dependencies.automations.filter(a => 
+            a.trigger_config?.stage_id === id || a.action_config?.stage_id === id
+        )
+
+        let title = `Delete "${stage.name}"?`
+        let msg = 'Are you sure you want to remove this stage? This action cannot be undone until you refresh the page without saving.'
         
+        if (inTriggers.length > 0 || inAutomations.length > 0) {
+            msg = `This stage is currently used in ${inTriggers.length} trigger(s) and ${inAutomations.length} automation rule(s). Deleting it will cause these rules to stop working or require manual updates.`
+        } else if (stage.lead_count > 0) {
+            msg = `There are ${stage.lead_count} leads currently in this stage. You must move them to another stage before these changes can be finalized.`
+        }
+
+        setDeleteConfirm({ open: true, id, msg, title })
+    }
+
+    const confirmDelete = () => {
+        const id = deleteConfirm.id
         setStages(prev => prev.filter(s => s.id !== id))
+        setDeleteConfirm({ open: false, id: null, msg: '', title: '' })
     }
 
     const handleSave = async () => {
         if (!pipeline?.id) return
+        
+        // Validate all stage names are non-empty
+        const hasEmptyName = stages.some(s => !s.name || !s.name.trim())
+        if (hasEmptyName) {
+            toast.error('All stage names must be filled')
+            return
+        }
+
         setSaving(true)
         try {
             // 1. POST any new stages first to get real ids
@@ -282,13 +344,33 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
                     <Button 
                         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" 
                         onClick={handleSave}
-                        disabled={saving}
+                        disabled={saving || stages.some(s => !s.name?.trim())}
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                         Save Changes
                     </Button>
                 </div>
             </SheetContent>
+
+            <AlertDialog open={deleteConfirm.open} onOpenChange={(v) => !v && setDeleteConfirm(prev => ({ ...prev, open: false }))}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{deleteConfirm.title}</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
+                            {deleteConfirm.msg}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete Stage
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </Sheet>
     )
 }

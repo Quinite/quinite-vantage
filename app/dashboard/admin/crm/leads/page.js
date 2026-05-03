@@ -34,7 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 const LeadFilters = dynamic(() => import('@/components/crm/leads/LeadFilters').then(mod => mod.LeadFilters), {
   loading: () => <Skeleton className="h-16 w-full mb-6" />
 })
-const LeadDialog = dynamic(() => import('@/components/crm/leads/LeadDialog').then(mod => mod.LeadDialog))
+const EditLeadProfileDialog = dynamic(() => import('@/components/crm/EditLeadProfileDialog'))
 const LeadSourceDialog = dynamic(() => import('@/components/crm/LeadSourceDialog'))
 // PipelineBoard import removed as it is no longer used here
 
@@ -53,7 +53,7 @@ export default function LeadsPage() {
 
   // View type is now fixed to table
   const viewType = 'table'
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
   const [isSourceDialogOpen, setIsSourceDialogOpen] = useState(false)
   const [editingLead, setEditingLead] = useState(null)
   const [isRefreshingLeads, setIsRefreshingLeads] = useState(false)
@@ -141,7 +141,7 @@ export default function LeadsPage() {
       } else {
         await createLeadMutation.mutateAsync(data)
       }
-      setIsDialogOpen(false)
+      setIsEditProfileOpen(false)
       setEditingLead(null)
       await refetchLeads()
       toast.success(editingLead ? 'Lead updated' : 'Lead added')
@@ -153,7 +153,7 @@ export default function LeadsPage() {
 
   const handleEditClick = (lead) => {
     setEditingLead(lead)
-    setIsDialogOpen(true)
+    setIsEditProfileOpen(true)
   }
 
 
@@ -394,17 +394,16 @@ export default function LeadsPage() {
         isLoadingMore={isPlaceholderData}
       /> : null}
 
-      <LeadDialog
-        open={isDialogOpen}
+
+
+      <EditLeadProfileDialog
+        open={isEditProfileOpen}
         onOpenChange={(open) => {
-          setIsDialogOpen(open)
+          setIsEditProfileOpen(open)
           if (!open) setEditingLead(null)
         }}
         lead={editingLead}
-        projects={projects || []}
-        users={users}
-        onSubmit={handleCreateEditSubmit}
-        submitting={createLeadMutation.isPending || updateLeadMutation.isPending}
+        onSave={refetchLeads}
       />
 
       <LeadSourceDialog

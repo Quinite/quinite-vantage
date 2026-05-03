@@ -165,6 +165,8 @@ export async function PUT(request, { params }) {
         if (body.mailing_country !== undefined) updateData.mailing_country = body.mailing_country
         if (body.score !== undefined) updateData.score = body.score
         if (body.interest_level !== undefined) updateData.interest_level = body.interest_level
+        if (body.waiting_status !== undefined) updateData.waiting_status = body.waiting_status
+        if (body.callback_time !== undefined) updateData.callback_time = body.callback_time
 
         // Update lead
         const { data, error } = await supabase

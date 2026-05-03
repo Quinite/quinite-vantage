@@ -208,7 +208,7 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
 
             if (!res.ok) throw new Error('Update failed')
             // Await refetch before clearing optimistic override to avoid flicker
-            await refetchLeads()
+            await Promise.all([refetchLeads(), refetchPipelines()])
             setOptimisticMoves(prev => { const next = new Map(prev); next.delete(leadId); return next })
 
             // Check for post-move automation prompts
@@ -281,7 +281,7 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
             const result = await res.json()
             if (!res.ok) throw new Error(result.error || 'Failed to create lead')
             toast.success('Lead created')
-            refetchLeads()
+            await Promise.all([refetchLeads(), refetchPipelines()])
             setAddDialogOpen(false)
         } catch (error) {
             toast.error(error.message)

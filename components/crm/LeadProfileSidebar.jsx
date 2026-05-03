@@ -7,10 +7,25 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Camera, Mail, Phone, Smartphone, Building, Building2, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText } from 'lucide-react'
+import { Camera, Mail, Phone, Smartphone, Building, Building2, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText, Trash2, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'react-hot-toast'
 import { getDefaultAvatar } from '@/lib/avatar-utils'
+import { usePipelines } from '@/hooks/usePipelines'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 
 function WhatsAppIcon({ className }) {
     return (
@@ -94,6 +109,45 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
     const [scoreInput, setScoreInput] = useState('')
     const [savingScore, setSavingScore] = useState(false)
     const [savingInterest, setSavingInterest] = useState(false)
+
+    // Callback deletion state
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+    const [selectedMoveStageId, setSelectedMoveStageId] = useState('')
+    const [deletingCallback, setDeletingCallback] = useState(false)
+
+    const { data: pipelines = [] } = usePipelines()
+    const stages = pipelines[0]?.stages || []
+
+    const handleDeleteCallback = async () => {
+        if (!selectedMoveStageId) {
+            toast.error('Please select a stage to move the lead to')
+            return
+        }
+        setDeletingCallback(true)
+        try {
+            const res = await fetch(`/api/leads/${lead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    waiting_status: null,
+                    callback_time: null,
+                    stageId: selectedMoveStageId
+                })
+            })
+            if (!res.ok) throw new Error()
+            toast.success('Callback deleted and lead moved')
+            setIsDeleteDialogOpen(false)
+            onLeadFieldUpdate?.({
+                waiting_status: null,
+                callback_time: null,
+                stage_id: selectedMoveStageId
+            })
+        } catch {
+            toast.error('Failed to delete callback')
+        } finally {
+            setDeletingCallback(false)
+        }
+    }
 
     const saveScore = async () => {
         const val = Number(scoreInput)
@@ -330,14 +384,24 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
 
                 {/* Callback scheduled */}
                 {lead.waiting_status === 'callback_scheduled' && (
-                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 mt-2">
+                    <div className="group/badge relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 mt-2">
                         <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                        <div>
+                        <div className="flex-1">
                             <p className="text-xs font-bold text-amber-700">Callback Scheduled</p>
                             {lead.callback_time && (
                                 <p className="text-[11px] text-amber-600">{formatCallbackTime(lead.callback_time)}</p>
                             )}
                         </div>
+                        <button
+                            onClick={() => {
+                                setSelectedMoveStageId(lead.stage_id || '')
+                                setIsDeleteDialogOpen(true)
+                            }}
+                            className="p-1.5 rounded-md hover:bg-amber-100 text-amber-400 hover:text-amber-600 transition-colors"
+                            title="Delete callback"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                     </div>
                 )}
 
@@ -570,6 +634,70 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
                     Edit Profile
                 </Button>
             </div>
+
+            {/* Delete Callback Confirmation Dialog */}
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-amber-600">
+                            <Clock className="w-5 h-5" />
+                            Delete Scheduled Callback
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <p className="text-sm text-slate-500 leading-relaxed">
+                            Are you sure you want to delete the scheduled callback for <span className="font-semibold text-slate-900">{lead.name}</span>?
+                        </p>
+                        
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                Move Lead to Stage
+                            </label>
+                            <Select
+                                value={selectedMoveStageId}
+                                onValueChange={setSelectedMoveStageId}
+                            >
+                                <SelectTrigger className="bg-white">
+                                    <SelectValue placeholder="Select a stage" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {stages.map((stage) => (
+                                        <SelectItem key={stage.id} value={stage.id}>
+                                            <div className="flex items-center gap-2">
+                                                <div 
+                                                    className="w-2 h-2 rounded-full" 
+                                                    style={{ backgroundColor: stage.color }} 
+                                                />
+                                                {stage.name}
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-slate-400 italic">
+                                Deleting the callback will remove the pending status and allow the lead to be processed in the new stage.
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsDeleteDialogOpen(false)}
+                            disabled={deletingCallback}
+                        >
+                            No, keep it
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleDeleteCallback}
+                            disabled={deletingCallback || !selectedMoveStageId}
+                            className="bg-amber-600 hover:bg-amber-700 text-white border-0"
+                        >
+                            {deletingCallback ? 'Deleting...' : 'Yes, Delete Callback'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

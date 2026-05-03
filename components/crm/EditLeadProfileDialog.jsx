@@ -179,11 +179,11 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="name">Full Name <span className="text-red-500">*</span></Label>
-                                    <Input id="name" name="name" value={formData.name} onChange={handleChange} required />
+                                    <Input id="name" name="name" value={formData.name} onChange={handleChange} required className="bg-white" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email</Label>
-                                    <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} />
+                                    <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} className="bg-white" />
                                 </div>
                             </div>
 
@@ -191,7 +191,7 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                                 <div className="space-y-2">
                                     <Label>Project</Label>
                                     <Select value={formData.projectId} onValueChange={handleProjectChange}>
-                                        <SelectTrigger>
+                                        <SelectTrigger className="bg-white">
                                             <SelectValue placeholder="Select project" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -209,7 +209,7 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                                         onValueChange={val => setFormData(prev => ({ ...prev, stageId: val }))}
                                         disabled={loadingStages || stages.length === 0}
                                     >
-                                        <SelectTrigger>
+                                        <SelectTrigger className="bg-white">
                                             <SelectValue placeholder={loadingStages ? 'Loading...' : stages.length === 0 ? 'No stages' : 'Select stage'} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -231,7 +231,7 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                                     <div className="space-y-2">
                                         <Label>Assign To</Label>
                                         <Select value={formData.assignedTo} onValueChange={val => setFormData(prev => ({ ...prev, assignedTo: val }))}>
-                                            <SelectTrigger>
+                                            <SelectTrigger className="bg-white">
                                                 <SelectValue placeholder="Select user" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -254,6 +254,7 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                                         value={formData.score}
                                         onChange={handleChange}
                                         placeholder="Auto-set by AI"
+                                        className="bg-white"
                                     />
                                 </div>
                             </div>
@@ -289,28 +290,28 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="phone">Phone</Label>
-                                    <PhoneInput id="phone" name="phone" value={formData.phone} onChange={value => setFormData(prev => ({ ...prev, phone: value }))} defaultCountry="IN" />
+                                    <PhoneInput id="phone" name="phone" value={formData.phone} onChange={value => setFormData(prev => ({ ...prev, phone: value }))} defaultCountry="IN" className="bg-white" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="mobile">Mobile</Label>
-                                    <PhoneInput id="mobile" name="mobile" value={formData.mobile} onChange={value => setFormData(prev => ({ ...prev, mobile: value }))} defaultCountry="IN" />
+                                    <PhoneInput id="mobile" name="mobile" value={formData.mobile} onChange={value => setFormData(prev => ({ ...prev, mobile: value }))} defaultCountry="IN" className="bg-white" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="company">Company</Label>
-                                    <Input id="company" name="company" value={formData.company} onChange={handleChange} />
+                                    <Input id="company" name="company" value={formData.company} onChange={handleChange} className="bg-white" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="job_title">Job Title</Label>
-                                    <Input id="job_title" name="job_title" value={formData.job_title} onChange={handleChange} />
+                                    <Input id="job_title" name="job_title" value={formData.job_title} onChange={handleChange} className="bg-white" />
                                 </div>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="department">Department</Label>
-                                <Input id="department" name="department" value={formData.department} onChange={handleChange} />
+                                <Input id="department" name="department" value={formData.department} onChange={handleChange} className="bg-white" />
                             </div>
                         </div>
 
@@ -320,28 +321,28 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
 
                             <div className="space-y-2">
                                 <Label htmlFor="mailing_street">Street Address</Label>
-                                <Input id="mailing_street" name="mailing_street" value={formData.mailing_street} onChange={handleChange} />
+                                <Input id="mailing_street" name="mailing_street" value={formData.mailing_street} onChange={handleChange} className="bg-white" />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="mailing_city">City</Label>
-                                    <Input id="mailing_city" name="mailing_city" value={formData.mailing_city} onChange={handleChange} />
+                                    <Input id="mailing_city" name="mailing_city" value={formData.mailing_city} onChange={handleChange} className="bg-white" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="mailing_state">State/Province</Label>
-                                    <Input id="mailing_state" name="mailing_state" value={formData.mailing_state} onChange={handleChange} />
+                                    <Input id="mailing_state" name="mailing_state" value={formData.mailing_state} onChange={handleChange} className="bg-white" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="mailing_zip">Zip/Postal Code</Label>
-                                    <Input id="mailing_zip" name="mailing_zip" value={formData.mailing_zip} onChange={handleChange} />
+                                    <Input id="mailing_zip" name="mailing_zip" value={formData.mailing_zip} onChange={handleChange} className="bg-white" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="mailing_country">Country</Label>
-                                    <Input id="mailing_country" name="mailing_country" value={formData.mailing_country} onChange={handleChange} />
+                                    <Input id="mailing_country" name="mailing_country" value={formData.mailing_country} onChange={handleChange} className="bg-white" />
                                 </div>
                             </div>
                         </div>

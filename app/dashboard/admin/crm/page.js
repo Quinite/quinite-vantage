@@ -60,7 +60,7 @@ function CrmPipelineContent() {
                             </Button>
                             <Button
                                 onClick={() => setManageStagesOpen(true)}
-                                className="bg-muted hover:bg-muted/80 text-foreground border border-border shadow-sm h-10 px-4 transition-all"
+                                className="bg-white hover:bg-zinc-50 text-foreground border border-border shadow-sm h-10 px-4 transition-all"
                             >
                                 <Settings className="w-4 h-4 mr-2" />
                                 Manage Pipeline

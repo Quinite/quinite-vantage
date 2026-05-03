@@ -12,9 +12,18 @@ import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 
 function getScoreStyle(score) {
-    if (score >= 70) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-    if (score >= 40) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-    return 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+    if (score >= 70) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+    if (score >= 40) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30'
+    return 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+}
+
+function getInterestStyle(level) {
+    const map = {
+        high: { label: 'High', icon: <Flame className="w-2.5 h-2.5" />, cls: 'bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-900/50' },
+        medium: { label: 'Mid', icon: <Zap className="w-2.5 h-2.5" />, cls: 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50' },
+        low: { label: 'Low', icon: <Snowflake className="w-2.5 h-2.5" />, cls: 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800' },
+    }
+    return map[level] || null
 }
 
 
@@ -117,11 +126,37 @@ function LeadCardInner({ lead }) {
                             <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lead.project.name}</p>
                         )}
                     </div>
-                    {lead.score > 0 && (
-                        <Badge className={`shrink-0 text-[10px] font-bold h-5 px-1.5 border-0 rounded-md ${getScoreStyle(lead.score)}`}>
-                            {lead.score}
-                        </Badge>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                        {lead.interest_level && lead.interest_level !== 'none' && (
+                            <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[9px] font-bold cursor-default ${getInterestStyle(lead.interest_level)?.cls}`}>
+                                            {getInterestStyle(lead.interest_level)?.icon}
+                                            {getInterestStyle(lead.interest_level)?.label}
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-[10px] py-1 px-2">
+                                        Interest: {lead.interest_level.charAt(0).toUpperCase() + lead.interest_level.slice(1)}
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+                        {lead.score > 0 && (
+                            <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Badge className={`shrink-0 text-[10px] font-bold h-5 px-1.5 border-0 rounded-md cursor-default ${getScoreStyle(lead.score)}`}>
+                                            {lead.score}
+                                        </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-[10px] py-1 px-2">
+                                        Lead Score: {lead.score}/100
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+                    </div>
                 </div>
 
                 {/* Phone */}
@@ -188,42 +223,6 @@ function LeadCardInner({ lead }) {
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs">
                                         {lead.assigned_to_user.full_name || lead.assigned_to_user.email}
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
-                        {lead.interest_level === 'high' && (
-                            <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Flame className="w-3 h-3 text-orange-500 shrink-0" />
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-[10px] py-1 px-2">
-                                        High Interest
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
-                        {lead.interest_level === 'medium' && (
-                            <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Zap className="w-3 h-3 text-amber-400 shrink-0" />
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-[10px] py-1 px-2">
-                                        Medium Interest
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
-                        {lead.interest_level === 'low' && (
-                            <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Snowflake className="w-3 h-3 text-blue-300 shrink-0" />
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-[10px] py-1 px-2">
-                                        Low Interest
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
