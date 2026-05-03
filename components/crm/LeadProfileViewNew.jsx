@@ -169,6 +169,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                     onEditProfile={() => setEditDialogOpen(true)}
                     onEditAvatar={() => setAvatarPickerOpen(true)}
                     upcomingVisit={nextUpcomingVisit}
+                    onLeadFieldUpdate={() => refetchLead()}
                 />
             </div>
 

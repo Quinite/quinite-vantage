@@ -1,8 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Camera, Mail, Phone, Smartphone, Building, Building2, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'react-hot-toast'
@@ -83,15 +87,62 @@ function IntelPill({ label, cls }) {
     )
 }
 
-export default function LeadProfileSidebar({ lead, project, onEditProfile, onEditAvatar, upcomingVisit }) {
+export default function LeadProfileSidebar({ lead, project, onEditProfile, onEditAvatar, upcomingVisit, onLeadFieldUpdate }) {
     if (!lead) return null
+
+    const [scorePopoverOpen, setScorePopoverOpen] = useState(false)
+    const [scoreInput, setScoreInput] = useState('')
+    const [savingScore, setSavingScore] = useState(false)
+    const [savingInterest, setSavingInterest] = useState(false)
+
+    const saveScore = async () => {
+        const val = Number(scoreInput)
+        if (isNaN(val) || val < 0 || val > 100) {
+            toast.error('Score must be 0–100')
+            return
+        }
+        setSavingScore(true)
+        try {
+            const res = await fetch(`/api/leads/${lead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ score: val })
+            })
+            if (!res.ok) throw new Error()
+            toast.success('Score updated')
+            setScorePopoverOpen(false)
+            onLeadFieldUpdate?.({ score: val })
+        } catch {
+            toast.error('Failed to update score')
+        } finally {
+            setSavingScore(false)
+        }
+    }
+
+    const saveInterest = async (level) => {
+        setSavingInterest(true)
+        try {
+            const res = await fetch(`/api/leads/${lead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ interest_level: level })
+            })
+            if (!res.ok) throw new Error()
+            toast.success('Interest level updated')
+            onLeadFieldUpdate?.({ interest_level: level })
+        } catch {
+            toast.error('Failed to update interest level')
+        } finally {
+            setSavingInterest(false)
+        }
+    }
 
     const interest = interestConfig(lead.interest_level)
     const sentiment = sentimentConfig(lead.last_sentiment_score)
     const readiness = readinessConfig(lead.purchase_readiness)
     const lastCalled = relativeTime(lead.last_contacted_at)
 
-    const hasIntelligence = lead.score > 0 || interest || sentiment || readiness || lead.budget_range || lead.total_calls > 0
+    const hasIntelligence = true
 
     return (
         <div className="bg-card border rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
@@ -316,30 +367,83 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
             {hasIntelligence && (
                 <div className="mx-4 mb-4 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden">
                     {/* Row 1: Score / Interest / Sentiment */}
-                    {(lead.score > 0 || interest || sentiment) && (
-                        <div className="flex items-center justify-around gap-1 px-2 py-2.5 border-b border-slate-100">
-                            {lead.score > 0 && (
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ring-1 ${scoreColor(lead.score)}`}>
-                                        {lead.score}
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Score</span>
-                                </div>
-                            )}
-                            {interest && (
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <IntelPill label={interest.label} cls={interest.cls} />
-                                    <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Interest</span>
-                                </div>
-                            )}
-                            {sentiment && (
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <IntelPill label={sentiment.label} cls={sentiment.cls} />
-                                    <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Sentiment</span>
-                                </div>
-                            )}
+                    <div className="flex items-center justify-around gap-1 px-2 py-2.5 border-b border-slate-100">
+                        {/* Score — always shown, click to edit */}
+                        <div className="flex flex-col items-center gap-0.5">
+                            <Popover open={scorePopoverOpen} onOpenChange={(open) => {
+                                setScorePopoverOpen(open)
+                                if (open) setScoreInput(String(lead.score || ''))
+                            }}>
+                                <PopoverTrigger asChild>
+                                    <button
+                                        className={`text-[11px] font-black px-2 py-0.5 rounded-full ring-1 cursor-pointer hover:opacity-75 transition-opacity ${lead.score > 0 ? scoreColor(lead.score) : 'bg-slate-100 text-slate-400 ring-slate-200'}`}
+                                        title="Click to edit score"
+                                    >
+                                        {lead.score > 0 ? lead.score : '—'}
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-48 p-3" align="center">
+                                    <p className="text-xs font-semibold text-slate-600 mb-2">Edit Score (0–100)</p>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={scoreInput}
+                                            onChange={e => setScoreInput(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && saveScore()}
+                                            className="h-7 text-xs"
+                                            autoFocus
+                                        />
+                                        <Button size="sm" className="h-7 px-2 text-xs" onClick={saveScore} disabled={savingScore}>
+                                            {savingScore ? '…' : 'Save'}
+                                        </Button>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                            <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Score</span>
                         </div>
-                    )}
+
+                        {/* Interest — always shown, click to edit */}
+                        <div className="flex flex-col items-center gap-0.5">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1 whitespace-nowrap cursor-pointer hover:opacity-75 transition-opacity ${interest ? interest.cls : 'bg-slate-100 text-slate-400 ring-slate-200'}`}
+                                        title="Click to edit interest level"
+                                        disabled={savingInterest}
+                                    >
+                                        {interest ? interest.label : '— None'}
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="center" className="w-36">
+                                    {[
+                                        { value: 'high', label: '🔥 High', cls: 'text-rose-600' },
+                                        { value: 'medium', label: '⚡ Medium', cls: 'text-amber-600' },
+                                        { value: 'low', label: '💤 Low', cls: 'text-slate-500' },
+                                        { value: 'none', label: '— None', cls: 'text-slate-400' },
+                                    ].map(opt => (
+                                        <DropdownMenuItem
+                                            key={opt.value}
+                                            onClick={() => saveInterest(opt.value)}
+                                            className={`text-xs font-semibold cursor-pointer ${lead.interest_level === opt.value ? 'bg-slate-50' : ''} ${opt.cls}`}
+                                        >
+                                            {opt.label}
+                                            {lead.interest_level === opt.value && <span className="ml-auto text-slate-400">✓</span>}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Interest</span>
+                        </div>
+
+                        {sentiment && (
+                            <div className="flex flex-col items-center gap-0.5">
+                                <IntelPill label={sentiment.label} cls={sentiment.cls} />
+                                <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Sentiment</span>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Row 2: Readiness / AI Budget / Total Calls */}
                     {(readiness || lead.budget_range || lead.total_calls > 0) && (

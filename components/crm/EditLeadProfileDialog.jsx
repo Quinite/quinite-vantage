@@ -35,7 +35,9 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
         mailing_city: '',
         mailing_state: '',
         mailing_zip: '',
-        mailing_country: ''
+        mailing_country: '',
+        score: '',
+        interest_level: ''
     })
 
     // Fetch users once on open
@@ -62,7 +64,9 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                 mailing_city: lead.mailing_city || '',
                 mailing_state: lead.mailing_state || '',
                 mailing_zip: lead.mailing_zip || '',
-                mailing_country: lead.mailing_country || ''
+                mailing_country: lead.mailing_country || '',
+                score: lead.score ?? '',
+                interest_level: lead.interest_level || ''
             })
             // Fetch stages for the lead's current project
             fetchStages(lead.project_id || 'none', lead.stage_id)
@@ -134,7 +138,9 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                 mailing_city: formData.mailing_city,
                 mailing_state: formData.mailing_state,
                 mailing_zip: formData.mailing_zip,
-                mailing_country: formData.mailing_country
+                mailing_country: formData.mailing_country,
+                score: formData.score !== '' ? Number(formData.score) : undefined,
+                interest_level: formData.interest_level || undefined
             }
             const res = await fetch(`/api/leads/${lead.id}`, {
                 method: 'PUT',
@@ -220,22 +226,60 @@ export default function EditLeadProfileDialog({ open, onOpenChange, lead, onSave
                                 </div>
                             </div>
 
-                            {canAssign && (
+                            <div className="grid grid-cols-2 gap-4">
+                                {canAssign && (
+                                    <div className="space-y-2">
+                                        <Label>Assign To</Label>
+                                        <Select value={formData.assignedTo} onValueChange={val => setFormData(prev => ({ ...prev, assignedTo: val }))}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select user" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="unassigned">Unassigned</SelectItem>
+                                                {users.map(u => (
+                                                    <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
                                 <div className="space-y-2">
-                                    <Label>Assign To</Label>
-                                    <Select value={formData.assignedTo} onValueChange={val => setFormData(prev => ({ ...prev, assignedTo: val }))}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select user" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                                            {users.map(u => (
-                                                <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <Label htmlFor="score">Score (0–100)</Label>
+                                    <Input
+                                        id="score"
+                                        name="score"
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={formData.score}
+                                        onChange={handleChange}
+                                        placeholder="Auto-set by AI"
+                                    />
                                 </div>
-                            )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Interest Level</Label>
+                                <div className="flex gap-1.5 flex-wrap">
+                                    {['high', 'medium', 'low', 'none'].map(level => (
+                                        <button
+                                            key={level}
+                                            type="button"
+                                            onClick={() => setFormData(prev => ({ ...prev, interest_level: level }))}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-semibold ring-1 transition-all capitalize ${
+                                                formData.interest_level === level
+                                                    ? level === 'high' ? 'bg-rose-100 text-rose-700 ring-rose-300'
+                                                    : level === 'medium' ? 'bg-amber-100 text-amber-700 ring-amber-300'
+                                                    : level === 'low' ? 'bg-slate-200 text-slate-600 ring-slate-300'
+                                                    : 'bg-slate-100 text-slate-500 ring-slate-200'
+                                                    : 'bg-white text-slate-400 ring-slate-200 hover:ring-slate-300'
+                                            }`}
+                                        >
+                                            {level === 'high' ? '🔥 High' : level === 'medium' ? '⚡ Medium' : level === 'low' ? '💤 Low' : 'None'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
 
                         {/* Contact Details */}

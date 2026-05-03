@@ -170,18 +170,74 @@ export default function IdentitySection({
         </span>
       </div>
 
-      {/* Tower / Floor picker — only shown when adding from list view */}
-      {towerPicker !== null && (
+      {/* Row 1: Config + Transaction + Status */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            Type / Config <span className="text-rose-400">*</span>
+          </Label>
+          <ConfigPicker
+            unitConfigs={unitConfigs}
+            value={formData.config_id || ''}
+            onValueChange={onConfigChange}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Transaction</Label>
+          <div className="flex bg-slate-100 p-0.5 rounded-xl h-9 gap-0.5">
+            {['sell', 'rent'].map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setFormData(p => ({ ...p, transaction_type: t }))}
+                className={cn(
+                  'flex-1 rounded-[10px] text-xs font-bold uppercase transition-all',
+                  formData.transaction_type === t
+                    ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-100'
+                    : 'text-slate-400 hover:text-slate-600'
+                )}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1.5 mt-1.5">
+          <div className="flex items-center gap-1.5">
+            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Status</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 text-slate-400 hover:text-blue-500 transition-colors cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">Managed via Deals tab</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div className={cn(
+            'h-9 rounded-xl border font-bold text-sm flex items-center px-3',
+            getStatusConfig(formData.status).bg,
+            getStatusConfig(formData.status).text,
+            'border-current/20 opacity-80'
+          )}>
+            <div className="flex items-center capitalize">
+              {(formData.status || 'available').replace(/_/g, ' ')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Placement — only when adding from list view AND not land/villa */}
+      {towerPicker !== null && !isLandOrVilla && (
         <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-3">
           <div className="flex items-center gap-2">
             <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Placement</span>
-            {isLandOrVilla && (
-              <span className="ml-auto text-[10px] font-semibold text-slate-400 italic">Not required for {selectedConfig?.property_type || 'land'}</span>
-            )}
           </div>
 
-          {isLandOrVilla ? null : towerPicker.towersLoading ? (
+          {towerPicker.towersLoading ? (
             <p className="text-xs text-slate-400 py-1">Loading towers…</p>
           ) : towerPicker.towers.length === 0 ? (
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-200">
@@ -244,7 +300,7 @@ export default function IdentitySection({
         </div>
       )}
 
-      {/* Row 1: Unit number + Config + Transaction */}
+      {/* Row 2: Unit number + Facing + Features */}
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1.5">
           <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
@@ -260,105 +316,60 @@ export default function IdentitySection({
           <p className="text-[10px] text-slate-400">🔁 Auto-gen · editable</p>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
-            Type / Config <span className="text-rose-400">*</span>
-          </Label>
-          <ConfigPicker
-            unitConfigs={unitConfigs}
-            value={formData.config_id || ''}
-            onValueChange={onConfigChange}
-          />
+          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Facing</Label>
+          <Select
+            value={formData.facing || 'North'}
+            onValueChange={(v) => setFormData(p => ({ ...p, facing: v }))}
+          >
+            <SelectTrigger className="h-9 bg-slate-50 border-slate-200 rounded-xl font-semibold text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              {FACING_OPTIONS.map((opt) => (
+                <SelectItem key={opt} value={opt} className="font-semibold text-xs cursor-pointer">{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Transaction</Label>
-          <div className="flex bg-slate-100 p-0.5 rounded-xl h-9 gap-0.5">
-            {['sell', 'rent'].map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setFormData(p => ({ ...p, transaction_type: t }))}
-                className={cn(
-                  'flex-1 rounded-[10px] text-xs font-bold uppercase transition-all',
-                  formData.transaction_type === t
-                    ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-100'
-                    : 'text-slate-400 hover:text-slate-600'
-                )}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 2: (Status + Facing) in one col, Features in other */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Status</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="w-3.5 h-3.5 text-slate-400 hover:text-blue-500 transition-colors cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p className="text-xs">Managed via Deals tab</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div className={cn(
-              'h-9 rounded-xl border font-bold text-sm flex items-center px-3',
-              getStatusConfig(formData.status).bg,
-              getStatusConfig(formData.status).text,
-              'border-current/20 opacity-80'
-            )}>
-              <div className="flex items-center capitalize">
-                {(formData.status || 'available').replace(/_/g, ' ')}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Facing Direction</Label>
-            <Select
-              value={formData.facing || 'North'}
-              onValueChange={(v) => setFormData(p => ({ ...p, facing: v }))}
+          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Features</Label>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFormData(p => ({ ...p, is_corner: !p.is_corner }))}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border-[1.5px] text-left transition-all',
+                formData.is_corner
+                  ? 'border-amber-400 bg-amber-50'
+                  : 'border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              )}
             >
-              <SelectTrigger className="h-9 bg-slate-50 border-slate-200 rounded-xl font-semibold text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                {FACING_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt} className="font-semibold text-xs cursor-pointer">{opt}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Unit Features</Label>
-          <div className="space-y-1.5">
-            <FeatureChip
-              icon="📐"
-              label="Corner Unit"
-              descOn="2-sided frontage · premium"
-              descOff="Tap to mark as corner"
-              value={formData.is_corner}
-              onChange={(v) => setFormData(p => ({ ...p, is_corner: v }))}
-              colorOn="amber"
-            />
-            <FeatureChip
-              icon="🧭"
-              label="Vastu Compliant"
-              descOn="Directional alignment ✓"
-              descOff="Tap to mark as aligned"
-              value={formData.is_vastu_compliant}
-              onChange={(v) => setFormData(p => ({ ...p, is_vastu_compliant: v }))}
-              colorOn="green"
-            />
+              <span className="text-sm">📐</span>
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-[11px] font-bold leading-tight', formData.is_corner ? 'text-slate-900' : 'text-slate-500')}>Corner</p>
+              </div>
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0', formData.is_corner ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400')}>
+                {formData.is_corner ? 'Yes ✓' : 'No'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormData(p => ({ ...p, is_vastu_compliant: !p.is_vastu_compliant }))}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border-[1.5px] text-left transition-all',
+                formData.is_vastu_compliant
+                  ? 'border-green-400 bg-green-50'
+                  : 'border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              )}
+            >
+              <span className="text-sm">🧭</span>
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-[11px] font-bold leading-tight', formData.is_vastu_compliant ? 'text-slate-900' : 'text-slate-500')}>Vastu</p>
+              </div>
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0', formData.is_vastu_compliant ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400')}>
+                {formData.is_vastu_compliant ? 'Yes ✓' : 'No'}
+              </span>
+            </button>
           </div>
         </div>
       </div>
