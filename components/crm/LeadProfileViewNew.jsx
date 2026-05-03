@@ -23,11 +23,13 @@ import { useLead, useLeadTasks, useLeadInteractions } from '@/hooks/useLeads'
 import { useOrgSettings } from '@/hooks/usePipelines'
 import { useSiteVisits } from '@/hooks/useSiteVisits'
 import { usePermission } from '@/contexts/PermissionContext'
+import { useDynamicTitle } from '@/hooks/useDynamicTitle'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LeadProfileView({ leadId, onClose, isModal = false }) {
     const { data: lead, isLoading: leadLoading, refetch: refetchLead } = useLead(leadId)
+    useDynamicTitle(lead?.name ? `Lead: ${lead.name}` : 'Lead Profile')
     const supabase = createClient()
     const { data: organization } = useOrgSettings()
     const canViewDeals = usePermission('view_deals')

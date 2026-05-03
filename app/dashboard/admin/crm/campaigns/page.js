@@ -73,6 +73,7 @@ import PermissionTooltip from '@/components/permissions/PermissionTooltip'
 import { toast } from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCampaigns } from '@/hooks/useCampaigns'
+import { useDynamicTitle } from '@/hooks/useDynamicTitle'
 
 // ─── Phone validation (client-side, mirrors server) ──────────────────────────
 function normalizePhone(raw) {
@@ -1010,6 +1011,7 @@ function DeleteConfirmDialog({ open, campaign, onConfirm, onCancel, deleting }) 
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CampaignsPage() {
+  useDynamicTitle('Campaigns')
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()

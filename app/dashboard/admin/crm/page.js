@@ -10,6 +10,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { PermissionGate } from '@/components/permissions/PermissionGate'
 import LeadSourceDialog from '@/components/crm/LeadSourceDialog'
+import { useDynamicTitle } from '@/hooks/useDynamicTitle'
 import {
     Select,
     SelectContent,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/select"
 
 function CrmPipelineContent() {
+    useDynamicTitle('CRM Pipeline')
     const searchParams = useSearchParams()
     const router = useRouter()
     const projectId = searchParams.get('project_id')

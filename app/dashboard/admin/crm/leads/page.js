@@ -25,6 +25,7 @@ import {
 import { useProjects } from '@/hooks/useProjects'
 import { useQuery } from '@tanstack/react-query'
 import { useUsers } from '@/hooks/usePipelines'
+import { useDynamicTitle } from '@/hooks/useDynamicTitle'
 
 // Components
 import { LeadTable } from '@/components/crm/leads/LeadTable'
@@ -39,6 +40,7 @@ const LeadSourceDialog = dynamic(() => import('@/components/crm/LeadSourceDialog
 // PipelineBoard import removed as it is no longer used here
 
 export default function LeadsPage() {
+  useDynamicTitle('Leads')
   // State
   const [searchQuery, setSearchQuery] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
