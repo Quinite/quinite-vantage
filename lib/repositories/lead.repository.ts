@@ -70,9 +70,15 @@ export class LeadRepository extends BaseRepository<Lead> {
         if (filters.projectId) {
             query = query.eq('project_id', filters.projectId)
         }
+        if (filters.projectIds && filters.projectIds.length > 0) {
+            query = query.in('project_id', filters.projectIds)
+        }
 
         if (filters.stageId && filters.stageId !== 'all') {
             query = query.eq('stage_id', filters.stageId)
+        }
+        if (filters.stageIds && filters.stageIds.length > 0) {
+            query = query.in('stage_id', filters.stageIds)
         }
 
         if (filters.search) {
@@ -83,6 +89,25 @@ export class LeadRepository extends BaseRepository<Lead> {
 
         if (filters.assignedTo) {
             query = query.eq('assigned_to', filters.assignedTo)
+        }
+        if (filters.assignedToIds && filters.assignedToIds.length > 0) {
+            query = query.in('assigned_to', filters.assignedToIds)
+        }
+
+        // Additional Filters
+        if (filters.interestLevels && filters.interestLevels.length > 0) {
+            query = query.in('interest_level', filters.interestLevels)
+        }
+
+        if (filters.sources && filters.sources.length > 0) {
+            query = query.in('source', filters.sources)
+        }
+
+        if (filters.scoreMin !== undefined && filters.scoreMin !== null) {
+            query = query.gte('score', filters.scoreMin)
+        }
+        if (filters.scoreMax !== undefined && filters.scoreMax !== null) {
+            query = query.lte('score', filters.scoreMax)
         }
 
         // Campaign filter: only leads enrolled in this campaign (IDs pre-fetched by service layer)

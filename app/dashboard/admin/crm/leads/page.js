@@ -43,9 +43,12 @@ export default function LeadsPage() {
   useDynamicTitle('Leads')
   // State
   const [searchQuery, setSearchQuery] = useState('')
-  const [stageFilter, setStageFilter] = useState('all')
-  const [projectId, setProjectId] = useState(null)
-  const [assignedTo, setAssignedTo] = useState(null)
+  const [stageIds, setStageIds] = useState([])
+  const [projectIds, setProjectIds] = useState([])
+  const [assignedToIds, setAssignedToIds] = useState([])
+  const [interestLevels, setInterestLevels] = useState([])
+  const [sources, setSources] = useState([])
+  const [scoreRange, setScoreRange] = useState([0, 100])
   const [selectedLeads, setSelectedLeads] = useState(new Set())
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
@@ -88,9 +91,13 @@ export default function LeadsPage() {
   // Data Fetching
   const { data: leadsResponse, isLoading: leadsLoading, isPlaceholderData, refetch: refetchLeads } = useLeads({
     search: searchQuery,
-    stageId: stageFilter !== 'all' ? stageFilter : undefined,
-    projectId: projectId,
-    assignedTo: assignedTo,
+    stageIds: stageIds,
+    projectIds: projectIds,
+    assignedToIds: assignedToIds,
+    interestLevels: interestLevels,
+    sources: sources,
+    scoreMin: scoreRange[0],
+    scoreMax: scoreRange[1],
     page: page,
     limit: limit,
     sortBy: sortBy,
@@ -332,12 +339,18 @@ export default function LeadsPage() {
       <LeadFilters
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        stageFilter={stageFilter}
-        setStageFilter={setStageFilter}
-        projectId={projectId}
-        setProjectId={setProjectId}
-        assignedTo={assignedTo}
-        setAssignedTo={setAssignedTo}
+        stageIds={stageIds}
+        setStageIds={setStageIds}
+        projectIds={projectIds}
+        setProjectIds={setProjectIds}
+        assignedToIds={assignedToIds}
+        setAssignedToIds={setAssignedToIds}
+        interestLevels={interestLevels}
+        setInterestLevels={setInterestLevels}
+        sources={sources}
+        setSources={setSources}
+        scoreRange={scoreRange}
+        setScoreRange={setScoreRange}
         projects={projects || []}
         stages={allStages}
         users={users}
@@ -411,7 +424,7 @@ export default function LeadsPage() {
       <LeadSourceDialog
         open={isSourceDialogOpen}
         onOpenChange={setIsSourceDialogOpen}
-        projectId={projectId}
+        projectId={projectIds[0]} // Use first selected project or none
         projects={projects || []}
         users={users}
         onSuccess={refetchLeads}

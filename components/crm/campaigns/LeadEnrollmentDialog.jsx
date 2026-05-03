@@ -166,9 +166,9 @@ export function LeadEnrollmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden flex flex-col bg-white">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border shrink-0 bg-white">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-500/10 rounded-xl">
               <Users className="w-5 h-5 text-green-600" />
@@ -180,13 +180,10 @@ export function LeadEnrollmentDialog({
               </DialogDescription>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 rounded-full">
-            <X className="w-4 h-4 text-muted-foreground" />
-          </Button>
         </div>
 
         {/* Body — two columns */}
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
 
           {/* Left — filters */}
           <div className="flex flex-col overflow-y-auto p-5 space-y-4">
@@ -213,7 +210,7 @@ export function LeadEnrollmentDialog({
           {/* Right — lead list */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* List header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/30 shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-white shrink-0">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
                 <span className="text-xs font-bold text-foreground">
@@ -270,7 +267,7 @@ export function LeadEnrollmentDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-muted/20 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-white shrink-0">
           <div className="text-xs text-muted-foreground">
             {previewCount != null && !previewLoading && (
               <span><span className="font-bold text-foreground">{previewCount}</span> leads will be enrolled when campaign starts</span>

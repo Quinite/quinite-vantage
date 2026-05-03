@@ -2,12 +2,19 @@ import { LeadRepository, Lead } from '@/lib/repositories/lead.repository'
 
 export interface FilterOptions {
     projectId?: string
+    projectIds?: string[]
     stageId?: string
+    stageIds?: string[]
     search?: string
     status?: string
     page?: number | string
     limit?: number | string
     assignedTo?: string
+    assignedToIds?: string[]
+    interestLevels?: string[]
+    sources?: string[]
+    scoreMin?: number
+    scoreMax?: number
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
     viewMode?: 'active' | 'archived'

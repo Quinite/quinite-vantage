@@ -57,22 +57,41 @@ export function LeadTable({
     viewMode = 'active'
 }) {
 
+    const [lastSelectedIndex, setLastSelectedIndex] = React.useState(null)
+
     const toggleSelectAll = () => {
-        if (selectedLeads.size === leads.length) {
+        if (selectedLeads.size === leads.length && leads.length > 0) {
             setSelectedLeads(new Set())
         } else {
             setSelectedLeads(new Set(leads.map(l => l.id)))
         }
+        setLastSelectedIndex(null)
     }
 
-    const toggleSelect = (id) => {
+    const toggleSelect = (id, index, event) => {
         const newSelected = new Set(selectedLeads)
-        if (newSelected.has(id)) {
-            newSelected.delete(id)
+        
+        if (event?.shiftKey && lastSelectedIndex !== null) {
+            const start = Math.min(lastSelectedIndex, index)
+            const end = Math.max(lastSelectedIndex, index)
+            const rangeIds = leads.slice(start, end + 1).map(l => l.id)
+            
+            // If the start item was selected, select the range. Otherwise deselect.
+            const shouldSelect = selectedLeads.has(leads[lastSelectedIndex].id)
+            rangeIds.forEach(rangeId => {
+                if (shouldSelect) newSelected.add(rangeId)
+                else newSelected.delete(rangeId)
+            })
         } else {
-            newSelected.add(id)
+            if (newSelected.has(id)) {
+                newSelected.delete(id)
+            } else {
+                newSelected.add(id)
+            }
         }
+        
         setSelectedLeads(newSelected)
+        setLastSelectedIndex(index)
     }
 
     if (loading) {
@@ -126,10 +145,12 @@ export function LeadTable({
                                         </div>
                                     </div>
                                 </div>
-                                <Checkbox
-                                    checked={selectedLeads.has(lead.id)}
-                                    onCheckedChange={() => toggleSelect(lead.id)}
-                                />
+                                <div onClick={(e) => toggleSelect(lead.id, leads.indexOf(lead), e)}>
+                                    <Checkbox
+                                        checked={selectedLeads.has(lead.id)}
+                                        onCheckedChange={() => {}}
+                                    />
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50/50 p-3 rounded-lg border border-slate-100">
@@ -358,10 +379,12 @@ export function LeadTable({
                             leads.map((lead) => (
                                 <TableRow key={lead.id} className="group hover:bg-indigo-50/30 transition-colors duration-150 border-b border-slate-100 last:border-0">
                                     <TableCell className="pl-4">
-                                        <Checkbox
-                                            checked={selectedLeads.has(lead.id)}
-                                            onCheckedChange={() => toggleSelect(lead.id)}
-                                        />
+                                        <div onClick={(e) => toggleSelect(lead.id, leads.indexOf(lead), e)}>
+                                            <Checkbox
+                                                checked={selectedLeads.has(lead.id)}
+                                                onCheckedChange={() => {}}
+                                            />
+                                        </div>
                                     </TableCell>
                                     <TableCell className="py-3">
                                         <Link href={`/dashboard/admin/crm/leads/${lead.id}`} className="flex items-center gap-3 group/name">
@@ -582,65 +605,72 @@ export function LeadTable({
             </div>
             {/* Bulk Action Bar */}
             {selectedLeads.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-background border border-border shadow-lg rounded-full px-6 py-3 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-4 duration-200">
-                    <span className="font-medium text-sm">
-                        {selectedLeads.size} selected
-                    </span>
-                    <div className="h-4 w-px bg-border" />
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 z-50 animate-in slide-in-from-bottom-8 duration-300 border border-slate-800">
+                    <div className="flex flex-col">
+                        <span className="font-bold text-sm">
+                            {selectedLeads.size} leads selected
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">Perform bulk action</span>
+                    </div>
+                    
+                    <div className="h-8 w-px bg-slate-700" />
 
-                    {/* Bulk Assign */}
-                    {onBulkAssign && (
-                        <Select onValueChange={onBulkAssign}>
-                            <SelectTrigger className="h-8 w-[140px] border-0 bg-secondary/50 hover:bg-secondary focus:ring-0">
-                                <SelectValue placeholder="Assign to..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {users && users.map(user => (
-                                    <SelectItem key={user.id} value={user.id}>
-                                        {user.full_name || user.email}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {/* Bulk Assign */}
+                        {onBulkAssign && (
+                            <Select onValueChange={onBulkAssign}>
+                                <SelectTrigger className="h-9 w-[160px] border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-xl focus:ring-0">
+                                    <Users className="w-3.5 h-3.5 mr-2 text-indigo-400" />
+                                    <SelectValue placeholder="Assign To..." />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                                    {users && users.map(user => (
+                                        <SelectItem key={user.id} value={user.id} className="focus:bg-slate-800 focus:text-white">
+                                            {user.full_name || user.email}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
 
-                    {/* Bulk Archive */}
-                    {onBulkArchive && viewMode === 'active' && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-full px-4 text-amber-600 border-amber-200 hover:bg-amber-50"
-                            onClick={onBulkArchive}
-                        >
-                            <Archive className="w-4 h-4 mr-2" />
-                            Archive
-                        </Button>
-                    )}
+                        {/* Bulk Archive */}
+                        {onBulkArchive && viewMode === 'active' && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9 rounded-xl px-4 bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all font-bold text-xs"
+                                onClick={onBulkArchive}
+                            >
+                                <Archive className="w-3.5 h-3.5 mr-2" />
+                                Archive
+                            </Button>
+                        )}
 
-                    {/* Bulk Restore */}
-                    {onBulkRestore && viewMode === 'archived' && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-full px-4 text-blue-600 border-blue-200 hover:bg-blue-50"
-                            onClick={onBulkRestore}
-                        >
-                            <RefreshCcw className="w-4 h-4 mr-2" />
-                            Restore
-                        </Button>
-                    )}
+                        {/* Bulk Restore */}
+                        {onBulkRestore && viewMode === 'archived' && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9 rounded-xl px-4 bg-indigo-500/10 text-indigo-500 border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all font-bold text-xs"
+                                onClick={onBulkRestore}
+                            >
+                                <RefreshCcw className="w-3.5 h-3.5 mr-2" />
+                                Restore
+                            </Button>
+                        )}
+                    </div>
 
-
+                    <div className="h-8 w-px bg-slate-700" />
 
                     {/* Clear Selection */}
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 rounded-full ml-2 hover:bg-muted"
+                        className="h-8 w-8 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
                         onClick={() => setSelectedLeads(new Set())}
                     >
                         <span className="sr-only">Dismiss</span>
-                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 opacity-50"><path d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.50009L3.21846 10.9685C2.99391 11.1931 2.99391 11.5571 3.21846 11.7816C3.44301 12.0062 3.80708 12.0062 4.03164 11.7816L7.50005 8.31327L10.9685 11.7816C11.193 12.0062 11.5571 12.0062 11.7816 11.7816C12.0062 11.5571 12.0062 11.1931 11.7816 10.9685L8.31322 7.50009L11.7816 4.03157Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
+                        <X className="w-4 h-4" />
                     </Button>
                 </div>
             )}
