@@ -29,12 +29,23 @@ function ScoreBadge({ score }) {
   )
 }
 
-function LeadRow({ lead }) {
+function LeadRow({ lead, isSelected, onToggle }) {
   const ineligible = !!lead.ineligible_reason
   const interest = lead.interest_level ? INTEREST_BADGE[lead.interest_level.toLowerCase()] : null
 
   return (
     <div className={`flex items-center gap-3 px-4 py-2.5 transition-colors group border-b border-border/40 last:border-0 ${ineligible ? 'opacity-45 bg-muted/20' : 'hover:bg-muted/30'}`}>
+      {/* Selection Checkbox */}
+      {!ineligible && (
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggle(lead.id)}
+          className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
+        />
+      )}
+      {ineligible && <div className="w-3.5 h-3.5" />}
+
       {/* Avatar */}
       <div className="w-8 h-8 rounded-full shrink-0 overflow-hidden border border-border group-hover:scale-105 transition-transform">
         <img
@@ -115,6 +126,7 @@ export function LeadEnrollmentDialog({
   const [previewBreakdown, setPreviewBreakdown] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewLeads, setPreviewLeads] = useState([])
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [leadSearch, setLeadSearch] = useState('')
   const debounceRef = useRef(null)
 
@@ -151,6 +163,9 @@ export function LeadEnrollmentDialog({
           setPreviewCount(data.net)
           setPreviewBreakdown({ included: data.included, excluded: data.excluded })
           setPreviewLeads(data.leads || [])
+          // Auto-select all eligible leads when list changes
+          const eligible = (data.leads || []).filter(l => !l.ineligible_reason).map(l => l.id)
+          setSelectedIds(new Set(eligible))
         }
       } catch (_) {} finally { setPreviewLoading(false) }
     }, 400)
@@ -163,6 +178,26 @@ export function LeadEnrollmentDialog({
         l.phone?.includes(leadSearch)
       )
     : previewLeads
+
+  const toggleLead = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    const eligible = previewLeads.filter(l => !l.ineligible_reason)
+    if (selectedIds.size === eligible.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(eligible.map(l => l.id)))
+    }
+  }
+
+  const selectedLeadsList = previewLeads.filter(l => selectedIds.has(l.id))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -216,9 +251,11 @@ export function LeadEnrollmentDialog({
                 <span className="text-xs font-bold text-foreground">
                   {previewLoading
                     ? 'Updating…'
-                    : previewCount != null
-                      ? `${previewCount} eligible · ${previewLeads.length} total`
-                      : 'Lead preview'}
+                    : selectedIds.size > 0
+                      ? `${selectedIds.size} selected`
+                      : previewCount != null
+                        ? `${previewCount} eligible`
+                        : 'Lead preview'}
                 </span>
                 {previewLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
               </div>
@@ -237,7 +274,13 @@ export function LeadEnrollmentDialog({
 
             {/* Search */}
             <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 shrink-0">
-              <Search className="w-3.5 h-3.5 text-muted-foreground" />
+              <input
+                type="checkbox"
+                checked={previewLeads.length > 0 && selectedIds.size === previewLeads.filter(l => !l.ineligible_reason).length}
+                onChange={toggleAll}
+                className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
+              />
+              <Search className="w-3.5 h-3.5 text-muted-foreground ml-1" />
               <Input
                 placeholder="Search by name or phone…"
                 className="h-6 text-xs border-0 bg-transparent p-0 focus-visible:ring-0 shadow-none"
@@ -260,7 +303,14 @@ export function LeadEnrollmentDialog({
                   </p>
                 </div>
               ) : (
-                filteredLeads.map(lead => <LeadRow key={lead.id} lead={lead} />)
+                filteredLeads.map(lead => (
+                  <LeadRow
+                    key={lead.id}
+                    lead={lead}
+                    isSelected={selectedIds.has(lead.id)}
+                    onToggle={toggleLead}
+                  />
+                ))
               )}
             </div>
           </div>
@@ -278,7 +328,7 @@ export function LeadEnrollmentDialog({
             <Button
               size="sm"
               disabled={previewLoading}
-              onClick={() => { onConfirm(previewCount, previewBreakdown); onOpenChange(false) }}
+              onClick={() => { onConfirm(selectedIds.size, previewBreakdown, selectedLeadsList); onOpenChange(false) }}
               className="gap-1.5"
             >
               Confirm Enrollment

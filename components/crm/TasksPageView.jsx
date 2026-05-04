@@ -249,8 +249,21 @@ function LeadHoverCard({ lead, leadId, children }) {
     )
 }
 
-function UnitBadge({ unit, project }) {
-    return <TaskUnitBadge unit={unit} project={project} />
+function LeadBadge({ leadId, name }) {
+    return (
+        <Link
+            href={`/dashboard/admin/crm/leads/${leadId}`}
+            onClick={e => e.stopPropagation()}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-indigo-100 bg-indigo-50/50 text-[9px] font-bold uppercase tracking-tight text-indigo-600 hover:bg-indigo-100 transition-colors"
+        >
+            <User className="w-2.5 h-2.5 shrink-0" />
+            <span className="truncate max-w-[100px]">{name}</span>
+        </Link>
+    )
+}
+
+function UnitBadge({ unit, project, compact }) {
+    return <TaskUnitBadge unit={unit} project={project} compact={compact} />
 }
 
 // ─── Task Row ─────────────────────────────────────────────────────────────────

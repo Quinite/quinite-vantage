@@ -553,8 +553,8 @@ export default function ProjectsPage() {
                     setViewingProject(p)
                     setViewOpen(true)
                   }}
-                  onStartCampaign={(p) => {
-                    router.push(`/dashboard/admin/crm/campaigns?project_id=${p.id}`)
+                  onInventory={(p) => {
+                    router.push(`/dashboard/admin/inventory/projects/${p.id}`)
                   }}
                   onToggleVisibility={handleToggleVisibility}
                   deleting={deletingId === project.id}
@@ -601,8 +601,8 @@ export default function ProjectsPage() {
                   setViewingProject(p)
                   setViewOpen(true)
                 }}
-                onStartCampaign={(p) => {
-                  router.push(`/dashboard/admin/crm/campaigns?project_id=${p.id}`)
+                onInventory={(p) => {
+                  router.push(`/dashboard/admin/inventory/projects/${p.id}`)
                 }}
                 onToggleVisibility={handleToggleVisibility}
                 deletingId={deletingId}

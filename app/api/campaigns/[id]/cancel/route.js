@@ -24,24 +24,23 @@ export async function POST(request, { params }) {
         const { data: campaign } = await admin.from('campaigns').select('id, status').eq('id', campaignId).eq('organization_id', profile.organization_id).single()
         if (!campaign) return corsJSON({ error: 'Campaign not found' }, { status: 404 })
 
-        const CANCELLABLE = ['running', 'paused', 'scheduled', 'draft']
+        const CANCELLABLE = ['running', 'paused']
         if (!CANCELLABLE.includes(campaign.status)) {
             return corsJSON({ error: 'CAMPAIGN_NOT_CANCELLABLE', message: `Campaign is ${campaign.status}` }, { status: 400 })
         }
 
         const now = new Date().toISOString()
 
-        // Clean up queued items in parallel
-        await Promise.all([
-            admin.from('call_queue')
-                .update({ status: 'failed', last_error: 'campaign_cancelled', updated_at: now })
-                .eq('campaign_id', campaignId)
-                .eq('status', 'queued'),
-            admin.from('campaign_leads')
-                .update({ status: 'skipped', skip_reason: 'campaign_cancelled', updated_at: now })
-                .eq('campaign_id', campaignId)
-                .in('status', ['enrolled', 'queued'])
-        ])
+        // Delete ALL call_queue entries for this campaign
+        await admin.from('call_queue')
+            .delete()
+            .eq('campaign_id', campaignId)
+
+        // Mark enrolled/queued campaign leads as skipped
+        await admin.from('campaign_leads')
+            .update({ status: 'skipped', skip_reason: 'campaign_cancelled', updated_at: now })
+            .eq('campaign_id', campaignId)
+            .in('status', ['enrolled', 'queued'])
 
         await admin.from('campaigns')
             .update({ status: 'cancelled', updated_at: now })

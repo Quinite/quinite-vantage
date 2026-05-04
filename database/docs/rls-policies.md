@@ -172,5 +172,4 @@ FOR ALL TO service_role USING (true);
 
 | Table | Reason |
 |-------|--------|
-| `websocket_servers` | System table, no sensitive data |
 | `impersonation_sessions` | Admin-only, managed via application logic |

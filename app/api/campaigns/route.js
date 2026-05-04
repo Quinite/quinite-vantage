@@ -30,7 +30,8 @@ export const GET = withPermission('view_campaigns', async (request, context) => 
 
     const { campaigns, metadata } = await CampaignService.getCampaigns(profile.organization_id, filters)
 
-    return corsJSON({ campaigns: campaigns || [], metadata })
+    const stripped = (campaigns || []).map(({ project_id, project_ids, project, campaign_projects, ...rest }) => rest)
+    return corsJSON({ campaigns: stripped, metadata })
   } catch (e) {
     console.error('campaigns GET error:', e)
     return corsJSON({ error: e.message }, { status: 500 })
@@ -148,7 +149,8 @@ export const POST = withPermission('create_campaigns', async (request, context) 
       console.warn('Audit log failed:', e.message)
     }
 
-    return corsJSON({ campaign, enrollment: enrollmentSummary })
+    const canonical = await CampaignService.getCampaignById(campaign.id, profile.organization_id)
+    return corsJSON({ campaign: canonical, enrollment: enrollmentSummary })
   } catch (e) {
     console.error('campaigns POST error:', e)
     return corsJSON({ error: e.message }, { status: 500 })

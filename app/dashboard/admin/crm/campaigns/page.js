@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo } from 'react'
 import { LeadEnrollmentDialog } from '@/components/crm/campaigns/LeadEnrollmentDialog'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 import { useSubscription } from '@/contexts/SubscriptionContext'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -38,7 +39,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import {
   Loader2,
   Megaphone,
-  Calendar,
+  Calendar as CalendarIcon,
   Clock,
   Edit,
   Trash2,
@@ -66,14 +67,19 @@ import {
   Info,
   X,
   Search,
-  ArrowRight
+  ArrowRight,
+  Archive
 } from 'lucide-react'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { format, parse, startOfDay } from 'date-fns'
 import { usePermission } from '@/contexts/PermissionContext'
 import PermissionTooltip from '@/components/permissions/PermissionTooltip'
 import { toast } from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCampaigns } from '@/hooks/useCampaigns'
 import { useDynamicTitle } from '@/hooks/useDynamicTitle'
+import { CampaignCard as NewCampaignCard } from '@/components/crm/campaigns/CampaignCard'
 
 // ─── Phone validation (client-side, mirrors server) ──────────────────────────
 function normalizePhone(raw) {
@@ -104,7 +110,6 @@ function isEligibleLead(lead) {
 // ─── Status Badge ───────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const statusConfig = {
-    draft:      { color: 'bg-zinc-500/10 text-zinc-600 border-zinc-200',     icon: <Clock className="w-3 h-3" /> },
     scheduled:  { color: 'bg-blue-500/10 text-blue-600 border-blue-200',     icon: <Clock className="w-3 h-3" /> },
     active:     { color: 'bg-green-500/10 text-green-600 border-green-200',  icon: <PlayCircle className="w-3 h-3" /> },
     running:    { color: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', icon: <Loader2 className="w-3 h-3 animate-spin" /> },
@@ -251,7 +256,7 @@ function CampaignCard({
         <div className="pt-3 border-t border-border/50 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground flex items-center gap-1">
-              <Calendar className="w-3 h-3 opacity-70" /> Duration
+              <CalendarIcon className="w-3 h-3 opacity-70" /> Duration
             </span>
             <span className="text-foreground font-medium text-right">
               {campaign.start_date ? new Date(campaign.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
@@ -380,7 +385,7 @@ function CampaignCard({
 }
 
 // ─── Create Campaign Dialog ────────────────────────────────────────────────
-function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, onCreate }) {
+function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, onCreate, onUpdate, editingCampaign }) {
   const today = getTodayString()
 
   const [selectedProjectIds, setSelectedProjectIds] = useState([])
@@ -394,9 +399,6 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
   const [creditCap, setCreditCap] = useState('')
   const [aiScript, setAiScript] = useState('')
   const [callSettings, setCallSettings] = useState({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
-  const [enrollMode, setEnrollMode] = useState('filter') // 'filter' | 'manual'
-  const [selectedLeads, setSelectedLeads] = useState(new Set())
-  const [leadSearch, setLeadSearch] = useState('')
   const [projectLeads, setProjectLeads] = useState([])
   const [inclusionFilters, setInclusionFilters] = useState([])
   const [exclusionFilters, setExclusionFilters] = useState([])
@@ -404,10 +406,13 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
   const [exclusionLogic, setExclusionLogic] = useState('AND')
   const [enrollDialogOpen, setEnrollDialogOpen] = useState(false)
   const [confirmedEnrollCount, setConfirmedEnrollCount] = useState(null)
+  const [previewLeads, setPreviewLeads] = useState([])
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [loadingLeads, setLoadingLeads] = useState(false)
   const [creating, setCreating] = useState(false)
   const [touched, setTouched] = useState(false)
-  const [creditBalance, setCreditBalance] = useState(null) // total available minutes
+  const [hasConfirmedEnrollment, setHasConfirmedEnrollment] = useState(false)
+  const [creditBalance, setCreditBalance] = useState(null)
 
   useEffect(() => {
     if (!open) return
@@ -416,6 +421,34 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
       .then(d => setCreditBalance(d.credits?.balance ?? null))
       .catch(() => setCreditBalance(null))
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    if (editingCampaign) {
+      setSelectedProjectIds(editingCampaign.projects?.map(p => p.id) || [editingCampaign.project_id].filter(Boolean))
+      setName(editingCampaign.name || '')
+      setDescription(editingCampaign.description || '')
+      setStartDate(editingCampaign.start_date || '')
+      setEndDate(editingCampaign.end_date || '')
+      setTimeStart(editingCampaign.time_start || '09:00')
+      setTimeEnd(editingCampaign.time_end || '21:00')
+      setDndCompliance(editingCampaign.dnd_compliance !== false)
+      setCreditCap(editingCampaign.credit_cap?.toString() || '')
+      setCallSettings(editingCampaign.call_settings || { language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
+    } else {
+      setSelectedProjectIds([])
+      setName('')
+      setDescription('')
+      setStartDate('')
+      setEndDate('')
+      setTimeStart('09:00')
+      setTimeEnd('21:00')
+      setDndCompliance(true)
+      setCreditCap('')
+      setAiScript('')
+      setCallSettings({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
+    }
+  }, [open, editingCampaign])
 
   function toggleProject(id) {
     setSelectedProjectIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -437,12 +470,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
       .finally(() => setLoadingLeads(false))
   }, [selectedProjectIds])
 
-  const eligibleLeads = useMemo(() => projectLeads.filter(isEligibleLead), [projectLeads])
-  const filteredLeads = useMemo(() => {
-    if (!leadSearch.trim()) return projectLeads
-    const q = leadSearch.toLowerCase()
-    return projectLeads.filter(l => l.name?.toLowerCase().includes(q) || l.phone?.includes(q))
-  }, [projectLeads, leadSearch])
+  const filteredLeads = useMemo(() => projectLeads, [projectLeads])
 
   // Derives unique stages/users/sources from loaded project leads
   const derivedStages = useMemo(() => {
@@ -477,14 +505,32 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
     return spec
   }
 
-  function toggleLead(id) {
-    setSelectedLeads(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-  }
-  function toggleAllVisible() {
-    const ids = filteredLeads.filter(isEligibleLead).map(l => l.id)
-    const allOn = ids.every(id => selectedLeads.has(id)) && ids.length > 0
-    setSelectedLeads(prev => { const n = new Set(prev); allOn ? ids.forEach(id => n.delete(id)) : ids.forEach(id => n.add(id)); return n })
-  }
+  // Reactive preview fetching — only runs if NOT manually confirmed
+  useEffect(() => {
+    if (!open || !selectedProjectIds.length || hasConfirmedEnrollment) return
+    
+    setPreviewLoading(true)
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/campaigns/preview-enrollment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_ids: selectedProjectIds,
+            inclusion: { filters: buildFilterSpec(inclusionFilters), logic: inclusionLogic },
+            exclusion: { filters: buildFilterSpec(exclusionFilters), logic: exclusionLogic },
+          })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setConfirmedEnrollCount(data.net)
+          setPreviewLeads(data.leads || [])
+        }
+      } catch (_) { } finally { setPreviewLoading(false) }
+    }, 500)
+    return () => clearTimeout(timeout)
+  }, [open, selectedProjectIds, inclusionFilters, exclusionFilters, inclusionLogic, exclusionLogic])
+
 
   const errors_ = useMemo(() => {
     const e = {}
@@ -496,8 +542,13 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
     if (!timeStart) e.timeStart = 'Start time is required'
     if (!timeEnd) e.timeEnd = 'End time is required'
     if (timeStart && timeEnd && timeEnd <= timeStart) e.timeEnd = 'End time must be after start time'
+    
+    // Enrollment check
+    if (!editingCampaign && confirmedEnrollCount === 0) {
+      e.enrollment = 'Select at least one lead for enrollment'
+    }
     return e
-  }, [selectedProjectIds, name, startDate, endDate, timeStart, timeEnd])
+  }, [selectedProjectIds, name, startDate, endDate, timeStart, timeEnd, confirmedEnrollCount, editingCampaign])
 
   const isValid = Object.keys(errors_).length === 0
   const fieldErr = (key) => touched && errors_[key] ? errors_[key] : null
@@ -508,34 +559,45 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
     if (creating) return
     setSelectedProjectIds([]); setName(''); setDescription(''); setStartDate(''); setEndDate('')
     setTimeStart('09:00'); setTimeEnd('21:00'); setDndCompliance(true); setTouched(false)
-    setCreditCap(''); setAiScript(''); setEnrollMode('filter'); setSelectedLeads(new Set()); setLeadSearch('')
+    setCreditCap(''); setAiScript(''); setPreviewLeads([]); setPreviewLoading(false)
     setCallSettings({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
     setProjectLeads([]); setCreditBalance(null)
     setInclusionFilters([]); setExclusionFilters([]); setInclusionLogic('AND'); setExclusionLogic('AND')
-    setEnrollDialogOpen(false); setConfirmedEnrollCount(null)
+    setEnrollDialogOpen(false); setConfirmedEnrollCount(null); setHasConfirmedEnrollment(false)
     onOpenChange(false)
   }
 
-  async function handleCreate() {
+  // Reset confirmation when filters or projects change
+  useEffect(() => {
+    setHasConfirmedEnrollment(false)
+  }, [selectedProjectIds, inclusionFilters, exclusionFilters, inclusionLogic, exclusionLogic])
+
+  async function handleSubmit() {
     setTouched(true)
     if (!isValid) return
     setCreating(true)
     try {
-      await onCreate({
+      const data = {
         projectIds: selectedProjectIds, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance,
         creditCap: creditCap !== '' ? parseFloat(creditCap) : null,
         aiScript: aiScript.trim() || null,
         callSettings: { ...callSettings, max_duration: parseInt(callSettings.max_duration), silence_timeout: parseInt(callSettings.silence_timeout) },
         autoEnroll: false,
-        leadIds: enrollMode === 'manual' ? [...selectedLeads] : [],
-        enrollFilters: enrollMode === 'filter' ? {
+        leadIds: hasConfirmedEnrollment ? previewLeads.map(l => l.id) : [],
+        enrollFilters: hasConfirmedEnrollment ? null : {
           inclusion: { filters: buildFilterSpec(inclusionFilters), logic: inclusionLogic },
           exclusion: { filters: buildFilterSpec(exclusionFilters), logic: exclusionLogic },
-        } : null,
-      })
+        },
+      }
+
+      if (editingCampaign) {
+        await onUpdate(editingCampaign.id, data)
+      } else {
+        await onCreate(data)
+      }
       handleClose()
     } catch (err) {
-      // Error is already handled by toast in parent handleCreate
+      // Error is already handled by toast in parent
     } finally { setCreating(false) }
   }
 
@@ -554,10 +616,10 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
               <div className="p-1.5 bg-primary/10 rounded-md shrink-0">
                 <Radio className="w-5 h-5 text-primary animate-pulse" />
               </div>
-              Create New Campaign
+              {editingCampaign ? 'Edit Campaign' : 'Create New Campaign'}
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground mt-1">
-              Schedule an outbound AI call campaign for your project
+              {editingCampaign ? 'Modify campaign configuration' : 'Schedule an outbound AI call campaign for your project'}
             </DialogDescription>
           </div>
           <Button 
@@ -588,7 +650,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
             <div className="space-y-1">
               <Label className="text-xs font-medium text-muted-foreground">Campaign Name <span className="text-destructive">*</span></Label>
               <Input
-                className={`${inputSm} ${fieldErr('name') ? 'border-destructive' : ''}`}
+                className={`h-10 text-sm shadow-sm border-border/80 focus:border-primary/50 focus:ring-primary/20 bg-white dark:bg-zinc-900 ${fieldErr('name') ? 'border-destructive' : ''}`}
                 placeholder="e.g., Summer 2025 Outreach"
                 value={name} onChange={e => setName(e.target.value)}
               />
@@ -608,33 +670,132 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
           {/* ── Schedule ── */}
           <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 space-y-3 shadow-sm">
             <div className="flex items-center gap-1.5 mb-1">
-              <Calendar className="w-3.5 h-3.5 text-blue-500" />
+              <CalendarIcon className="w-3.5 h-3.5 text-blue-500" />
               <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Schedule</span>
             </div>
 
             <div className="grid gap-3 grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">Start Date <span className="text-destructive">*</span></Label>
-                <Input type="date" className={`${inputSm} ${fieldErr('startDate') ? 'border-destructive' : ''}`}
-                  value={startDate} min={today} onChange={e => setStartDate(e.target.value)} />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full h-8 px-3 justify-start text-left font-normal text-sm bg-white dark:bg-zinc-900",
+                        !startDate && "text-muted-foreground",
+                        fieldErr('startDate') && "border-destructive"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5 opacity-50" />
+                      {startDate ? format(parse(startDate, 'yyyy-MM-dd', new Date()), "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={startDate ? parse(startDate, 'yyyy-MM-dd', new Date()) : undefined}
+                      onSelect={(date) => setStartDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                      disabled={(date) => date < startOfDay(new Date())}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
                 {fieldErr('startDate') && <p className="text-xs text-destructive">{fieldErr('startDate')}</p>}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">End Date <span className="text-destructive">*</span></Label>
-                <Input type="date" className={`${inputSm} ${fieldErr('endDate') ? 'border-destructive' : ''}`}
-                  value={endDate} min={startDate || today} onChange={e => setEndDate(e.target.value)} />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full h-8 px-3 justify-start text-left font-normal text-sm bg-white dark:bg-zinc-900",
+                        !endDate && "text-muted-foreground",
+                        fieldErr('endDate') && "border-destructive"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5 opacity-50" />
+                      {endDate ? format(parse(endDate, 'yyyy-MM-dd', new Date()), "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={endDate ? parse(endDate, 'yyyy-MM-dd', new Date()) : undefined}
+                      onSelect={(date) => setEndDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                      disabled={(date) => {
+                        const minDate = startDate ? parse(startDate, 'yyyy-MM-dd', new Date()) : startOfDay(new Date())
+                        return date < minDate
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
                 {fieldErr('endDate') && <p className="text-xs text-destructive">{fieldErr('endDate')}</p>}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">Daily Start <span className="text-destructive">*</span></Label>
-                <Input type="time" className={`${inputSm} ${fieldErr('timeStart') ? 'border-destructive' : ''}`}
-                  value={timeStart} onChange={e => setTimeStart(e.target.value)} />
+                <div className="flex gap-1.5">
+                  <Select 
+                    value={timeStart.split(':')[0]} 
+                    onValueChange={(h) => setTimeStart(`${h}:${timeStart.split(':')[1] || '00'}`)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-900">
+                      <SelectValue placeholder="HH" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <SelectItem key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select 
+                    value={timeStart.split(':')[1]} 
+                    onValueChange={(m) => setTimeStart(`${timeStart.split(':')[0] || '09'}:${m}`)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-900">
+                      <SelectValue placeholder="MM" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['00', '15', '30', '45'].map(m => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {fieldErr('timeStart') && <p className="text-xs text-destructive">{fieldErr('timeStart')}</p>}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">Daily End <span className="text-destructive">*</span></Label>
-                <Input type="time" className={`${inputSm} ${fieldErr('timeEnd') ? 'border-destructive' : ''}`}
-                  value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
+                <div className="flex gap-1.5">
+                  <Select 
+                    value={timeEnd.split(':')[0]} 
+                    onValueChange={(h) => setTimeEnd(`${h}:${timeEnd.split(':')[1] || '00'}`)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-900">
+                      <SelectValue placeholder="HH" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <SelectItem key={i} value={String(i).padStart(2, '0')}>{String(i).padStart(2, '0')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select 
+                    value={timeEnd.split(':')[1]} 
+                    onValueChange={(m) => setTimeEnd(`${timeEnd.split(':')[0] || '21'}:${m}`)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-900">
+                      <SelectValue placeholder="MM" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['00', '15', '30', '45'].map(m => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {fieldErr('timeEnd') && <p className="text-xs text-destructive">{fieldErr('timeEnd')}</p>}
               </div>
             </div>
@@ -777,154 +938,87 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
           </div>
 
           {/* ── Lead Enrollment ── */}
-          <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-green-500/10 rounded-lg">
-                  <Users className="w-4 h-4 text-green-600" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-foreground">Lead Enrollment</h4>
-                  <p className="text-[11px] text-muted-foreground">
-                    {enrollMode === 'filter'
-                      ? confirmedEnrollCount != null
+          {!editingCampaign && (
+            <div className="rounded-xl border border-border/60 bg-white dark:bg-zinc-950 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-green-500/10 rounded-lg">
+                    <Users className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-foreground">Lead Enrollment</h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      {confirmedEnrollCount != null
                         ? `${confirmedEnrollCount} leads configured via filters`
                         : (inclusionFilters.length || exclusionFilters.length)
                           ? 'Filters set — confirm in enrollment panel'
-                          : 'All eligible leads from selected projects'
-                      : selectedLeads.size > 0
-                        ? `${selectedLeads.size} leads selected manually`
-                        : 'No leads selected yet'}
-                  </p>
+                          : 'All eligible leads from selected projects'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Mode toggle pills */}
-                <div className="flex p-0.5 bg-background rounded-lg border border-border shadow-sm">
-                  {[
-                    { key: 'filter', label: 'Filter' },
-                    { key: 'manual', label: 'Manual' },
-                  ].map(m => (
-                    <button key={m.key} type="button"
+                <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
                       disabled={!selectedProjectIds.length}
-                      onClick={() => setEnrollMode(m.key)}
-                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed
-                        ${enrollMode === m.key
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'}`}
+                      onClick={() => setEnrollDialogOpen(true)}
+                      className="h-8 text-xs gap-1.5 px-4 rounded-lg font-bold bg-primary/5 border-primary/20 text-primary hover:bg-primary/10 transition-all shadow-sm"
                     >
-                      {m.label}
-                    </button>
-                  ))}
+                      Configure Enrollment
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
                 </div>
-                {enrollMode === 'filter' && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!selectedProjectIds.length}
-                    onClick={() => setEnrollDialogOpen(true)}
-                    className="h-8 text-xs gap-1.5"
-                  >
-                    Configure
-                    <ArrowRight className="w-3 h-3" />
-                  </Button>
-                )}
               </div>
-            </div>
 
-            {/* Manual selection (inline, only shown when manual mode active) */}
-            {selectedProjectIds.length > 0 && enrollMode === 'manual' && (
-              <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm">
-                <div className="flex items-center gap-3 px-4 py-2 bg-muted/40 border-b border-border/60">
-                  <div className="flex items-center gap-2 flex-1">
-                    <Search className="w-3.5 h-3.5 text-muted-foreground" />
-                    <Input placeholder="Search by name or phone…"
-                      className="h-6 text-xs border-0 bg-transparent p-0 focus-visible:ring-0 shadow-none"
-                      value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
+
+              {/* Lead Preview List */}
+              {selectedProjectIds.length > 0 && (
+                <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 overflow-hidden">
+                  <div className="px-4 py-2 border-b border-border/60 bg-muted/40 flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enrolled Leads Preview</span>
+                    {previewLoading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
                   </div>
-                  <button type="button" onClick={toggleAllVisible}
-                    className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold hover:bg-primary/20 transition-colors">
-                    {filteredLeads.filter(isEligibleLead).every(l => selectedLeads.has(l.id)) && filteredLeads.filter(isEligibleLead).length > 0 ? 'Deselect all' : 'Select all'}
-                  </button>
-                </div>
-                <div className="max-h-[250px] overflow-y-auto divide-y divide-border/40 scrollbar-thin">
-                  {loadingLeads
-                    ? <div className="p-3 space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
-                    : filteredLeads.length === 0
-                      ? <div className="flex flex-col items-center justify-center py-8 opacity-60">
-                          <Search className="w-8 h-8 mb-2 text-muted-foreground" />
-                          <p className="text-xs font-medium">No leads match your search</p>
+                  <div className="max-h-[200px] overflow-y-auto divide-y divide-border/40 scrollbar-thin bg-white/50">
+                    {previewLoading && previewLeads.length === 0 ? (
+                      <div className="p-3 space-y-2">
+                        {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+                      </div>
+                    ) : previewLeads.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 opacity-40">
+                        <Users className="w-8 h-8 mb-2" />
+                        <p className="text-[10px] font-bold">No leads matched by filters</p>
+                      </div>
+                    ) : (
+                      previewLeads.map(lead => (
+                        <div key={lead.id} className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-white/80">
+                          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
+                            <span className="text-[10px] font-bold text-slate-500">{lead.name?.[0]?.toUpperCase()}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">{lead.name}</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{lead.phone || lead.mobile || 'No phone'}</p>
+                          </div>
+                          {lead.stage && (
+                            <Badge variant="outline" className="text-[8px] px-1.5 py-0 h-4 font-bold border-slate-200 bg-slate-50 text-slate-500">
+                              {lead.stage.name}
+                            </Badge>
+                          )}
                         </div>
-                      : filteredLeads.map(lead => {
-                          const { eligible, reason } = getEligibility(lead)
-                          const checked = selectedLeads.has(lead.id)
-                          return (
-                            <label key={lead.id}
-                              className={`flex items-center gap-3 px-4 py-2 transition-all group
-                                ${eligible ? 'cursor-pointer hover:bg-primary/5' : 'opacity-40 cursor-not-allowed bg-muted/10'}`}
-                            >
-                              <div className="relative flex items-center">
-                                <input type="checkbox" checked={checked} disabled={!eligible}
-                                  onChange={() => eligible && toggleLead(lead.id)}
-                                  className="w-4 h-4 rounded-md border-border text-primary focus:ring-primary accent-primary cursor-pointer disabled:cursor-not-allowed" />
-                              </div>
-                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 border border-border group-hover:border-primary/30 transition-colors">
-                                <span className="text-[10px] font-bold text-muted-foreground">{lead.name?.[0]?.toUpperCase()}</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-xs font-bold truncate ${checked ? 'text-primary' : 'text-foreground'}`}>{lead.name}</span>
-                                  {lead.interest_level && (
-                                    <div className={`w-1.5 h-1.5 rounded-full ${
-                                      lead.interest_level.toLowerCase() === 'hot' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 
-                                      lead.interest_level.toLowerCase() === 'warm' ? 'bg-orange-400' : 'bg-blue-400'
-                                    }`} />
-                                  )}
-                                  {!eligible && (
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <span className="text-[8px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded font-black uppercase cursor-help border border-destructive/20">Ineligible</span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="right" className="bg-destructive text-destructive-foreground border-none">
-                                          <p className="text-[11px] font-bold">{reason}</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[10px] text-muted-foreground font-medium">{lead.phone || lead.mobile || 'No phone'}</span>
-                                  <span className="text-[10px] text-muted-foreground/40">•</span>
-                                  <span className="text-[10px] text-muted-foreground">{lead.preferred_location || lead.mailing_city || 'Unknown'}</span>
-                                  {(lead.budget_range || lead.max_budget) && (
-                                    <>
-                                      <span className="text-[10px] text-muted-foreground/40">•</span>
-                                      <span className="text-[10px] text-green-600 font-bold">{lead.budget_range || `₹${lead.max_budget}`}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              {lead.stage && (
-                                <Badge variant="outline" className="text-[9px] px-2 py-0 h-5 shrink-0 font-bold" style={{ borderColor: lead.stage.color + '40', color: lead.stage.color, backgroundColor: lead.stage.color + '05' }}>
-                                  {lead.stage.name}
-                                </Badge>
-                              )}
-                            </label>
-                          )
-                        })
-                  }
-                </div>
-                {selectedLeads.size > 0 && (
-                  <div className="px-4 py-2 bg-primary/10 border-t border-primary/20 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-primary">{selectedLeads.size} Leads Selected</span>
-                    <button type="button" onClick={() => setSelectedLeads(new Set())} className="text-[10px] text-muted-foreground hover:text-destructive font-medium transition-colors">Clear Selection</button>
+                      ))
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                  {confirmedEnrollCount != null && (
+                    <div className="px-4 py-2 bg-slate-50 border-t border-border/60">
+                      <p className="text-[10px] font-bold text-slate-500">
+                        Total <span className="text-primary">{confirmedEnrollCount}</span> leads will be enrolled
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Validation ── */}
           {touched && !isValid && (
@@ -940,8 +1034,12 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
         {/* ── Sticky Footer ── */}
         <div className="sticky bottom-0 z-10 bg-background border-t border-border px-6 py-3 flex items-center justify-end gap-2">
           <Button variant="outline" size="sm" onClick={handleClose} disabled={creating}>Cancel</Button>
-          <Button size="sm" onClick={handleCreate} disabled={creating || !isValid} className="min-w-[130px]">
-            {creating ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Creating…</> : <><Plus className="w-3.5 h-3.5 mr-1.5" />Create Campaign</>}
+          <Button size="sm" onClick={handleSubmit} disabled={creating || !isValid} className="min-w-[130px]">
+            {creating ? (
+              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {editingCampaign ? 'Updating...' : 'Creating...'}</>
+            ) : (
+              <>{editingCampaign ? 'Save Changes' : 'Create Campaign'}</>
+            )}
           </Button>
         </div>
       </DialogContent>
@@ -962,7 +1060,13 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
         setExclusionFilters={setExclusionFilters}
         exclusionLogic={exclusionLogic}
         setExclusionLogic={setExclusionLogic}
-        onConfirm={(count) => setConfirmedEnrollCount(count)}
+        onConfirm={(count, breakdown, leads) => {
+          setConfirmedEnrollCount(count)
+          setPreviewLeads(leads || [])
+          setHasConfirmedEnrollment(true)
+        }}
+        previewLoading={previewLoading}
+        setPreviewLoading={setPreviewLoading}
       />
     </Dialog>
   )
@@ -982,26 +1086,49 @@ function DeleteConfirmDialog({ open, campaign, onConfirm, onCancel, deleting }) 
               This action is permanent and cannot be undone.
             </DialogDescription>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={onCancel}
-            disabled={deleting}
-            className="h-8 w-8 rounded-full hover:bg-muted transition-colors"
-          >
-            <X className="w-4 h-4 text-muted-foreground" />
-          </Button>
         </DialogHeader>
-        <div className="py-2">
+        <div className="p-4">
           <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-lg text-sm">
             <span className="font-medium text-foreground">"{campaign?.name}"</span>
             <span className="text-muted-foreground"> will be permanently deleted.</span>
           </div>
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 p-4">
           <Button variant="outline" onClick={onCancel} disabled={deleting}>Cancel</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={deleting}>
             {deleting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting...</> : <><Trash2 className="w-4 h-4 mr-2" /> Delete Campaign</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog >
+  )
+}
+
+// ─── Archive Confirmation Dialog ──────────────────────────────────────────────
+function ArchiveConfirmDialog({ open, campaign, onConfirm, onCancel, archiving }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !archiving) onCancel() }}>
+      <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b border-border flex flex-row items-center justify-between">
+          <div className="space-y-1">
+            <DialogTitle className="flex items-center gap-2 text-amber-600 text-lg font-bold">
+              <Archive className="w-5 h-5" /> Archive Campaign
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Archiving hides the campaign from active lists but preserves all logs.
+            </DialogDescription>
+          </div>
+        </DialogHeader>
+        <div className="p-4">
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+            <span className="font-medium text-foreground">"{campaign?.name}"</span>
+            <span className="text-muted-foreground"> will be moved to the archives.</span>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 p-4">
+          <Button variant="outline" onClick={onCancel} disabled={archiving}>Cancel</Button>
+          <Button variant="default" className="bg-amber-600 hover:bg-amber-700 text-white border-none" onClick={onConfirm} disabled={archiving}>
+            {archiving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Archiving...</> : <><Archive className="w-4 h-4 mr-2" /> Archive Campaign</>}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1032,9 +1159,9 @@ export default function CampaignsPage() {
 
   // Map tab to status filter(s)
   const statusFilter = statusTab === 'active'
-    ? 'draft,scheduled,running,paused'
+    ? 'scheduled,running,paused'
     : statusTab === 'completed'
-    ? 'completed,cancelled'
+    ? 'completed,cancelled,failed'
     : 'archived'
 
   // Campaign Data
@@ -1054,6 +1181,9 @@ export default function CampaignsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingCampaign, setDeletingCampaign] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false)
+  const [archivingCampaign, setArchivingCampaign] = useState(null)
+  const [archiving, setArchiving] = useState(false)
   const [starting, setStarting] = useState(false)
   const [startingCampaignId, setStartingCampaignId] = useState(null)
   const [pausingCampaignId, setPausingCampaignId] = useState(null)
@@ -1106,23 +1236,27 @@ export default function CampaignsPage() {
     }
   }
 
-  async function handleCreate({ projectIds, name, description, startDate, endDate, timeStart, timeEnd, dndCompliance, creditCap, aiScript, callSettings, autoEnroll, leadIds, enrollFilters }) {
+  async function handleCreate(data) {
     if (!canCreate) { toast.error("You do not have permission to create campaigns"); return }
     try {
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_ids: projectIds, name, description,
-          start_date: startDate, end_date: endDate,
-          time_start: timeStart, time_end: timeEnd,
-          dnd_compliance: dndCompliance,
-          credit_cap: creditCap,
-          ai_script: aiScript,
-          call_settings: callSettings,
-          auto_enroll: autoEnroll,
-          lead_ids: leadIds,
-          enroll_filters: enrollFilters,
+          project_ids: data.projectIds,
+          name: data.name,
+          description: data.description,
+          start_date: data.startDate,
+          end_date: data.endDate,
+          time_start: data.timeStart,
+          time_end: data.timeEnd,
+          dnd_compliance: data.dndCompliance,
+          credit_cap: data.creditCap,
+          ai_script: data.aiScript,
+          call_settings: data.callSettings,
+          auto_enroll: data.autoEnroll,
+          lead_ids: data.leadIds,
+          enroll_filters: data.enrollFilters,
         })
       })
       if (!res.ok) {
@@ -1140,7 +1274,40 @@ export default function CampaignsPage() {
     } catch (err) {
       console.error('Campaign creation error:', err)
       toast.error(err.message || 'Failed to create campaign')
-      throw err // Re-throw to prevent dialog from closing
+      throw err 
+    }
+  }
+
+  async function handleUpdate(campaignId, data) {
+    if (!canEdit) { toast.error("You do not have permission to edit campaigns"); return }
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_ids: data.projectIds,
+          name: data.name,
+          description: data.description,
+          start_date: data.startDate,
+          end_date: data.endDate,
+          time_start: data.timeStart,
+          time_end: data.timeEnd,
+          dnd_compliance: data.dndCompliance,
+          credit_cap: data.creditCap,
+          ai_script: data.aiScript,
+          call_settings: data.callSettings,
+        })
+      })
+      if (!res.ok) {
+        const payload = await res.json()
+        throw new Error(payload?.error || 'Failed to update campaign')
+      }
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+      toast.success("Campaign updated successfully!")
+    } catch (err) {
+      console.error('Campaign update error:', err)
+      toast.error(err.message || 'Failed to update campaign')
+      throw err
     }
   }
 
@@ -1286,93 +1453,199 @@ export default function CampaignsPage() {
     }
   }
 
+  async function handleArchive(campaignId) {
+    const campaign = campaigns.find(c => c.id === campaignId)
+    setArchivingCampaign(campaign)
+    setArchiveDialogOpen(true)
+  }
+
+  async function confirmArchive() {
+    if (!archivingCampaign) return
+    if (!canDelete) { toast.error("You do not have permission to archive campaigns"); return }
+    setArchiving(true)
+    try {
+      const res = await fetch(`/api/campaigns/${archivingCampaign.id}/archive`, { method: 'POST' })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Archive failed') }
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+      toast.success("Campaign archived successfully!")
+      setArchiveDialogOpen(false)
+      setArchivingCampaign(null)
+    } catch (err) {
+      console.error(err)
+      toast.error(err.message || 'Archive failed')
+    } finally {
+      setArchiving(false)
+    }
+  }
+
+  // Client-side name search on top of server-filtered results
+  const [nameSearch, setNameSearch] = useState('')
+  const visibleCampaigns = useMemo(() => {
+    if (!nameSearch.trim()) return campaigns
+    const q = nameSearch.toLowerCase()
+    return campaigns.filter(c => c.name?.toLowerCase().includes(q))
+  }, [campaigns, nameSearch])
+
+  const STATUS_TABS = [
+    { key: 'active',    label: 'Active',    countColor: 'bg-emerald-100 text-emerald-700' },
+    { key: 'completed', label: 'Completed', countColor: 'bg-indigo-100 text-indigo-700' },
+    { key: 'archived',  label: 'Archived',  countColor: 'bg-gray-200 text-gray-600' },
+  ]
+
   return (
-    <div className="min-h-screen bg-muted/5">
-      {/* Header */}
-      {/* Header Toolbar */}
-      <div className="p-6 border-b border-border bg-background space-y-4">
-        {/* Title row */}
-        <div className="flex items-center justify-between gap-4">
+    <div className="min-h-screen bg-gray-50/60 py-4">
+      <div className="bg-white shadow-sm rounded-xl mx-6">
+        {/* Row 1: Title and Credits */}
+        <div className="px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/40">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Campaigns</h1>
-            {creditBalance != null && (
-              <Badge variant={creditBalance < 5 ? 'destructive' : 'secondary'} className="text-xs px-2.5 py-0.5 rounded-full font-medium">
-                {creditBalance < 5 && <AlertTriangle className="w-3 h-3 mr-1" />}
-                {creditBalance.toFixed(1)} Credits
-              </Badge>
-            )}
+            <div className="p-2 bg-primary/10 rounded-xl group transition-all duration-300">
+              <Megaphone className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">Campaigns</h1>
+              <p className="text-xs text-slate-400 font-medium mt-0.5">Manage and monitor your AI call campaigns</p>
+            </div>
           </div>
+          
+          {creditBalance != null && (
+            <div className={cn(
+              "flex items-center gap-3 px-4 py-2 rounded-xl border shadow-sm transition-all duration-300",
+              creditBalance < 10 
+                ? "bg-red-50 text-red-700 border-red-100" 
+                : "bg-emerald-50 text-emerald-700 border-emerald-100"
+            )}>
+              <div className={cn(
+                "p-1.5 rounded-lg",
+                creditBalance < 10 ? "bg-red-100/50" : "bg-emerald-100/50"
+              )}>
+                <CreditCard className={cn("w-4 h-4", creditBalance < 10 ? "text-red-600" : "text-emerald-600")} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase tracking-wider font-bold opacity-60 leading-none mb-1">Available Minutes</span>
+                <span className="text-base font-bold tabular-nums">
+                  {creditBalance.toFixed(1)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Toolbar row */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          {/* Status Tabs */}
-          <div className="p-1 bg-muted rounded-lg flex items-center w-full sm:w-auto overflow-x-auto shrink-0 shadow-inner">
-            {[
-              { key: 'active', label: 'Active' },
-              { key: 'completed', label: 'Completed' },
-              { key: 'archived', label: 'Archived' },
-            ].map(tab => (
+        {/* Row 2: Tabs, Search, Filters, Refresh, New Campaign */}
+        <div className="px-6 py-3.5 flex items-center gap-4 flex-wrap bg-white rounded-xl">
+          {/* Segmented tabs */}
+          <div className="inline-flex items-center gap-1 bg-gray-100/80 rounded-xl p-1 shrink-0">
+            {STATUS_TABS.map(tab => (
               <button
                 key={tab.key}
-                onClick={() => { setStatusTab(tab.key); setPage(1) }}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusTab === tab.key
-                  ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
-                  : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => { setStatusTab(tab.key); setPage(1); setNameSearch('') }}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
+                  statusTab === tab.key
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-gray-200/50'
+                )}
               >
                 {tab.label}
+                {metadata.statusGroups?.[tab.key] > 0 && (
+                  <span className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full transition-colors",
+                    statusTab === tab.key ? tab.countColor : "bg-gray-200 text-gray-500"
+                  )}>
+                    {metadata.statusGroups[tab.key]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* Project Filter */}
-            <div className="flex items-center gap-2 flex-1 sm:flex-none">
-              <div className="w-[180px] sm:w-[220px]">
-                <Select
-                  value={selectedProjectId}
-                  onValueChange={(v) => {
-                    setSelectedProjectId(v)
-                    setPage(1)
-                    const url = v === 'all'
-                      ? '/dashboard/admin/crm/campaigns'
-                      : `/dashboard/admin/crm/campaigns?project_id=${v}`
-                    router.replace(url, { scroll: false })
-                  }}
-                >
-                  <SelectTrigger className="w-full bg-background shadow-sm h-9">
-                    <SelectValue placeholder="All Projects" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Projects</SelectItem>
-                    {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                variant="outline" size="icon"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['campaigns'] })}
-                disabled={loading} className="shrink-0 h-9 w-9 bg-background shadow-sm text-muted-foreground"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
+          <div className="w-px h-8 bg-gray-200/60 mx-1 hidden xl:block" />
 
-            {/* New Campaign Action */}
-            <PermissionTooltip
-              hasPermission={canCreate && !subExpired}
-              message={subExpired ? 'Subscription expired. Renew to create campaigns.' : "You need 'Create Campaigns' permission."}
-            >
-              <Button
-                onClick={() => { if (!canCreate || subExpired) return; setShowCreateDialog(true) }}
-                disabled={!canCreate || subExpired}
-                className="h-9 shadow-sm shrink-0"
+          {/* Search */}
+          <div className="relative flex-1 min-w-[280px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search campaigns..."
+              value={nameSearch}
+              onChange={e => setNameSearch(e.target.value)}
+              className="pl-9 h-10 bg-white border-border rounded-xl"
+            />
+            {nameSearch && (
+              <button 
+                onClick={() => setNameSearch('')} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
               >
-                {(!canCreate || subExpired) ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                <span className="hidden sm:inline">New Campaign</span>
-                <span className="sm:hidden">New</span>
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Actions & Filters Group */}
+          <div className="flex items-center gap-3 ml-auto">
+            {/* Project Filter */}
+            <Select
+              value={selectedProjectId}
+              onValueChange={(v) => {
+                setSelectedProjectId(v); setPage(1)
+                router.replace(v === 'all' ? '/dashboard/admin/crm/campaigns' : `/dashboard/admin/crm/campaigns?project_id=${v}`, { scroll: false })
+              }}
+            >
+              <SelectTrigger className="w-[180px] h-10 rounded-xl bg-white border-border">
+                <SelectValue placeholder="All Projects" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="all">All Projects</SelectItem>
+                {projects.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Clear filters */}
+            {(nameSearch || selectedProjectId !== 'all') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setNameSearch(''); setSelectedProjectId('all'); setPage(1); router.replace('/dashboard/admin/crm/campaigns', { scroll: false }) }}
+                className="text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/5 font-bold h-10 px-4 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4 mr-1.5" /> Clear
               </Button>
-            </PermissionTooltip>
+            )}
+
+            <div className="w-px h-8 bg-gray-200/60 mx-1 hidden sm:block" />
+
+            <div className="flex items-center gap-2.5">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-10 w-10 text-muted-foreground border-border rounded-xl"
+                      onClick={() => queryClient.invalidateQueries({ queryKey: ['campaigns'] })} 
+                      disabled={loading}
+                    >
+                      <RefreshCw className={cn("h-4 h-4", loading && "animate-spin")} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="font-bold">Refresh Data</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+                  <PermissionTooltip
+                hasPermission={canCreate && !subExpired}
+                message={subExpired ? 'Subscription expired.' : "You need 'Create Campaigns' permission."}
+              >
+                <Button
+                  onClick={() => { if (!canCreate || subExpired) return; setEditingCampaign(null); setShowCreateDialog(true) }}
+                  disabled={!canCreate || subExpired}
+                  className="gap-2 h-10 px-4 rounded-xl font-semibold bg-primary shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Campaign
+                </Button>
+              </PermissionTooltip>
+            </div>
           </div>
         </div>
       </div>
@@ -1382,73 +1655,137 @@ export default function CampaignsPage() {
         {loading ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-10 w-10 rounded-lg" />
-                  <div className="flex gap-2"><Skeleton className="h-8 w-8 rounded-md" /><Skeleton className="h-8 w-8 rounded-md" /></div>
+              <div key={i} className="rounded-xl border border-slate-200 bg-white p-5 space-y-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-5 w-3/4 rounded-md" />
+                    <Skeleton className="h-3 w-1/2 rounded-md" />
+                  </div>
+                  <Skeleton className="h-8 w-16 rounded-lg" />
                 </div>
-                <div className="space-y-2"><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>
-                <Skeleton className="h-4 w-full" />
-                <div className="pt-2"><Skeleton className="h-5 w-20 rounded-full" /></div>
-                <div className="pt-3 border-t border-border/50 space-y-2">
+                
+                <div className="flex gap-2">
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3 w-full rounded-md" />
+                  <Skeleton className="h-3 w-5/6 rounded-md" />
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 space-y-3">
                   <div className="flex justify-between"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 w-24" /></div>
-                  <div className="flex justify-between"><Skeleton className="h-3 w-20" /><Skeleton className="h-3 w-16" /></div>
+                  <div className="flex justify-between"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 w-20" /></div>
                 </div>
-                <div className="pt-3 space-y-2"><Skeleton className="h-8 w-full rounded-md" /></div>
+
+                <div className="pt-4 border-t border-slate-100 space-y-2">
+                  <div className="flex justify-between"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 w-28" /></div>
+                  <Skeleton className="h-1.5 w-full rounded-full" />
+                </div>
               </div>
             ))}
           </div>
-        ) : campaigns.length === 0 ? (
-          <Card className="py-20 border-border bg-card shadow-sm">
-            <CardContent className="text-center">
-              <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                <Radio className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">No campaigns yet</h3>
-              <p className="text-muted-foreground mb-4">Create your first campaign to start scheduling calls</p>
-              <PermissionTooltip hasPermission={canCreate} message="You need 'Create Campaigns' permission.">
-                <Button onClick={() => { if (!canCreate) return; setShowCreateDialog(true) }} disabled={!canCreate}>
-                  {!canCreate ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                  Create Campaign
+        ) : visibleCampaigns.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center bg-white backdrop-blur-sm rounded-xl border border-dashed border-slate-200">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+              <Radio className="w-8 h-8 text-slate-400" />
+            </div>
+            {nameSearch || selectedProjectId !== 'all' ? (
+              <div className="max-w-md px-6">
+                <h3 className="text-lg font-bold text-foreground mb-1">No campaigns found</h3>
+                <p className="text-sm text-muted-foreground mb-6">We couldn't find any campaigns matching your current search or filters.</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => { setNameSearch(''); setSelectedProjectId('all'); setPage(1); router.replace('/dashboard/admin/crm/campaigns', { scroll: false }) }}
+                  className="rounded-lg px-4 h-9 font-bold"
+                >
+                  <X className="w-3.5 h-3.5 mr-2" /> Clear filters
                 </Button>
-              </PermissionTooltip>
-            </CardContent>
-          </Card>
+              </div>
+            ) : statusTab === 'active' ? (
+              <div className="max-w-md px-6">
+                <h3 className="text-lg font-bold text-foreground mb-1">Start a campaign</h3>
+                <p className="text-sm text-muted-foreground mb-6">Create your first AI-powered calling campaign to automate your outreach.</p>
+                <PermissionTooltip hasPermission={canCreate && !subExpired} message={subExpired ? 'Subscription expired.' : "You need 'Create Campaigns' permission."}>
+                  <Button 
+                    onClick={() => { if (!canCreate || subExpired) return; setShowCreateDialog(true) }} 
+                    disabled={!canCreate || subExpired} 
+                    className="gap-2 h-10 px-6 rounded-lg font-semibold shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Create Campaign
+                  </Button>
+                </PermissionTooltip>
+              </div>
+            ) : (
+              <div className="max-w-md px-6">
+                <h3 className="text-lg font-bold text-foreground mb-1">No {statusTab} campaigns</h3>
+                <p className="text-sm text-muted-foreground">There are currently no campaigns in the {statusTab} status.</p>
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {campaigns.map(campaign => (
-              <CampaignCard
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {visibleCampaigns.map(campaign => (
+              <NewCampaignCard
                 key={campaign.id}
                 campaign={campaign}
-                getProjectName={getProjectName}
-                canEdit={canEdit}
-                canDelete={canDelete}
-                canRun={canRun && !subExpired}
-                starting={starting}
-                startingCampaignId={startingCampaignId}
-                pausingCampaignId={pausingCampaignId}
-                deleting={deleting}
-                onEdit={openEditModal}
-                onDelete={openDeleteDialog}
-                onStart={handleStartCampaign}
-                onPause={handlePauseCampaign}
-                onCancel={handleCancelCampaign}
-                onOpenPipeline={(c) => router.push(`/dashboard/admin/crm/campaigns/${c.id}`)}
-                subExpired={subExpired}
+                permissions={{ canRun: canRun && !subExpired, canEdit, canDelete }}
+                orgCredits={creditBalance}
+                subscriptionStatus={subExpired ? 'expired' : 'active'}
+                mutations={{
+                  start:    (id) => handleStartCampaign(campaigns.find(c => c.id === id)),
+                  pause:    (id) => handlePauseCampaign(campaigns.find(c => c.id === id)),
+                  resume:   (id) => handleStartCampaign(campaigns.find(c => c.id === id)),
+                  cancel:   (id) => handleCancelCampaign(campaigns.find(c => c.id === id)),
+                  delete:   (id) => openDeleteDialog(campaigns.find(c => c.id === id)),
+                  edit:     (id) => {
+                    const c = campaigns.find(x => x.id === id)
+                    setEditingCampaign(c)
+                    setShowCreateDialog(true)
+                  },
+                  archive:  (id) => handleArchive(id),
+                  complete: undefined,
+                  enroll:   undefined,
+                }}
+                loadingStates={{
+                  starting:  starting && startingCampaignId === campaign.id,
+                  pausing:   pausingCampaignId === campaign.id,
+                  resuming:  starting && startingCampaignId === campaign.id,
+                  archiving: false,
+                  deleting:  deleting,
+                }}
               />
             ))}
           </div>
         )}
 
         {/* Pagination */}
-        {campaigns.length > 0 && (
-          <div className="flex items-center justify-end space-x-2 py-4 mt-4 border-t border-border">
-            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || isPlaceholderData}>
-              Previous
+        {campaigns.length > 0 && !nameSearch && (
+          <div className="flex items-center justify-end gap-3 py-6 border-t border-border mt-6">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setPage(p => Math.max(1, p - 1))} 
+              disabled={page === 1 || isPlaceholderData}
+              className="rounded-lg px-4 h-9 font-bold"
+            >
+              <ChevronRight className="w-4 h-4 mr-1 rotate-180" /> Previous
             </Button>
-            <div className="text-sm text-muted-foreground">Page {page}</div>
-            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={!metadata?.hasMore || isPlaceholderData}>
-              Next
+            <div className="flex items-center gap-2">
+              <span className="h-9 px-4 flex items-center justify-center rounded-lg bg-slate-50 text-slate-700 text-xs font-bold border border-border min-w-[80px]">
+                Page {page}
+              </span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setPage(p => p + 1)} 
+              disabled={!metadata?.hasMore || isPlaceholderData}
+              className="rounded-lg px-4 h-9 font-bold"
+            >
+              Next <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         )}
@@ -1461,6 +1798,8 @@ export default function CampaignsPage() {
         projects={projects}
         loadingProjects={loadingProjects}
         onCreate={handleCreate}
+        onUpdate={handleUpdate}
+        editingCampaign={editingCampaign}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -1472,167 +1811,170 @@ export default function CampaignsPage() {
         deleting={deleting}
       />
 
+      {/* Archive Confirmation Dialog */}
+      <ArchiveConfirmDialog
+        open={archiveDialogOpen}
+        campaign={archivingCampaign}
+        onConfirm={confirmArchive}
+        onCancel={() => { if (!archiving) { setArchiveDialogOpen(false); setArchivingCampaign(null) } }}
+        archiving={archiving}
+      />
+
       {/* Edit Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
-          <DialogHeader className="sticky top-0 z-10 bg-background border-b border-border px-6 py-4 flex flex-row items-center justify-between">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 rounded-xl">
+          <div className="sticky top-0 z-10 bg-background border-b border-border px-6 py-4 flex items-center justify-between">
             <div>
               <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-                <Edit className="w-6 h-6 text-purple-600" /> Edit Campaign
+                <Edit className="w-5 h-5 text-indigo-600" />
+                Edit Campaign
               </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground mt-1">
-                Modify the details and schedule of your campaign
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5 font-medium">
+                Modify campaign details and scheduling
               </DialogDescription>
             </div>
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={() => setEditModalOpen(false)}
-              className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+              className="h-8 w-8 rounded-lg"
             >
-              <X className="w-5 h-5 text-muted-foreground" />
+              <X className="w-4 h-4 text-muted-foreground" />
             </Button>
-          </DialogHeader>
+          </div>
 
-          <div className="space-y-4 py-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">Projects *</Label>
+          <div className="px-6 py-5 space-y-6">
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Projects *</Label>
                 <MultiSelect
                   options={projects.map(p => ({ value: p.id, label: p.name }))}
                   selected={editProjectIds}
                   onChange={setEditProjectIds}
                   placeholder={loadingProjects ? "Loading projects..." : "Select projects..."}
+                  className="rounded-lg border-slate-200"
                 />
               </div>
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">Campaign Name *</Label>
-                <Input value={editName} onChange={e => setEditName(e.target.value)} />
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium mb-1.5 block">Description</Label>
-              <Textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3} />
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium mb-1.5 block">Status</Label>
-              <select
-                value={editStatus}
-                onChange={e => setEditStatus(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="scheduled">Scheduled</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">Start Date *</Label>
-                <Input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">End Date *</Label>
-                <Input
-                  type="date"
-                  value={editEndDate}
-                  min={editStartDate}
-                  onChange={e => setEditEndDate(e.target.value)}
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Campaign Name *</Label>
+                <Input 
+                  value={editName} 
+                  onChange={e => setEditName(e.target.value)} 
+                  className="rounded-lg border-slate-200 h-10 font-medium"
                 />
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">Start Time *</Label>
-                <Input type="time" value={editTimeStart} onChange={e => setEditTimeStart(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">End Time *</Label>
-                <Input type="time" value={editTimeEnd} onChange={e => setEditTimeEnd(e.target.value)} />
-              </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Description</Label>
+              <Textarea 
+                value={editDescription} 
+                onChange={e => setEditDescription(e.target.value)} 
+                rows={3} 
+                className="rounded-lg border-slate-200 resize-none font-medium"
+              />
             </div>
 
-            {/* AI Call Settings */}
-            <div className="pt-2 border-t border-border/50">
-              <Label className="text-sm font-semibold mb-3 block text-foreground">AI Call Settings</Label>
-              <div className="space-y-4">
-                {/* Language selector — temporarily hidden
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Language</Label>
-                    <select
-                      value={editCallSettings.language || 'hinglish'}
-                      onChange={e => setEditCallSettings(s => ({ ...s, language: e.target.value }))}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="hinglish">Hinglish (Default)</option>
-                      <option value="hindi">Hindi</option>
-                      <option value="english">English</option>
-                      <option value="gujarati">Gujarati</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">AI Voice</Label>
-                    <select
-                      value={editCallSettings.voice_id || 'shimmer'}
-                      onChange={e => setEditCallSettings(s => ({ ...s, voice_id: e.target.value }))}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="shimmer">Shimmer (Female, Default)</option>
-                      <option value="alloy">Alloy (Neutral)</option>
-                      <option value="echo">Echo (Male)</option>
-                      <option value="fable">Fable (Male)</option>
-                      <option value="nova">Nova (Female)</option>
-                      <option value="onyx">Onyx (Male, Deep)</option>
-                    </select>
-                  </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Campaign Status</Label>
+              <Select value={editStatus} onValueChange={setEditStatus}>
+                <SelectTrigger className="h-10 rounded-lg border-slate-200 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-lg">
+                  <SelectItem value="scheduled">Scheduled</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-5 space-y-5">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-500" />
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Schedule</span>
+              </div>
+              
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Start Date *</Label>
+                  <Input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} className="rounded-lg border-slate-200 h-10 font-medium" />
                 </div>
-                */}
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Max Call Duration (seconds)</Label>
-                    <Input
-                      type="number" min={60} max={1800}
-                      value={editCallSettings.max_duration || 600}
-                      onChange={e => setEditCallSettings(s => ({ ...s, max_duration: parseInt(e.target.value) || 600 }))}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Silence Timeout (seconds)</Label>
-                    <Input
-                      type="number" min={5} max={60}
-                      value={editCallSettings.silence_timeout || 30}
-                      onChange={e => setEditCallSettings(s => ({ ...s, silence_timeout: parseInt(e.target.value) || 30 }))}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-1.5 block">AI Script / Custom Instructions (optional)</Label>
-                  <Textarea
-                    value={editAiScript}
-                    onChange={e => setEditAiScript(e.target.value)}
-                    rows={4}
-                    placeholder="e.g. Focus on 2BHK units in Tower A. Mention the monsoon offer — 5% discount for bookings this week. Always ask for a site visit."
-                    className="text-sm"
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">End Date *</Label>
+                  <Input
+                    type="date"
+                    value={editEndDate}
+                    min={editStartDate}
+                    onChange={e => setEditEndDate(e.target.value)}
+                    className="rounded-lg border-slate-200 h-10 font-medium"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">This overrides the default AI persona script for this campaign.</p>
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Daily Start *</Label>
+                  <Input type="time" value={editTimeStart} onChange={e => setEditTimeStart(e.target.value)} className="rounded-lg border-slate-200 h-10 font-medium" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Daily End *</Label>
+                  <Input type="time" value={editTimeEnd} onChange={e => setEditTimeEnd(e.target.value)} className="rounded-lg border-slate-200 h-10 font-medium" />
+                </div>
+              </div>
+            </div>
+
+            {/* AI Configuration Section */}
+            <div className="rounded-xl border border-slate-100 p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">AI Configuration</span>
+              </div>
+              
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Max Call Duration (sec)</Label>
+                  <Input
+                    type="number" min={60} max={1800}
+                    value={editCallSettings.max_duration || 600}
+                    onChange={e => setEditCallSettings(s => ({ ...s, max_duration: parseInt(e.target.value) || 600 }))}
+                    className="rounded-lg border-slate-200 h-10 font-medium"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Silence Timeout (sec)</Label>
+                  <Input
+                    type="number" min={5} max={60}
+                    value={editCallSettings.silence_timeout || 30}
+                    onChange={e => setEditCallSettings(s => ({ ...s, silence_timeout: parseInt(e.target.value) || 30 }))}
+                    className="rounded-lg border-slate-200 h-10 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Custom Instructions</Label>
+                <Textarea
+                  value={editAiScript}
+                  onChange={e => setEditAiScript(e.target.value)}
+                  rows={4}
+                  placeholder="e.g. Focus on 2BHK units..."
+                  className="rounded-lg border-slate-200 font-medium p-3 bg-white text-sm"
+                />
               </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleUpdate} className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
-              Update Campaign
+          <div className="sticky bottom-0 z-10 bg-slate-50 border-t border-border px-6 py-4 flex items-center justify-end gap-3">
+            <Button variant="ghost" onClick={() => setEditModalOpen(false)} className="font-bold">
+              Cancel
             </Button>
-          </DialogFooter>
+            <Button 
+              onClick={handleUpdate} 
+              className="font-bold bg-primary text-white px-6"
+            >
+              Save Changes
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

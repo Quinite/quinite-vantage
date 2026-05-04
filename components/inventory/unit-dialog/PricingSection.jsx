@@ -82,6 +82,7 @@ export default function PricingSection({
   setFormData,
   isResidential,
   isLand,
+  isApartment,
   finalPrice,
   selectedConfig,
 }) {
@@ -106,7 +107,10 @@ export default function PricingSection({
       </div>
 
       {/* Price row */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className={cn(
+        "grid gap-3",
+        isApartment ? "grid-cols-3" : "grid-cols-1 max-w-[240px]"
+      )}>
         <div className="space-y-1.5">
           <NumInput
             label="Base Price"
@@ -138,20 +142,25 @@ export default function PricingSection({
             Do not disclose on AI calls
           </button>
         </div>
-        <NumInput
-          label="Floor Rise"
-          value={formData.floor_rise_price}
-          onChange={set('floor_rise_price')}
-          placeholder="0"
-          hint="Per floor premium"
-        />
-        <NumInput
-          label="PLC"
-          value={formData.plc_price}
-          onChange={set('plc_price')}
-          placeholder="0"
-          hint="Preferred location"
-        />
+
+        {isApartment && (
+          <>
+            <NumInput
+              label="Floor Rise"
+              value={formData.floor_rise_price}
+              onChange={set('floor_rise_price')}
+              placeholder="0"
+              hint="Per floor premium"
+            />
+            <NumInput
+              label="PLC"
+              value={formData.plc_price}
+              onChange={set('plc_price')}
+              placeholder="0"
+              hint="Preferred location"
+            />
+          </>
+        )}
       </div>
 
             {/* Computed total */}

@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logAudit } from '@/lib/permissions'
 import { hasDashboardPermission } from '@/lib/dashboardPermissions'
 import { withAuth } from '@/lib/middleware/withAuth'
-import { CampaignService } from '@/services/campaign.service'
+import { CampaignService, assertCampaignOwnership } from '@/services/campaign.service'
 
 function handleCORS(response) {
     response.headers.set('Access-Control-Allow-Origin', '*')
@@ -12,15 +12,6 @@ function handleCORS(response) {
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     return response
 }
-
-// Fields that cannot be changed once a campaign is running/paused
-const IMMUTABLE_WHEN_RUNNING = new Set(['project_id', 'project_ids', 'start_date', 'end_date'])
-
-// Fields that are allowed to change while running/paused
-const ALLOWED_WHEN_RUNNING = new Set([
-    'name', 'description', 'time_start', 'time_end',
-    'credit_cap', 'ai_script', 'call_settings', 'dnd_compliance'
-])
 
 export async function GET(request, { params }) {
     try {
@@ -39,25 +30,14 @@ export async function GET(request, { params }) {
 
         const { id } = await params
 
-        const { data, error } = await admin
-            .from('campaigns')
-            .select('*, project:projects!campaigns_project_id_fkey(id, name), campaign_projects(project_id, project:projects(id, name, description, city, locality, project_status, possession_date))')
-            .eq('id', id)
-            .eq('organization_id', profile.organization_id)
-            .single()
+        await assertCampaignOwnership(admin, id, profile.organization_id)
 
-        if (error || !data) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
-
-        const campaign = {
-            ...data,
-            projects: data.campaign_projects?.map(cp => cp.project).filter(Boolean)
-                || (data.project ? [data.project] : [])
-        }
+        const campaign = await CampaignService.getCampaignById(id, profile.organization_id)
 
         return handleCORS(NextResponse.json({ campaign }))
     } catch (e) {
         console.error('[GET /campaigns/[id]]', e)
-        return handleCORS(NextResponse.json({ error: e.message }, { status: 500 }))
+        return handleCORS(NextResponse.json({ error: e.message }, { status: e.status || 500 }))
     }
 }
 
@@ -76,8 +56,7 @@ export const PUT = withAuth(async (request, context) => {
         if (!campaignId) return handleCORS(NextResponse.json({ error: 'Campaign ID required' }, { status: 400 }))
 
         const admin = createAdminClient()
-        const { data: existing } = await admin.from('campaigns').select('*').eq('id', campaignId).eq('organization_id', profile.organization_id).single()
-        if (!existing) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
+        const existing = await assertCampaignOwnership(admin, campaignId, profile.organization_id)
 
         let body = await request.json()
 
@@ -87,28 +66,14 @@ export const PUT = withAuth(async (request, context) => {
         }
 
         if (['running', 'paused'].includes(existing.status)) {
-            // Block immutable fields
-            const blockedFields = Object.keys(body).filter(k => IMMUTABLE_WHEN_RUNNING.has(k))
-            if (blockedFields.length > 0) {
-                return handleCORS(NextResponse.json({ error: 'FIELD_LOCKED', message: `Cannot change ${blockedFields.join(', ')} on a running/paused campaign`, blocked_fields: blockedFields }, { status: 400 }))
-            }
-
-            // Filter to only allowed fields
-            const filteredBody = {}
-            for (const k of ALLOWED_WHEN_RUNNING) {
-                if (body[k] !== undefined) filteredBody[k] = body[k]
-            }
-
             // Audit sensitive mid-run changes
-            const sensitiveChanged = ['ai_script', 'call_settings'].filter(k => filteredBody[k] !== undefined)
+            const sensitiveChanged = ['ai_script', 'call_settings', 'time_start', 'time_end', 'dnd_compliance', 'credit_cap'].filter(k => body[k] !== undefined)
             if (sensitiveChanged.length > 0) {
                 await logAudit(admin, user.id, profile.full_name, 'campaign.settings_changed_while_running', 'campaign', campaignId, {
                     changed: sensitiveChanged,
                     note: 'Changes take effect on next call'
                 })
             }
-
-            body = filteredBody
         }
 
         // Sync junction table if project_ids is being updated
@@ -125,7 +90,7 @@ export const PUT = withAuth(async (request, context) => {
         return handleCORS(NextResponse.json({ campaign }))
     } catch (e) {
         console.error('[PUT /campaigns/[id]]', e)
-        return handleCORS(NextResponse.json({ error: e.message }, { status: 500 }))
+        return handleCORS(NextResponse.json({ error: e.message }, { status: e.status || 500 }))
     }
 })
 
@@ -146,25 +111,34 @@ export async function DELETE(request, { params }) {
 
         const { id } = await params
 
-        const { data: existing } = await admin.from('campaigns').select('id, status').eq('id', id).eq('organization_id', profile.organization_id).single()
-        if (!existing) return handleCORS(NextResponse.json({ error: 'Campaign not found' }, { status: 404 }))
+        const existing = await assertCampaignOwnership(admin, id, profile.organization_id)
 
         // Block deletion of active campaigns
         if (['running', 'paused'].includes(existing.status)) {
             return handleCORS(NextResponse.json({ error: 'CAMPAIGN_ACTIVE', message: 'Cancel the campaign before deleting' }, { status: 400 }))
         }
 
-        // Check if any campaign_leads history exists
         const { count: enrolledCount } = await admin.from('campaign_leads').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
+        const { count: callCount } = await admin.from('call_logs').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
 
-        if (['completed', 'cancelled'].includes(existing.status) || enrolledCount > 0) {
+        // Hard delete ONLY if scheduled AND no calls have been made
+        // If it's completed/cancelled OR calls were made, we archive to preserve history
+        if (existing.status !== 'scheduled' || callCount > 0) {
             // Soft-delete: preserve history
-            await admin.from('campaigns').update({ status: 'archived', archived_at: new Date().toISOString(), archived_by: user.id, updated_at: new Date().toISOString() }).eq('id', id)
+            await admin.from('campaigns').update({ 
+                status: 'archived', 
+                archived_at: new Date().toISOString(), 
+                archived_by: user.id, 
+                updated_at: new Date().toISOString() 
+            }).eq('id', id)
             await logAudit(admin, user.id, profile.full_name, 'campaign.archived_via_delete', 'campaign', id, { previous_status: existing.status })
             return handleCORS(NextResponse.json({ success: true, archived: true, message: 'Campaign archived (data preserved)' }))
         }
 
-        // Hard delete only for draft/scheduled with no history
+        // Hard delete for scheduled with no history
+        // First delete dependent records that might not cascade
+        await admin.from('campaign_leads').delete().eq('campaign_id', id)
+        await admin.from('call_queue').delete().eq('campaign_id', id)
         await admin.from('call_logs').delete().eq('campaign_id', id)
         await admin.from('campaigns').delete().eq('id', id)
 
@@ -173,7 +147,7 @@ export async function DELETE(request, { params }) {
         return handleCORS(NextResponse.json({ success: true, deleted: true }))
     } catch (e) {
         console.error('[DELETE /campaigns/[id]]', e)
-        return handleCORS(NextResponse.json({ error: e.message }, { status: 500 }))
+        return handleCORS(NextResponse.json({ error: e.message }, { status: e.status || 500 }))
     }
 }
 

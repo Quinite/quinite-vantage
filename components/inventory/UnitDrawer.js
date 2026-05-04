@@ -381,7 +381,7 @@ export default function UnitDrawer({
                   <div className="space-y-1">
                     <Label className="text-[11px] font-bold text-slate-400 uppercase">Transaction</Label>
                     <div className="flex gap-1 bg-slate-100/50 p-0.5 rounded-lg border border-slate-100">
-                        {['sell', 'rent'].map((mode) => (
+                        {['sell', 'rent', 'lease'].map((mode) => (
                           <button
                             key={mode}
                             type="button"

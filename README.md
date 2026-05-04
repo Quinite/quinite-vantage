@@ -116,7 +116,7 @@ The database consists of 20+ tables organized into modules:
 - **Calling**: `call_logs`, `call_queue`
 - **Inventory**: `properties`, `property_images`, `property_features`
 - **Billing**: `subscriptions`, `subscription_plans`, `invoices`, `payment_methods`
-- **System**: `audit_logs`, `usage_logs`, `websocket_sessions`
+- **System**: `audit_logs`, `usage_logs`
 
 See [Database Schema Documentation](./docs/setup/DATABASE.md) for complete details.
 

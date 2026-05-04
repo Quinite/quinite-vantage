@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import {
-    Building2, MapPin,
+    Building2, MapPin, LayoutGrid,
     Eye, Megaphone, MoreHorizontal, Edit,
     Globe, EyeOff, Archive, RefreshCw,
     FileText, Download, Copy,
@@ -54,7 +54,7 @@ function resolvePriceRange(project) {
 
 // ── Card ──────────────────────────────────────────────────────────────────
 export default function ProjectCard({
-    project, onEdit, onDelete, onView, onStartCampaign,
+    project, onEdit, onDelete, onView, onInventory,
     onToggleVisibility, deleting, isArchived, onRestore,
     currency = 'INR', locale = 'en-IN',
 }) {
@@ -209,25 +209,40 @@ export default function ProjectCard({
                 <div className="flex-1" />
 
                 {/* ── Actions ───────────────────────────────────────────── */}
-                <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+                <div className="flex items-center gap-1.5 pt-3 border-t border-gray-100">
                     <Button
                         variant="outline"
                         size="sm"
-                        className="flex-1 h-8 text-xs gap-1.5"
+                        className="flex-1 h-8 text-xs px-2 gap-1"
                         onClick={() => onView(project)}
                     >
                         <Eye className="w-3.5 h-3.5" />
                         View
                     </Button>
                     <Button
+                        variant="default"
                         size="sm"
-                        className="flex-1 h-8 text-xs gap-1.5"
-                        onClick={() => onStartCampaign(project)}
-                        disabled={!!(project.is_draft || isArchived)}
+                        className="flex-1 h-8 text-xs px-2 gap-1 bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0"
+                        onClick={() => onInventory?.(project)}
+                        disabled={!!isArchived}
                     >
-                        <Megaphone className="w-3.5 h-3.5" />
-                        Campaign
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        Inventory
                     </Button>
+                    {project.brochure_url && (
+                        <Button
+                            size="sm"
+                            className="flex-1 h-8 text-xs px-2 gap-1 bg-[#25D366] hover:bg-[#128C7E] text-white border-0 shadow-sm"
+                            onClick={() => {
+                                const msg = encodeURIComponent(`Hi! Check out *${project.name}*:\n${project.brochure_url}`)
+                                window.open(`https://wa.me/?text=${msg}`, '_blank')
+                            }}
+                            disabled={!!isArchived}
+                        >
+                            <WhatsAppIcon className="w-3.5 h-3.5" />
+                            Share
+                        </Button>
+                    )}
 
                     {/* ⋯ Overflow actions */}
                     <DropdownMenu>
@@ -237,34 +252,6 @@ export default function ProjectCard({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                            {project.brochure_url && (
-                                <>
-                                    <DropdownMenuItem asChild>
-                                        <a href={project.brochure_url} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
-                                            <Download className="w-3.5 h-3.5 text-blue-500" />
-                                            Download Brochure
-                                        </a>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => {
-                                        navigator.clipboard.writeText(project.brochure_url)
-                                        toast.success('Brochure link copied!')
-                                    }}>
-                                        <Copy className="w-3.5 h-3.5 mr-2 text-slate-400" />
-                                        Copy Brochure Link
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            const msg = encodeURIComponent(`Hi! Please find the brochure for *${project.name}*:\n${project.brochure_url}`)
-                                            window.open(`https://wa.me/?text=${msg}`, '_blank')
-                                        }}
-                                        className="text-[#25D366] focus:text-[#128C7E] focus:bg-green-50"
-                                    >
-                                        <WhatsAppIcon className="w-3.5 h-3.5 mr-2" />
-                                        Share via WhatsApp
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                </>
-                            )}
                             <DropdownMenuItem
                                 disabled={!canEdit || !!isArchived}
                                 onClick={() => canEdit && !isArchived && onEdit(project)}

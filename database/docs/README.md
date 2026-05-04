@@ -27,7 +27,7 @@ This database powers the Quinite Vantage CRM and Real Estate Management platform
 | **Inventory** | `projects`, `properties`, `property_*` | Real estate inventory management |
 | **Calling** | `call_logs`, `campaigns`, `call_*`, `conversation_insights` | AI calling and campaign management |
 | **Billing** | `subscriptions`, `invoices`, `payment_methods`, `subscription_plans` | Subscription and billing |
-| **System** | `audit_logs`, `notifications`, `websocket_servers` | System operations |
+| **System** | `audit_logs`, `notifications` | System operations |
 
 ## Key Features
 

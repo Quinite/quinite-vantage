@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { hasDashboardPermission } from '@/lib/dashboardPermissions'
 import { logAudit } from '@/lib/permissions'
 import { corsJSON } from '@/lib/cors'
+import { assertCampaignOwnership } from '@/services/campaign.service'
 
 export async function POST(request, { params }) {
     try {
@@ -19,11 +20,11 @@ export async function POST(request, { params }) {
         const { data: profile } = await admin.from('profiles').select('organization_id').eq('id', user.id).single()
         if (!profile?.organization_id) return corsJSON({ error: 'No organization' }, { status: 403 })
 
-        const { data: campaign } = await admin.from('campaigns').select('id, status').eq('id', campaignId).eq('organization_id', profile.organization_id).single()
+        const campaign = await assertCampaignOwnership(admin, campaignId, profile.organization_id)
         if (!campaign) return corsJSON({ error: 'Campaign not found' }, { status: 404 })
 
-        if (!['completed', 'cancelled'].includes(campaign.status)) {
-            return corsJSON({ error: 'CAMPAIGN_NOT_ARCHIVABLE', message: `Only completed or cancelled campaigns can be archived. Current status: ${campaign.status}` }, { status: 400 })
+        if (!['completed', 'cancelled', 'failed'].includes(campaign.status)) {
+            return corsJSON({ error: 'CAMPAIGN_NOT_ARCHIVABLE', message: `Only completed, cancelled, or failed campaigns can be archived. Current status: ${campaign.status}` }, { status: 409 })
         }
 
         await admin.from('campaigns')

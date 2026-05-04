@@ -3,15 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { hasDashboardPermission } from '@/lib/dashboardPermissions'
 import { logAudit } from '@/lib/permissions'
 import { corsJSON } from '@/lib/cors'
-import { CampaignService } from '@/services/campaign.service'
+import { CampaignService, assertCampaignOwnership, validateCampaignStartConditions } from '@/services/campaign.service'
 import { requireActiveSubscription } from '@/lib/middleware/subscription'
 
-function getISTDateTime() {
-    const now = new Date()
-    const currentDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    const currentTime = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false }).substring(0, 5)
-    return { currentDate, currentTime }
-}
 
 export async function POST(request, { params }) {
     try {
@@ -42,27 +36,17 @@ export async function POST(request, { params }) {
             return corsJSON({ error: 'CAMPAIGN_NOT_PAUSED', message: `Campaign is ${campaign.status}, not paused` }, { status: 400 })
         }
 
-        // Time window + DND re-validation
-        const { currentDate, currentTime } = getISTDateTime()
-        if (campaign.start_date && campaign.end_date) {
-            if (currentDate < campaign.start_date || currentDate > campaign.end_date) {
-                return corsJSON({ error: 'TIME_WINDOW_VIOLATION', message: 'Outside campaign date range' }, { status: 400 })
-            }
-        }
-        if (campaign.time_start && campaign.time_end) {
-            if (currentTime < campaign.time_start || currentTime > campaign.time_end) {
-                return corsJSON({ error: 'TIME_WINDOW_VIOLATION', message: 'Outside campaign time window' }, { status: 400 })
-            }
-        }
-        if (campaign.dnd_compliance !== false && (currentTime < '09:00' || currentTime > '21:00')) {
-            return corsJSON({ error: 'DND_HOURS_VIOLATION', message: 'Cannot resume outside 9:00–21:00 IST' }, { status: 400 })
-        }
+        // ── Credit + org fetch ────────────────────────────────────────────────
+        const [{ data: credits }, { data: org }] = await Promise.all([
+            admin.from('call_credits').select('balance').eq('organization_id', profile.organization_id).single(),
+            admin.from('organizations').select('subscription_status').eq('id', profile.organization_id).single(),
+        ])
 
-        // Credit check
-        const { data: credits } = await admin.from('call_credits').select('balance').eq('organization_id', profile.organization_id).single()
-        if (!credits || credits.balance < 1.0) {
-            return corsJSON({ error: 'INSUFFICIENT_CREDITS', balance: credits?.balance || 0 }, { status: 400 })
-        }
+        // ── Shared validation (dates, time window, DND, credits, subscription) ─
+        const validation = validateCampaignStartConditions(campaign, credits?.balance, org?.subscription_status)
+        if (!validation.valid) return corsJSON({ error: validation.error, code: validation.code }, { status: 422 })
+
+        // ── Credit cap guard ──────────────────────────────────────────────────
         if (campaign.credit_cap != null && (campaign.credit_spent || 0) >= campaign.credit_cap) {
             return corsJSON({ error: 'CREDIT_CAP_EXHAUSTED' }, { status: 400 })
         }

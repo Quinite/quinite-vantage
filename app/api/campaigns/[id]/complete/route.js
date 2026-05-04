@@ -40,11 +40,16 @@ export async function POST(request, { params }) {
             return corsJSON({ error: 'LEADS_STILL_PENDING', pending_count: pendingCount, message: `${pendingCount} leads still pending. Pass force=true to complete anyway.` }, { status: 400 })
         }
 
-        // Clean up remaining queue items
+        // Clean up remaining queue items (including those waiting for retries)
         await admin.from('call_queue')
-            .update({ status: 'failed', last_error: 'campaign_manually_completed', updated_at: new Date().toISOString() })
+            .update({ 
+                status: 'failed', 
+                last_error: 'campaign_manually_completed', 
+                next_retry_at: null, // Clear retry timer
+                updated_at: new Date().toISOString() 
+            })
             .eq('campaign_id', campaignId)
-            .eq('status', 'queued')
+            .neq('status', 'completed') // Neutralize everything that isn't finished
 
         // Finalize stats and mark complete
         await CampaignService.finalizeStats(campaignId)

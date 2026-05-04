@@ -220,33 +220,6 @@ export function useArchiveCampaign() {
     })
 }
 
-export function useRestoreCampaign() {
-    const qc = useQueryClient()
-    return useMutation({
-        mutationFn: async (id) => {
-            const res = await fetch(`/api/campaigns/${id}/restore`, { method: 'POST' })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || 'Failed to restore')
-            return data
-        },
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign restored to draft') },
-        onError: (e) => toast.error(e.message)
-    })
-}
-
-export function useRestartCampaign() {
-    const qc = useQueryClient()
-    return useMutation({
-        mutationFn: async (id) => {
-            const res = await fetch(`/api/campaigns/${id}/restart`, { method: 'POST' })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message || data.error || 'Failed to restart')
-            return data
-        },
-        onSuccess: (_, id) => { invalidateCampaign(qc, id); qc.invalidateQueries({ queryKey: ['campaign-leads', id] }); toast.success('Campaign restarted — ready to start fresh') },
-        onError: (e) => toast.error(e.message)
-    })
-}
 
 export function useEnrollLeads(campaignId) {
     const qc = useQueryClient()
@@ -303,5 +276,92 @@ export function useOptOutLead(campaignId) {
             toast.success('Lead opted out')
         },
         onError: (e) => toast.error(e.message)
+    })
+}
+
+export function useCampaignCallLogs(campaignId, filters = {}) {
+    return useQuery({
+        queryKey: ['campaign-call-logs', campaignId, filters],
+        queryFn: async () => {
+            const params = new URLSearchParams({ page: filters.page || 1, limit: filters.limit || 20 })
+            if (filters.status) params.set('status', filters.status)
+            if (filters.transferred) params.set('transferred', 'true')
+            const res = await fetch(`/api/campaigns/${campaignId}/logs?${params}`)
+            if (!res.ok) throw new Error('Failed to fetch call logs')
+            return res.json()
+        },
+        enabled: !!campaignId,
+        staleTime: 30 * 1000,
+    })
+}
+
+export function useCampaignAnalytics(campaignId) {
+    return useQuery({
+        queryKey: ['campaign-analytics', campaignId],
+        queryFn: async () => {
+            const res = await fetch(`/api/campaigns/${campaignId}/logs?limit=1000`)
+            if (!res.ok) throw new Error('Failed to fetch logs for analytics')
+            const data = await res.json()
+            const logs = data.logs || []
+
+            const byDate = {}
+            for (const log of logs) {
+                const date = log.created_at?.slice(0, 10)
+                if (!date) continue
+                if (!byDate[date]) byDate[date] = { date, total: 0, answered: 0, transferred: 0, sentimentSum: 0, sentimentCount: 0 }
+                byDate[date].total++
+                if (['called', 'completed'].includes(log.call_status)) byDate[date].answered++
+                if (log.transferred) byDate[date].transferred++
+                if (log.sentiment_score != null) { byDate[date].sentimentSum += log.sentiment_score; byDate[date].sentimentCount++ }
+            }
+
+            const dailyData = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
+                ...d,
+                avgSentiment: d.sentimentCount > 0 ? +(d.sentimentSum / d.sentimentCount).toFixed(2) : null,
+                transferRate: d.total > 0 ? +(d.transferred / d.total * 100).toFixed(1) : 0,
+            }))
+
+            const interestCounts = { high: 0, medium: 0, low: 0, none: 0 }
+            for (const log of logs) {
+                const lvl = log.interest_level?.toLowerCase()
+                if (lvl && interestCounts[lvl] !== undefined) interestCounts[lvl]++
+                else interestCounts.none++
+            }
+
+            const outcomeCounts = { answered: 0, no_answer: 0, failed: 0 }
+            for (const log of logs) {
+                if (['called', 'completed'].includes(log.call_status)) outcomeCounts.answered++
+                else if (log.call_status === 'no_answer') outcomeCounts.no_answer++
+                else outcomeCounts.failed++
+            }
+
+            return { dailyData, interestCounts, outcomeCounts, totalLogs: logs.length }
+        },
+        enabled: !!campaignId,
+        staleTime: 2 * 60 * 1000,
+    })
+}
+
+export function useCampaignPipelineMovement(campaignId) {
+    return useQuery({
+        queryKey: ['campaign-pipeline-movement', campaignId],
+        queryFn: async () => {
+            const res = await fetch(`/api/campaigns/${campaignId}/logs?limit=500`)
+            if (!res.ok) throw new Error('Failed to fetch logs')
+            const data = await res.json()
+            const logs = data.logs || []
+            return logs
+                .filter(l => l.interest_level && l.lead)
+                .map(l => ({
+                    leadId: l.lead_id,
+                    leadName: l.lead?.name,
+                    interestLevel: l.interest_level,
+                    sentimentScore: l.sentiment_score,
+                    callDate: l.created_at,
+                    callDuration: l.duration,
+                }))
+        },
+        enabled: !!campaignId,
+        staleTime: 60 * 1000,
     })
 }

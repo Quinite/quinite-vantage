@@ -16,7 +16,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Edit, Trash2, Eye, Megaphone, Building2, MapPin, Lock, Globe, Archive, RefreshCw, FileText, Download, Copy } from "lucide-react"
+import { Edit, Trash2, Eye, Megaphone, Building2, MapPin, Lock, Globe, Archive, RefreshCw, FileText, Download, Copy, LayoutGrid } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from 'react-hot-toast'
 import { usePermission } from '@/contexts/PermissionContext'
@@ -35,8 +35,8 @@ export default function ProjectList({
     onEdit,
     onDelete,
     onView,
-    onStartCampaign,
-    onToggleVisibility, // Add this
+    onInventory,
+    onToggleVisibility, 
     deletingId,
 
     page = 1,
@@ -176,66 +176,43 @@ export default function ProjectList({
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex items-center justify-end gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => onStartCampaign(project)}
-                                                disabled={project.is_draft || project.project_status === 'draft' || isArchived}
-                                                className="h-8 px-2 text-primary hover:text-primary hover:bg-primary/10 disabled:opacity-30"
-                                                title="Start Campaign"
-                                            >
-                                                <Megaphone className="w-3.5 h-3.5" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => onView(project)}
-                                                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                                                title="View Details"
-                                            >
-                                                <Eye className="w-3.5 h-3.5" />
-                                            </Button>
+                                             <Button
+                                                 variant="ghost"
+                                                 size="sm"
+                                                 onClick={() => onView(project)}
+                                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                                 title="View Details"
+                                             >
+                                                 <Eye className="w-3.5 h-3.5" />
+                                             </Button>
 
-                                            {project.brochure_url && (
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/50"
-                                                            title="Share Brochure"
-                                                        >
-                                                            <FileText className="w-3.5 h-3.5" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="w-48">
-                                                        <DropdownMenuItem asChild>
-                                                            <a href={project.brochure_url} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
-                                                                <Download className="w-3.5 h-3.5 text-blue-500" />
-                                                                Download PDF
-                                                            </a>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => {
-                                                            navigator.clipboard.writeText(project.brochure_url)
-                                                            toast.success('Brochure link copied!')
-                                                        }}>
-                                                            <Copy className="w-3.5 h-3.5 mr-2 text-slate-400" />
-                                                            Copy Link
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem
-                                                            onClick={() => {
-                                                                const msg = encodeURIComponent(`Hi! Please find the brochure for *${project.name}*:\n${project.brochure_url}`)
-                                                                window.open(`https://wa.me/?text=${msg}`, '_blank')
-                                                            }}
-                                                            className="text-[#25D366] focus:text-[#128C7E] focus:bg-green-50"
-                                                        >
-                                                            <WhatsAppIcon className="w-3.5 h-3.5 mr-2" />
-                                                            Share via WhatsApp
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            )}
+                                             <Button
+                                                 variant="ghost"
+                                                 size="sm"
+                                                 onClick={() => onInventory?.(project)}
+                                                 disabled={isArchived}
+                                                 className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-30"
+                                                 title="Manage Inventory"
+                                             >
+                                                 <LayoutGrid className="w-3.5 h-3.5" />
+                                             </Button>
+
+                                             {project.brochure_url && (
+                                                 <Button
+                                                     variant="ghost"
+                                                     size="sm"
+                                                     onClick={() => {
+                                                         const msg = encodeURIComponent(`Hi! Check out *${project.name}*:\n${project.brochure_url}`)
+                                                         window.open(`https://wa.me/?text=${msg}`, '_blank')
+                                                     }}
+                                                     disabled={isArchived}
+                                                     className="h-8 w-8 p-0 text-[#25D366] hover:text-[#128C7E] hover:bg-green-50 disabled:opacity-30"
+                                                     title="Share via WhatsApp"
+                                                 >
+                                                     <WhatsAppIcon className="w-3.5 h-3.5" />
+                                                 </Button>
+                                             )}
+
 
                                             <PermissionTooltip
                                                 hasPermission={canEdit}

@@ -9,8 +9,7 @@ export async function GET() {
         const adminClient = createAdminClient()
         const tablesToCheck = [
             'organizations', 'profiles', 'projects', 'campaigns',
-            'leads', 'call_logs', 'audit_logs', 'impersonation_sessions',
-            'websocket_servers'
+            'leads', 'call_logs', 'audit_logs', 'impersonation_sessions'
         ]
 
         const stats = {

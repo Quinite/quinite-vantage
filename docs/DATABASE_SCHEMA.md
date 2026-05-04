@@ -875,20 +875,4 @@ create table public.usage_logs (
 ) TABLESPACE pg_default;
 ```
 
-## 33. websocket_servers
 
-```sql
-create table public.websocket_servers (
-  id uuid not null default gen_random_uuid (),
-  name text not null,
-  url text not null,
-  is_active boolean null default true,
-  status text null default 'pending'::text,
-  last_verified_at timestamp with time zone null,
-  priority integer null default 0,
-  created_at timestamp with time zone null default now(),
-  updated_at timestamp with time zone null default now(),
-  constraint websocket_servers_pkey primary key (id),
-  constraint websocket_servers_url_key unique (url)
-) TABLESPACE pg_default;
-```

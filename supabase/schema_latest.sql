@@ -117,7 +117,7 @@ CREATE TABLE public.call_logs (
   summary text,
   call_cost numeric DEFAULT 0,
   ai_metadata jsonb DEFAULT '{}'::jsonb,
-  priority_score integer,
+  usage_telemetry jsonb DEFAULT '{}'::jsonb,
   CONSTRAINT call_logs_pkey PRIMARY KEY (id),
   CONSTRAINT call_logs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT call_logs_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
@@ -169,6 +169,14 @@ CREATE TABLE public.campaign_leads (
   CONSTRAINT campaign_leads_enrolled_by_fkey FOREIGN KEY (enrolled_by) REFERENCES public.profiles(id),
   CONSTRAINT campaign_leads_call_log_id_fkey FOREIGN KEY (call_log_id) REFERENCES public.call_logs(id)
 );
+CREATE TABLE public.campaign_projects (
+  campaign_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT campaign_projects_pkey PRIMARY KEY (campaign_id, project_id),
+  CONSTRAINT campaign_projects_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id),
+  CONSTRAINT campaign_projects_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
+);
 CREATE TABLE public.campaigns (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   organization_id uuid,
@@ -200,20 +208,12 @@ CREATE TABLE public.campaigns (
   paused_at timestamp with time zone,
   completed_at timestamp with time zone,
   total_enrolled integer NOT NULL DEFAULT 0,
-  project_ids uuid[],
+  project_ids ARRAY,
   CONSTRAINT campaigns_pkey PRIMARY KEY (id),
   CONSTRAINT campaigns_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT campaigns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
   CONSTRAINT campaigns_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT campaigns_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES public.profiles(id)
-);
-CREATE TABLE public.campaign_projects (
-  campaign_id uuid NOT NULL,
-  project_id uuid NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT campaign_projects_pkey PRIMARY KEY (campaign_id, project_id),
-  CONSTRAINT campaign_projects_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id) ON DELETE CASCADE,
-  CONSTRAINT campaign_projects_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE
 );
 CREATE TABLE public.country_pricing (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -433,6 +433,7 @@ CREATE TABLE public.leads (
   opted_out_at timestamp with time zone,
   opted_out_reason text,
   do_not_call boolean NOT NULL DEFAULT false,
+  call_failed_at timestamp with time zone,
   CONSTRAINT leads_pkey PRIMARY KEY (id),
   CONSTRAINT leads_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT leads_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
@@ -453,6 +454,18 @@ CREATE TABLE public.notifications (
   metadata jsonb DEFAULT '{}'::jsonb,
   CONSTRAINT notifications_pkey PRIMARY KEY (id),
   CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.org_pipeline_triggers (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL,
+  trigger_key text NOT NULL,
+  is_enabled boolean DEFAULT true,
+  target_stage_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT org_pipeline_triggers_pkey PRIMARY KEY (id),
+  CONSTRAINT org_pipeline_triggers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
+  CONSTRAINT org_pipeline_triggers_target_stage_id_fkey FOREIGN KEY (target_stage_id) REFERENCES public.pipeline_stages(id)
 );
 CREATE TABLE public.organizations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -531,7 +544,7 @@ CREATE TABLE public.pipeline_automations (
   is_active boolean NOT NULL DEFAULT true,
   trigger_type text NOT NULL CHECK (trigger_type = ANY (ARRAY['stage_enter'::text, 'stage_exit'::text, 'stale_in_stage'::text, 'ai_call_outcome'::text, 'interest_level_change'::text, 'score_threshold'::text, 'task_completed'::text, 'call_logged'::text])),
   trigger_config jsonb NOT NULL DEFAULT '{}'::jsonb,
-  action_type text NOT NULL CHECK (action_type = ANY (ARRAY['move_stage'::text, 'assign_agent'::text, 'create_task'::text, 'add_tag'::text])),
+  action_type text NOT NULL CHECK (action_type = ANY (ARRAY['move_stage'::text, 'assign_agent'::text, 'create_task'::text, 'add_tag'::text, 'show_site_visit_form'::text, 'show_site_visit_outcome_form'::text])),
   action_config jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_by uuid,
   created_at timestamp with time zone DEFAULT now(),
@@ -750,13 +763,15 @@ CREATE TABLE public.tasks (
   project_id uuid,
   updated_by uuid,
   updated_at timestamp with time zone DEFAULT now(),
+  unit_id uuid,
   CONSTRAINT tasks_pkey PRIMARY KEY (id),
   CONSTRAINT tasks_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT tasks_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id),
   CONSTRAINT tasks_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id),
   CONSTRAINT tasks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT tasks_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES auth.users(id),
-  CONSTRAINT tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
+  CONSTRAINT tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
+  CONSTRAINT tasks_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id)
 );
 CREATE TABLE public.towers (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -765,7 +780,6 @@ CREATE TABLE public.towers (
   name text NOT NULL,
   total_floors integer NOT NULL DEFAULT 10,
   units_per_floor integer NOT NULL DEFAULT 4,
-  description text,
   metadata jsonb DEFAULT '{}'::jsonb,
   order_index integer DEFAULT 0,
   created_by uuid,
@@ -795,6 +809,7 @@ CREATE TABLE public.unit_configs (
   updated_by uuid,
   metadata jsonb DEFAULT '{}'::jsonb,
   amenities jsonb NOT NULL DEFAULT '[]'::jsonb,
+  price_undisclosed boolean DEFAULT false,
   CONSTRAINT unit_configs_pkey PRIMARY KEY (id),
   CONSTRAINT unit_configs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
   CONSTRAINT unit_configs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id),
@@ -838,6 +853,7 @@ CREATE TABLE public.units (
   updated_by uuid,
   is_archived boolean DEFAULT false,
   amenities jsonb,
+  price_undisclosed boolean DEFAULT false,
   CONSTRAINT units_pkey PRIMARY KEY (id),
   CONSTRAINT properties_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT properties_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
@@ -886,16 +902,4 @@ CREATE TABLE public.website_templates (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT website_templates_pkey PRIMARY KEY (id),
   CONSTRAINT website_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
-);
-CREATE TABLE public.websocket_servers (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  url text NOT NULL UNIQUE,
-  is_active boolean DEFAULT true,
-  status text DEFAULT 'pending'::text,
-  last_verified_at timestamp with time zone,
-  priority integer DEFAULT 0,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT websocket_servers_pkey PRIMARY KEY (id)
-);
+);

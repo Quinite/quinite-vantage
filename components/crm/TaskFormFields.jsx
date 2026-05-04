@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Calendar as CalendarIcon, Clock, User, Building2, X, Lock, ChevronsUpDown, Check, Home, Search } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, User, Building2, Lock, ChevronsUpDown, Check, Home, Search } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils/currency'
 
 import { Button } from '@/components/ui/button'
@@ -75,69 +75,123 @@ function LeadSelector({ value, valueLabel, onChange, disabled }) {
     const [query, setQuery]     = useState('')
     const [results, setResults] = useState([])
     const [open, setOpen]       = useState(false)
+    const [loading, setLoading] = useState(false)
     const timer = useRef(null)
 
     useEffect(() => {
-        if (!query.trim()) { setResults([]); return }
+        if (!open && !query.trim()) { setResults([]); return }
+        
         clearTimeout(timer.current)
         timer.current = setTimeout(async () => {
+            setLoading(true)
             try {
-                const res = await fetch(`/api/leads?search=${encodeURIComponent(query)}&limit=8`)
+                const res = await fetch(`/api/leads?search=${encodeURIComponent(query)}&limit=10`)
                 const json = await res.json()
                 setResults(json.leads || json.data || [])
             } catch { setResults([]) }
+            finally { setLoading(false) }
         }, 300)
         return () => clearTimeout(timer.current)
-    }, [query])
-
-    if (value && valueLabel) {
-        return (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-blue-50 border-blue-200">
-                <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                <span className="text-sm font-medium text-blue-800 flex-1 truncate">{valueLabel}</span>
-                {!disabled && (
-                    <button
-                        type="button"
-                        onClick={() => onChange(null, null)}
-                        className="text-blue-400 hover:text-blue-600 shrink-0"
-                    >
-                        <X className="h-3.5 w-3.5" />
-                    </button>
-                )}
-            </div>
-        )
-    }
+    }, [query, open])
 
     return (
-        <div className="relative">
-            <Input
-                value={query}
-                onChange={e => { setQuery(e.target.value); setOpen(true) }}
-                onFocus={() => setOpen(true)}
-                onBlur={() => setTimeout(() => setOpen(false), 150)}
-                placeholder="Search leads... (optional)"
-                className="h-9 text-sm"
-                disabled={disabled}
-            />
-            {open && results.length > 0 && (
-                <div 
-                    className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto"
-                    onWheel={e => e.stopPropagation()}
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    disabled={disabled}
+                    className={cn(
+                        'w-full flex items-center justify-between h-9 px-3 rounded-md border border-input bg-white text-sm transition-colors',
+                        'hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                        !value && 'text-muted-foreground'
+                    )}
                 >
-                    {results.map(lead => (
-                        <button
-                            key={lead.id}
-                            type="button"
-                            onMouseDown={() => { onChange(lead.id, lead.name); setQuery(''); setOpen(false) }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
-                        >
-                            <span className="font-medium">{lead.name}</span>
-                            {lead.email && <span className="text-muted-foreground ml-2 text-xs">{lead.email}</span>}
-                        </button>
-                    ))}
+                    <span className="flex items-center gap-2 truncate">
+                        <User className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                        {value && valueLabel ? valueLabel : 'Link to a lead... (optional)'}
+                    </span>
+                    <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground opacity-50" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                <div className="flex flex-col rounded-md bg-popover text-popover-foreground shadow-xl border">
+                    <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-40" />
+                        <input
+                            className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+                            placeholder="Search lead name or email..."
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    <div 
+                        className="max-h-[220px] overflow-y-auto scrollbar-thin"
+                        onWheel={e => e.stopPropagation()}
+                    >
+                        {loading ? (
+                            <div className="py-4 text-center text-sm text-muted-foreground">Searching leads...</div>
+                        ) : (
+                            <div className="p-1">
+                                <button
+                                    type="button"
+                                    onClick={() => { onChange(null, null); setOpen(false); setQuery('') }}
+                                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer text-muted-foreground hover:bg-slate-100"
+                                >
+                                    <span>None</span>
+                                    {!value && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                                </button>
+                                {results.length === 0 && query.trim() && (
+                                    <div className="py-4 text-center text-xs text-muted-foreground">No leads found</div>
+                                )}
+                                {results.map(lead => (
+                                    <button
+                                        key={lead.id}
+                                        type="button"
+                                        onClick={() => {
+                                            onChange(lead.id, lead.name)
+                                            setOpen(false)
+                                            setQuery('')
+                                        }}
+                                        className={cn(
+                                            "w-full flex flex-col items-start gap-0 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-indigo-50 transition-colors text-left",
+                                            value === lead.id && "bg-indigo-50"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-between w-full min-w-0">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="font-medium truncate text-slate-900">
+                                                    {lead.name}
+                                                </span>
+                                                {lead.stage && (
+                                                    <span 
+                                                        className="px-2 py-[0px] rounded-full text-[7px] font-black uppercase tracking-wider border"
+                                                        style={{ 
+                                                            backgroundColor: `${lead.stage.color}15`, 
+                                                            color: lead.stage.color,
+                                                            borderColor: `${lead.stage.color}30`
+                                                        }}
+                                                    >
+                                                        {lead.stage.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {value === lead.id && <Check className="w-3.5 h-3.5 shrink-0 text-indigo-600" />}
+                                        </div>
+                                        {(lead.phone || lead.mobile || lead.email) && (
+                                            <span className="text-[10px] -mt-0.5 text-muted-foreground truncate">
+                                                {lead.phone || lead.mobile || lead.email}
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            )}
-        </div>
+            </PopoverContent>
+        </Popover>
     )
 }
 
@@ -147,69 +201,107 @@ function ProjectSelector({ value, valueLabel, onChange, disabled }) {
     const [query, setQuery]     = useState('')
     const [results, setResults] = useState([])
     const [open, setOpen]       = useState(false)
+    const [loading, setLoading] = useState(false)
     const timer = useRef(null)
 
     useEffect(() => {
-        if (!query.trim()) { setResults([]); return }
+        if (!open && !query.trim()) { setResults([]); return }
+        
         clearTimeout(timer.current)
         timer.current = setTimeout(async () => {
+            setLoading(true)
             try {
-                const res = await fetch(`/api/projects?search=${encodeURIComponent(query)}&limit=8`)
+                const res = await fetch(`/api/projects?search=${encodeURIComponent(query)}&limit=10`)
                 const json = await res.json()
                 setResults(json.projects || json.data || [])
             } catch { setResults([]) }
+            finally { setLoading(false) }
         }, 300)
         return () => clearTimeout(timer.current)
-    }, [query])
-
-    if (value && valueLabel) {
-        return (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-purple-50 border-purple-200">
-                <Building2 className="h-3.5 w-3.5 text-purple-500 shrink-0" />
-                <span className="text-sm font-medium text-purple-800 flex-1 truncate">{valueLabel}</span>
-                {!disabled && (
-                    <button
-                        type="button"
-                        onClick={() => onChange(null, null)}
-                        className="text-purple-400 hover:text-purple-600 shrink-0"
-                    >
-                        <X className="h-3.5 w-3.5" />
-                    </button>
-                )}
-            </div>
-        )
-    }
+    }, [query, open])
 
     return (
-        <div className="relative">
-            <Input
-                value={query}
-                onChange={e => { setQuery(e.target.value); setOpen(true) }}
-                onFocus={() => setOpen(true)}
-                onBlur={() => setTimeout(() => setOpen(false), 150)}
-                placeholder="Search projects... (optional)"
-                className="h-9 text-sm"
-                disabled={disabled}
-            />
-            {open && results.length > 0 && (
-                <div 
-                    className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto"
-                    onWheel={e => e.stopPropagation()}
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    disabled={disabled}
+                    className={cn(
+                        'w-full flex items-center justify-between h-9 px-3 rounded-md border border-input bg-white text-sm transition-colors',
+                        'hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
+                        !value && 'text-muted-foreground'
+                    )}
                 >
-                    {results.map(proj => (
-                        <button
-                            key={proj.id}
-                            type="button"
-                            onMouseDown={() => { onChange(proj.id, proj.name); setQuery(''); setOpen(false) }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
-                        >
-                            <span className="font-medium">{proj.name}</span>
-                            {(proj.city || proj.address) && <span className="text-muted-foreground ml-2 text-xs">{proj.city || proj.address}</span>}
-                        </button>
-                    ))}
+                    <span className="flex items-center gap-2 truncate">
+                        <Building2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                        {value && valueLabel ? valueLabel : 'Select project... (optional)'}
+                    </span>
+                    <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground opacity-50" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                <div className="flex flex-col rounded-md bg-popover text-popover-foreground shadow-xl border">
+                    <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-40" />
+                        <input
+                            className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+                            placeholder="Search project name..."
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    <div 
+                        className="max-h-[220px] overflow-y-auto scrollbar-thin"
+                        onWheel={e => e.stopPropagation()}
+                    >
+                        {loading ? (
+                            <div className="py-4 text-center text-sm text-muted-foreground">Searching projects...</div>
+                        ) : (
+                            <div className="p-1">
+                                <button
+                                    type="button"
+                                    onClick={() => { onChange(null, null); setOpen(false); setQuery('') }}
+                                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer text-muted-foreground hover:bg-slate-100"
+                                >
+                                    <span>None</span>
+                                    {!value && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                                </button>
+                                {results.length === 0 && query.trim() && (
+                                    <div className="py-4 text-center text-xs text-muted-foreground">No projects found</div>
+                                )}
+                                {results.map(proj => (
+                                    <button
+                                        key={proj.id}
+                                        type="button"
+                                        onClick={() => {
+                                            onChange(proj.id, proj.name)
+                                            setOpen(false)
+                                            setQuery('')
+                                        }}
+                                        className={cn(
+                                            "w-full flex flex-col items-start gap-0 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-indigo-50 transition-colors text-left",
+                                            value === proj.id && "bg-indigo-50"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-between w-full min-w-0">
+                                            <span className="font-medium truncate text-slate-900">
+                                                {proj.name}
+                                            </span>
+                                            {value === proj.id && <Check className="w-3.5 h-3.5 shrink-0 text-indigo-600" />}
+                                        </div>
+                                        {(proj.city || proj.address) && (
+                                            <span className="text-[10px] text-muted-foreground -mt-1 truncate">{proj.city || proj.address}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            )}
-        </div>
+            </PopoverContent>
+        </Popover>
     )
 }
 
@@ -302,15 +394,18 @@ function UnitSelector({ value, valueLabel, onChange, disabled, projectId }) {
                                                 setOpen(false)
                                                 setQuery('')
                                             }}
-                                            className="w-full flex flex-col items-start gap-0.5 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent transition-colors text-left"
+                                            className={cn(
+                                                "w-full flex flex-col items-start gap-0 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent transition-colors text-left",
+                                                value === unit.id && "bg-accent"
+                                            )}
                                         >
-                                            <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center justify-between w-full min-w-0">
                                                 <span className="font-medium truncate text-slate-900">
                                                     {label}
                                                 </span>
-                                                {details && <span className="text-[10px] text-muted-foreground">{details}</span>}
+                                                {value === unit.id && <Check className="w-3.5 h-3.5 shrink-0 text-indigo-600" />}
                                             </div>
-                                            {value === unit.id && <Check className="w-3.5 h-3.5 shrink-0 text-indigo-600" />}
+                                            {details && <span className="text-[10px] -mt-0.5 text-muted-foreground truncate">{details}</span>}
                                         </button>
                                     )
                                 })}
@@ -323,56 +418,6 @@ function UnitSelector({ value, valueLabel, onChange, disabled, projectId }) {
     )
 }
 
-function UnitPreview({ unit, onRemove }) {
-    if (!unit) return null
-    
-    const price = unit.total_price || unit.base_price || 0
-    const area = unit.carpet_area || unit.built_up_area
-
-    return (
-        <div className="p-3 rounded-lg border bg-white shadow-sm flex flex-col gap-2.5 relative group mt-1">
-            <button
-                type="button"
-                onClick={onRemove}
-                className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
-            >
-                <X className="h-3.5 w-3.5" />
-            </button>
-
-            <div className="flex items-start gap-3">
-                <div className="h-9 w-9 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100 shrink-0">
-                    <Building2 className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-slate-900 truncate">Unit {unit.unit_number}</h4>
-                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase tracking-tighter border border-emerald-100">
-                            {unit.construction_status?.replace('_', ' ') || 'Available'}
-                        </span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 font-medium">
-                        {unit.tower?.name ? `${unit.tower.name} Tower` : 'Main Block'}
-                    </p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-50">
-                <div className="flex flex-col">
-                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">BHK</span>
-                    <span className="text-[10px] font-bold text-slate-700">{unit.bedrooms ? `${unit.bedrooms} BHK` : 'N/A'}</span>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Area</span>
-                    <span className="text-[10px] font-bold text-slate-700">{area ? `${area} sqft` : 'N/A'}</span>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Price</span>
-                    <span className="text-[10px] font-bold text-emerald-700">{price ? formatCurrency(price) : 'N/A'}</span>
-                </div>
-            </div>
-        </div>
-    )
-}
 
 // ─── Main Form Fields ─────────────────────────────────────────────────────────
 

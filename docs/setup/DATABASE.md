@@ -213,9 +213,6 @@ Complete audit trail of all actions.
 
 Admin support mode tracking.
 
-#### `websocket_sessions`
-
-Active WebSocket connections for real-time features.
 
 ---
 

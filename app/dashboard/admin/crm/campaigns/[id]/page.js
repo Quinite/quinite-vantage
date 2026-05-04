@@ -3,13 +3,16 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
     ArrowLeft, Loader2, Radio, Play, Pause, XCircle, CheckCircle2,
     Archive, RotateCcw, Settings, Users, Phone, BarChart3,
     AlertTriangle, TrendingUp, TrendingDown, Minus, Clock,
     Building2, Calendar, Zap, Search, UserMinus, Ban,
-    ChevronLeft, ChevronRight, RefreshCw, Plus, Trash2
+    ChevronLeft, ChevronRight, RefreshCw, Plus, Trash2, UserPlus,
+    Moon, Lock, X
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,14 +33,27 @@ import {
     useCampaign, useCampaignLeads, useCampaignProgress,
     useStartCampaign, usePauseCampaign, useResumeCampaign,
     useCancelCampaign, useCompleteCampaign, useArchiveCampaign,
-    useRestoreCampaign, useRestartCampaign, useUpdateCampaign, useEnrollLeads,
+    useDeleteCampaign, useUpdateCampaign, useEnrollLeads,
     useRemoveLeadFromCampaign, useOptOutLead
 } from '@/hooks/useCampaigns'
 import { useQueryClient } from '@tanstack/react-query'
+import {
+    Tooltip, TooltipContent, TooltipProvider, TooltipTrigger
+} from '@/components/ui/tooltip'
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel,
+    AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+    AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from '@/components/ui/alert-dialog'
+import { CampaignStatusBadge } from '@/components/crm/campaigns/CampaignStatusBadge'
+import { CampaignActionButton } from '@/components/crm/campaigns/CampaignActionButton'
+import { CampaignOverviewTab } from '@/components/crm/campaigns/CampaignOverviewTab'
+import { CampaignCallLogsTab, CampaignAnalyticsTab } from '@/components/crm/campaigns/CampaignCallResultsTab'
+import { isReadyToStart, isRunningButPausedForNight } from '@/lib/campaigns/timeWindow'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 
 // ─── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-    draft:     { color: 'bg-zinc-500/10 text-zinc-600 border-zinc-200',      label: 'Draft',     dot: 'bg-zinc-400' },
     scheduled: { color: 'bg-blue-500/10 text-blue-600 border-blue-200',      label: 'Scheduled', dot: 'bg-blue-500' },
     running:   { color: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', label: 'Running', dot: 'bg-emerald-500 animate-pulse' },
     paused:    { color: 'bg-amber-500/10 text-amber-600 border-amber-200',   label: 'Paused',    dot: 'bg-amber-500' },
@@ -47,8 +63,17 @@ const STATUS_CONFIG = {
     failed:    { color: 'bg-rose-500/10 text-rose-600 border-rose-200',     label: 'Failed',    dot: 'bg-rose-500' },
 }
 
+const FAIL_REASON_MESSAGES = {
+    insufficient_credits:   'Campaign stopped: insufficient call credits. Top up credits to continue.',
+    subscription_lapsed:    'Campaign stopped: subscription is inactive. Reactivate to continue.',
+    all_leads_unreachable:  'Campaign stopped: all leads were unreachable after maximum retry attempts.',
+    provider_error:         'Campaign stopped: persistent calling provider errors. Contact support.',
+    worker_error:           'Campaign stopped due to an internal error. Contact support.',
+    credit_exhausted:       'Campaign stopped: call credits were exhausted for 30+ minutes.',
+}
+
 function StatusBadge({ status }) {
-    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.draft
+    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.scheduled
     return (
         <Badge variant="outline" className={`${cfg.color} border flex items-center gap-1.5 px-2.5 py-1 font-medium text-xs`}>
             <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -202,7 +227,7 @@ function OverviewTab({ campaign, progress }) {
                             <div>
                                 <h3 className="text-sm font-semibold text-foreground">Credit Budget</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    ₹{Number(campaign.credit_spent || 0).toFixed(2)} spent of ₹{Number(campaign.credit_cap).toFixed(2)} cap
+                                    {Number(campaign.credit_spent || 0).toFixed(1)} mins used of {Number(campaign.credit_cap).toFixed(1)} min cap
                                 </p>
                             </div>
                             <span className={`text-sm font-bold tabular-nums ${creditPct >= 90 ? 'text-red-500' : creditPct >= 70 ? 'text-amber-500' : 'text-foreground'}`}>
@@ -217,7 +242,7 @@ function OverviewTab({ campaign, progress }) {
                         </div>
                         {creditPct >= 80 && (
                             <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" /> ₹{(Number(campaign.credit_cap) - Number(campaign.credit_spent || 0)).toFixed(2)} remaining
+                                <AlertTriangle className="w-3 h-3" /> {(Number(campaign.credit_cap) - Number(campaign.credit_spent || 0)).toFixed(1)} mins remaining
                             </p>
                         )}
                     </CardContent>
@@ -306,129 +331,31 @@ function useRetryCountdown(nextRetryAt) {
     return label
 }
 
-// ─── Lead Card ─────────────────────────────────────────────────────────────────
-function LeadCard({ row, selected, onSelect, onRemove, onOptOut, canModify, removeIsPending }) {
-    const MAX_ATTEMPTS = 4
-    const queueItem = Array.isArray(row.queue_item) ? row.queue_item[0] : row.queue_item
-    const attemptCount = queueItem?.attempt_count ?? null
-    const nextRetryAt = queueItem?.next_retry_at ?? null
-    const isFailed = row.status === 'failed'
-    const maxReached = isFailed && attemptCount != null && attemptCount >= MAX_ATTEMPTS
-    const retryLabel = useRetryCountdown(maxReached ? null : nextRetryAt)
 
-    const failureReason = row.call_log?.call_status
-    const sentiment = row.call_log?.sentiment_score != null ? Number(row.call_log.sentiment_score) : null
-    const sentimentLabel = sentiment == null ? null : sentiment >= 0.3 ? 'Positive' : sentiment < -0.1 ? 'Negative' : 'Neutral'
 
-    const canAction = canModify && ['enrolled', 'queued', 'calling', 'called', 'failed'].includes(row.status)
+function LeadAvatar({ name, url }) {
+    const [imgError, setImgError] = useState(false)
+    const initials = name?.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'
+    const fallback = getDefaultAvatar(name)
 
     return (
-        <div className={`relative rounded-xl border bg-card flex flex-col overflow-hidden transition-shadow hover:shadow-sm ${isFailed ? 'border-red-200 dark:border-red-900/50' : 'border-border'}`}>
-            <div className="p-4 flex flex-col gap-3 flex-1">
-                {/* Top row: checkbox + name + status */}
-                <div className="flex items-start gap-3">
-                    {canModify && (
-                        <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={onSelect}
-                            className="mt-0.5 rounded shrink-0"
-                        />
-                    )}
-                    <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm text-foreground truncate">{row.lead?.name || '—'}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">{row.lead?.phone || '—'}</div>
-                    </div>
-                    <LeadStatusBadge status={row.status} skipReason={row.skip_reason} />
-                </div>
-
-                {/* Pills row */}
-                <div className="flex flex-wrap gap-1.5">
-                    {row.lead?.interest_level && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-600 border border-violet-200 capitalize">
-                            {row.lead.interest_level}
-                        </span>
-                    )}
-                    {row.lead?.score != null && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border">
-                            Score {row.lead.score}
-                        </span>
-                    )}
-                    {sentiment != null && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-                            sentiment >= 0.3 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200' :
-                            sentiment < -0.1 ? 'bg-red-500/10 text-red-600 border-red-200' :
-                            'bg-amber-500/10 text-amber-600 border-amber-200'
-                        }`}>
-                            <SentimentIcon score={sentiment} />
-                            {sentimentLabel}
-                        </span>
-                    )}
-                </div>
-
-                {/* Bottom row: last called + actions */}
-                <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                        {row.last_call_attempt_at
-                            ? `Last called ${new Date(row.last_call_attempt_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`
-                            : 'Not yet called'}
-                    </span>
-                    {canAction && (
-                        <div className="flex items-center gap-1">
-                            <Button
-                                variant="ghost" size="sm"
-                                onClick={() => onRemove(row.lead_id)}
-                                disabled={removeIsPending}
-                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                                title="Remove from campaign"
-                            >
-                                <UserMinus className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                                variant="ghost" size="sm"
-                                onClick={() => onOptOut(row.lead_id)}
-                                className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-600"
-                                title="Opt out"
-                            >
-                                <Ban className="w-3.5 h-3.5" />
-                            </Button>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Failed banner */}
-            {isFailed && (
-                <div className={`flex items-center justify-between px-4 py-2 border-t text-xs ${
-                    maxReached
-                        ? 'bg-muted/60 border-border text-muted-foreground'
-                        : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50'
-                }`}>
-                    <div className="flex items-center gap-2">
-                        {failureReason && (
-                            <span className={`px-1.5 py-0.5 rounded font-medium text-[10px] uppercase tracking-wide ${
-                                maxReached ? 'bg-muted text-muted-foreground' : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
-                            }`}>
-                                {failureReason.replace(/[-_]/g, ' ')}
-                            </span>
-                        )}
-                        {attemptCount != null && (
-                            <span className={maxReached ? 'text-muted-foreground' : 'text-red-700 dark:text-red-400'}>
-                                Attempt {Math.min(attemptCount, MAX_ATTEMPTS)} of {MAX_ATTEMPTS}
-                            </span>
-                        )}
-                    </div>
-                    <span className={`font-medium ${maxReached ? 'text-muted-foreground' : 'text-red-700 dark:text-red-400'}`}>
-                        {maxReached ? 'Max attempts reached' : (retryLabel || 'Pending retry')}
-                    </span>
-                </div>
+        <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+            {(url || fallback) && !imgError ? (
+                <img
+                    src={url || fallback}
+                    alt={name}
+                    className="w-full h-full object-cover"
+                    onError={() => setImgError(true)}
+                />
+            ) : (
+                <span className="text-[10px] font-bold text-slate-500">{initials}</span>
             )}
         </div>
     )
 }
 
 // ─── Enrolled Leads Tab ────────────────────────────────────────────────────────
-function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
+function EnrolledLeadsTab({ campaignId, campaignStatus, projectIds = [] }) {
     const [statusFilter, setStatusFilter] = useState('all')
     const [search, setSearch] = useState('')
     const [page, setPage] = useState(1)
@@ -444,6 +371,7 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
     })
     const removeLead = useRemoveLeadFromCampaign(campaignId)
     const optOut = useOptOutLead(campaignId)
+
 
     const leads = data?.leads || []
     const counts = data?.status_counts || {}
@@ -490,15 +418,7 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
         <div className="space-y-4">
             {/* Toolbar */}
             <div className="flex items-center gap-3 flex-wrap">
-                {canModify && (
-                    <input
-                        type="checkbox"
-                        checked={leads.length > 0 && selected.size === leads.length}
-                        onChange={toggleAll}
-                        className="rounded shrink-0"
-                        title="Select all on this page"
-                    />
-                )}
+
                 <div className="relative flex-1 min-w-48">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -514,7 +434,7 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
                     </Button>
                     {canModify && (
                         <Button size="sm" onClick={() => setShowEnrollPanel(true)} className="h-9">
-                            <Plus className="w-4 h-4 mr-1.5" /> Add Leads
+                            <Plus className="w-4 h-4" /> Enroll Leads
                         </Button>
                     )}
                 </div>
@@ -544,7 +464,7 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
                             className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
                                 statusFilter === tab.key
                                     ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    : 'border-border bg-white text-muted-foreground hover:text-foreground hover:bg-muted'
                             }`}
                         >
                             {tab.label}
@@ -558,35 +478,160 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
                 })}
             </div>
 
-            {/* Cards */}
-            {isLoading ? (
-                <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            {/* Leads Table */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[800px]">
+                        <thead className="bg-slate-50/80 border-b border-slate-200">
+                            <tr>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lead</th>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Interest</th>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Score</th>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Source</th>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sentiment</th>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Last Activity</th>
+                                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {isLoading ? (
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i} className="border-b border-slate-50">
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <Skeleton className="w-8 h-8 rounded-full" />
+                                                <div className="space-y-1.5 flex-1">
+                                                    <Skeleton className="h-4 w-1/3" />
+                                                    <Skeleton className="h-3 w-1/4" />
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3"><Skeleton className="h-5 w-20 rounded" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-5 w-10 mx-auto rounded" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-20 rounded" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded" /></td>
+                                        <td className="px-4 py-3"><Skeleton className="h-4 w-24 rounded" /></td>
+                                        <td className="px-4 py-3 text-right"><Skeleton className="h-8 w-24 ml-auto rounded-lg" /></td>
+                                    </tr>
+                                ))
+                            ) : leads.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="py-16 text-center">
+                                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20 text-slate-400" />
+                                        <p className="text-sm text-slate-500">{emptyMessage()}</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                leads.map(row => {
+                                    const queueItem = Array.isArray(row.queue_item) ? row.queue_item[0] : row.queue_item;
+                                    const isFailed = row.status === 'failed';
+                                    const sentiment = row.call_log?.sentiment_score != null ? Number(row.call_log.sentiment_score) : null;
+                                    const canAction = canModify && ['enrolled', 'queued', 'calling', 'called', 'failed'].includes(row.status);
+                                    
+                                    return (
+                                        <tr key={row.lead_id} className={cn("hover:bg-slate-50/50 transition-colors group", isFailed && "bg-red-50/30")}>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <LeadAvatar name={row.lead?.name} url={row.lead?.avatar_url} />
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium text-slate-900 text-sm truncate">{row.lead?.name || '—'}</div>
+                                                        <div className="text-xs text-slate-500 tabular-nums">{row.lead?.phone || '—'}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex flex-col gap-1.5 w-fit">
+                                                    <div className="flex items-center gap-2">
+                                                        <LeadStatusBadge status={row.status} skipReason={row.skip_reason} />
+                                                        {row.attempt_count > 0 && (
+                                                            <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                                                Attempt {row.attempt_count}/4
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {isFailed && row.call_log?.call_status && (
+                                                        <span className="text-[9px] font-bold text-red-600 uppercase tracking-tight">
+                                                            {row.call_log.call_status.replace(/[-_]/g, ' ')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {row.lead?.interest_level ? (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-violet-100 text-violet-700 border border-violet-200">
+                                                        {row.lead.interest_level}
+                                                    </span>
+                                                ) : <span className="text-slate-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                {row.lead?.score != null ? (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                                        {row.lead.score}
+                                                    </span>
+                                                ) : <span className="text-slate-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {row.lead?.source ? (
+                                                    <span className="text-[11px] text-slate-500 font-bold uppercase tracking-tight">{row.lead.source}</span>
+                                                ) : <span className="text-slate-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {sentiment != null ? (
+                                                    <span className={cn(
+                                                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border",
+                                                        sentiment >= 0.3 ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                                                        sentiment < -0.1 ? "bg-red-100 text-red-700 border-red-200" :
+                                                        "bg-amber-100 text-amber-700 border-amber-200"
+                                                    )}>
+                                                        <SentimentIcon score={sentiment} />
+                                                        {sentiment >= 0.3 ? 'POS' : sentiment < -0.1 ? 'NEG' : 'NEU'}
+                                                    </span>
+                                                ) : <span className="text-slate-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="text-xs text-slate-600 font-medium tabular-nums">
+                                                    {row.last_call_attempt_at
+                                                        ? new Date(row.last_call_attempt_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                                        : <span className="text-slate-400 italic">Not called</span>}
+                                                </div>
+                                                {queueItem?.next_retry_at && (
+                                                    <div className="text-[10px] text-amber-600 font-bold uppercase mt-1 flex items-center gap-1">
+                                                        <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" />
+                                                        Retry: {new Date(queueItem.next_retry_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                {canAction && (
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <Button
+                                                            variant="ghost" size="sm"
+                                                            onClick={() => removeLead.mutate(row.lead_id)}
+                                                            disabled={removeLead.isPending}
+                                                            className="h-8 px-2.5 text-[11px] font-bold bg-red-50 text-red-600 hover:bg-red-200 hover:text-red-600 rounded-lg uppercase tracking-wider transition-colors"
+                                                        >
+                                                            <UserMinus className="w-3.5 h-3.5" /> Remove
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost" size="sm"
+                                                            onClick={() => setOptOutTarget(row.lead_id)}
+                                                            className="h-8 px-2.5 text-[11px] font-bold bg-amber-50 text-amber-600 hover:bg-amber-200 hover:text-amber-600 rounded-lg uppercase tracking-wider transition-colors"
+                                                        >
+                                                            <Ban className="w-3.5 h-3.5" /> Opt Out
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            ) : leads.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground">
-                    <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">{emptyMessage()}</p>
-                    {canModify && statusFilter === 'all' && !search && (
-                        <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowEnrollPanel(true)}>Add Leads</Button>
-                    )}
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    {leads.map(row => (
-                        <LeadCard
-                            key={row.lead_id}
-                            row={row}
-                            selected={selected.has(row.lead_id)}
-                            onSelect={() => toggleSelect(row.lead_id)}
-                            onRemove={id => removeLead.mutate(id)}
-                            onOptOut={id => setOptOutTarget(id)}
-                            canModify={canModify}
-                            removeIsPending={removeLead.isPending}
-                        />
-                    ))}
-                </div>
-            )}
+            </div>
 
             {/* Pagination */}
             {(page > 1 || hasMore) && (
@@ -606,7 +651,7 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
                 open={showEnrollPanel}
                 onClose={() => setShowEnrollPanel(false)}
                 campaignId={campaignId}
-                projectId={projectId}
+                projectIds={projectIds}
             />
 
             {/* Opt-out Dialog */}
@@ -639,7 +684,7 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectId }) {
 }
 
 // ─── Lead Enrollment Panel ─────────────────────────────────────────────────────
-function LeadEnrollmentPanel({ open, onClose, campaignId, projectId }) {
+function LeadEnrollmentPanel({ open, onClose, campaignId, projectIds = [] }) {
     const [search, setSearch] = useState('')
     const [leads, setLeads] = useState([])
     const [loading, setLoading] = useState(false)
@@ -647,32 +692,47 @@ function LeadEnrollmentPanel({ open, onClose, campaignId, projectId }) {
     const enrollLeads = useEnrollLeads(campaignId)
 
     useEffect(() => {
-        if (open && projectId) {
+        if (open && projectIds.length > 0) {
             searchLeads()
         } else if (!open) {
             setSearch('')
             setLeads([])
             setSelected(new Set())
         }
-    }, [open, projectId])
+    }, [open, projectIds])
 
     async function searchLeads(optionalSearch = search) {
         setLoading(true)
         try {
             const query = new URLSearchParams()
-            if (projectId) query.append('project_id', projectId)
+            if (projectIds.length > 0) query.append('project_ids', projectIds.join(','))
             if (optionalSearch) query.append('search', optionalSearch)
             query.append('limit', '100')
+            query.append('view_mode', 'active')
+            // Don't show leads already in this campaign
+            query.append('not_in_campaign_id', campaignId)
             
             const res = await fetch(`/api/leads?${query.toString()}`)
             const data = await res.json()
             setLeads(data.leads || [])
+        } catch (err) {
+            console.error('Failed to fetch leads for enrollment:', err)
         } finally {
             setLoading(false)
         }
     }
 
-    function toggleLead(id) {
+    const validatePhone = (phone) => {
+        if (!phone) return false
+        const cleaned = String(phone).replace(/[\s\-().]/g, '')
+        let normalized = cleaned
+        if (/^\d{10}$/.test(cleaned)) normalized = `+91${cleaned}`
+        else if (/^91\d{10}$/.test(cleaned)) normalized = `+${cleaned}`
+        return /^\+91[6-9]\d{9}$/.test(normalized)
+    }
+
+    function toggleLead(id, disabled) {
+        if (disabled) return
         setSelected(prev => {
             const next = new Set(prev)
             next.has(id) ? next.delete(id) : next.add(id)
@@ -681,10 +741,11 @@ function LeadEnrollmentPanel({ open, onClose, campaignId, projectId }) {
     }
 
     function toggleAll() {
-        if (selected.size === leads.length && leads.length > 0) {
+        const selectableLeads = leads.filter(l => !l.do_not_call && !l.opted_out_at && validatePhone(l.phone))
+        if (selected.size === selectableLeads.length && selectableLeads.length > 0) {
             setSelected(new Set())
         } else {
-            setSelected(new Set(leads.map(l => l.id)))
+            setSelected(new Set(selectableLeads.map(l => l.id)))
         }
     }
 
@@ -699,56 +760,162 @@ function LeadEnrollmentPanel({ open, onClose, campaignId, projectId }) {
 
     return (
         <Sheet open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-            <SheetContent className="w-full sm:max-w-lg flex flex-col">
-                <SheetHeader>
-                    <SheetTitle>Add Leads to Campaign</SheetTitle>
-                    <SheetDescription>Search and select leads to enroll in this campaign.</SheetDescription>
+            <SheetContent className="w-full sm:max-w-lg flex flex-col p-0 gap-0 bg-white">
+                <SheetHeader className="px-6 py-5 border-b border-slate-100 bg-white">
+                    <SheetTitle className="text-lg font-bold text-slate-900">Enroll Leads</SheetTitle>
+                    <SheetDescription className="text-xs font-medium text-slate-500 uppercase tracking-wider !mt-0">
+                        Select leads from campaign projects to add
+                    </SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto space-y-4 py-4">
+                <div className="px-6 py-4 bg-white border-b border-slate-100">
                     <div className="flex gap-2">
-                        <Input
-                            placeholder="Search by name or phone..."
-                            value={search}
-                            onChange={e => { setSearch(e.target.value); searchLeads(e.target.value) }}
-                            onKeyDown={e => e.key === 'Enter' && searchLeads()}
-                            className="flex-1 h-9 bg-background"
-                        />
-                        <Button type="button" size="sm" variant="outline" className="h-9 px-3" onClick={toggleAll}>
-                            {selected.size === leads.length && leads.length > 0 ? 'Deselect All' : 'Select All'}
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                                placeholder="Search by name, phone or email..."
+                                value={search}
+                                onChange={e => { setSearch(e.target.value); searchLeads(e.target.value) }}
+                                onKeyDown={e => e.key === 'Enter' && searchLeads()}
+                                className="pl-9 h-10 bg-white border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-indigo-500"
+                            />
+                        </div>
+                        <Button 
+                            type="button" 
+                            variant="outline" 
+                            className="h-10 px-4 font-bold text-xs uppercase tracking-wider border-slate-200 hover:bg-slate-50" 
+                            onClick={toggleAll}
+                        >
+                            {selected.size > 0 && selected.size === leads.filter(l => !l.do_not_call && !l.opted_out_at && validatePhone(l.phone)).length ? 'Deselect All' : 'Select All'}
                         </Button>
                     </div>
+                </div>
 
-                    {leads.length > 0 && (
-                        <div className="space-y-1 border border-border rounded-lg overflow-hidden">
-                            {leads.map(lead => (
-                                <label key={lead.id} className="flex items-center gap-3 p-3 hover:bg-muted/50 cursor-pointer transition-colors">
-                                    <input
-                                        type="checkbox"
-                                        checked={selected.has(lead.id)}
-                                        onChange={() => toggleLead(lead.id)}
-                                        className="rounded"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                        <div className="font-medium text-sm truncate">{lead.name}</div>
-                                        <div className="text-xs text-muted-foreground">{lead.phone}</div>
-                                    </div>
-                                </label>
-                            ))}
+                <div className="flex-1 overflow-y-auto">
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center py-20 gap-3">
+                            <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fetching relevant leads...</p>
                         </div>
-                    )}
+                    ) : leads.length > 0 ? (
+                        <div className="divide-y divide-slate-100 bg-white">
+                            <TooltipProvider delayDuration={0}>
+                                {leads.map(lead => {
+                                    const isInvalidPhone = !validatePhone(lead.phone)
+                                    const unreachable = lead.do_not_call || lead.opted_out_at || isInvalidPhone
+                                    const reason = lead.do_not_call ? "Marked as Do Not Call" : 
+                                                   lead.opted_out_at ? "Lead has opted out" : 
+                                                   "Invalid phone number"
+                                    
+                                    const content = (
+                                        <label 
+                                            key={lead.id} 
+                                            className={cn(
+                                                "flex items-center gap-4 px-6 py-4 transition-all group",
+                                                unreachable ? "opacity-40 cursor-not-allowed grayscale-[0.5]" : "cursor-pointer hover:bg-slate-50/80",
+                                                selected.has(lead.id) && "bg-indigo-50/50 hover:bg-indigo-50/70"
+                                            )}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selected.has(lead.id)}
+                                                onChange={() => toggleLead(lead.id, unreachable)}
+                                                disabled={unreachable}
+                                                className={cn(
+                                                    "w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all shrink-0",
+                                                    unreachable && "opacity-50"
+                                                )}
+                                            />
+                                            <div className="flex-1 min-w-0 flex items-center gap-3">
+                                                <LeadAvatar name={lead.name} url={lead.avatar_url} />
+                                                <div className="min-w-0 flex-1">
+                                                    {/* Row 1: Name and Stage */}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-slate-900 text-sm truncate">{lead.name || '—'}</span>
+                                                        {lead.stage?.name && (
+                                                            <span 
+                                                                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border leading-none"
+                                                                style={{ 
+                                                                    backgroundColor: `${lead.stage.color || '#64748b'}15`, 
+                                                                    color: lead.stage.color || '#64748b',
+                                                                    borderColor: `${lead.stage.color || '#64748b'}30` 
+                                                                }}
+                                                            >
+                                                                {lead.stage.name}
+                                                            </span>
+                                                        )}
+                                                        {unreachable && (
+                                                            <span className="flex items-center gap-1 text-[9px] font-black uppercase text-red-500 ml-auto">
+                                                                <Ban className="w-2.5 h-2.5" /> Blocked
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {/* Row 2: Number, Interest, Source, Score */}
+                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                        <span className={cn("text-xs tabular-nums font-medium mr-1", isInvalidPhone ? "text-red-400 line-through" : "text-slate-500")}>
+                                                            {lead.phone || 'No phone'}
+                                                        </span>
+                                                        {lead.interest_level && (
+                                                            <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 border border-violet-200 leading-none">
+                                                                {lead.interest_level}
+                                                            </span>
+                                                        )}
+                                                        {lead.source && (
+                                                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 leading-none">
+                                                                {lead.source}
+                                                            </span>
+                                                        )}
+                                                        {lead.score != null && (
+                                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 leading-none">
+                                                                Score: {lead.score}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    )
 
-                    {leads.length === 0 && search && !loading && (
-                        <div className="text-center py-8 text-muted-foreground text-sm">No leads found</div>
+                                    if (unreachable) return (
+                                        <Tooltip key={lead.id}>
+                                            <TooltipTrigger asChild>
+                                                {content}
+                                            </TooltipTrigger>
+                                            <TooltipContent side="left" className="bg-slate-900 text-white border-slate-800 text-xs font-bold uppercase tracking-wider p-2">
+                                                <p>{reason}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )
+
+                                    return content
+                                })}
+                            </TooltipProvider>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-20 text-center px-10">
+                            <Users className="w-12 h-12 text-slate-200 mb-4" />
+                            <p className="text-sm font-bold text-slate-900">No matching leads found</p>
+                            <p className="text-xs text-slate-500 mt-1">We couldn't find any unenrolled leads in the selected projects that match your search.</p>
+                        </div>
                     )}
                 </div>
 
-                <div className="border-t border-border pt-4 flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">{selected.size} lead{selected.size !== 1 ? 's' : ''} selected</span>
+                <div className="px-6 py-5 border-t border-slate-100 bg-white flex items-center justify-between">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold text-slate-900">{selected.size} selected</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total {leads.length} found</span>
+                    </div>
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button onClick={handleEnroll} disabled={selected.size === 0 || enrollLeads.isPending}>
-                            {enrollLeads.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                        <Button variant="ghost" onClick={onClose} className="font-bold text-xs uppercase tracking-wider text-slate-500 hover:text-slate-900">
+                            Cancel
+                        </Button>
+                        <Button 
+                            onClick={handleEnroll} 
+                            disabled={selected.size === 0 || enrollLeads.isPending}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 font-bold text-xs uppercase tracking-wider shadow-sm shadow-indigo-200"
+                        >
+                            {enrollLeads.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <UserPlus className="w-3.5 h-3.5 mr-2" />}
                             Enroll {selected.size > 0 ? selected.size : ''} Leads
                         </Button>
                     </div>
@@ -758,312 +925,148 @@ function LeadEnrollmentPanel({ open, onClose, campaignId, projectId }) {
     )
 }
 
-// ─── Call Results Tab ──────────────────────────────────────────────────────────
-const CALL_STATUS_STYLE = {
-    completed:   'bg-emerald-500/10 text-emerald-700 border-emerald-200',
-    transferred: 'bg-blue-500/10 text-blue-700 border-blue-200',
-    in_progress: 'bg-amber-500/10 text-amber-700 border-amber-200',
-    failed:      'bg-red-500/10 text-red-700 border-red-200',
-    unknown:     'bg-zinc-400/10 text-zinc-500 border-zinc-200',
-}
-
-function CallResultsTab({ campaignId }) {
-    const [page, setPage] = useState(1)
-    const [logs, setLogs] = useState([])
-    const [summary, setSummary] = useState(null)
-    const [loading, setLoading] = useState(false)
-    const [hasMore, setHasMore] = useState(false)
-
-    useEffect(() => {
-        async function fetchLogs() {
-            setLoading(true)
-            try {
-                const res = await fetch(`/api/campaigns/${campaignId}/logs?page=${page}&limit=50`)
-                if (res.ok) {
-                    const data = await res.json()
-                    setLogs(data.logs || [])
-                    setSummary(data.summary || null)
-                    setHasMore(data.hasMore || false)
-                }
-            } finally {
-                setLoading(false)
-            }
-        }
-        if (campaignId) fetchLogs()
-    }, [campaignId, page])
-
-    if (loading) return (
-        <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-    )
-
-    if (!logs.length) return (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                <Phone className="w-5 h-5 opacity-40" />
-            </div>
-            <p className="text-sm font-medium">No call logs yet</p>
-            <p className="text-xs">Logs will appear here once calls start</p>
-        </div>
-    )
-
+// ─── Danger Zone ───────────────────────────────────────────────────────────────
+function DangerRow({ icon: Icon, title, description, triggerLabel, confirmTitle, confirmDescription, confirmLabel, onConfirm, disabled, variant = 'destructive' }) {
     return (
-        <div className="space-y-4">
-            {/* Summary strip */}
-            {summary && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                        { label: 'Total Calls', value: summary.totalCalls },
-                        { label: 'Answered', value: summary.answeredCalls },
-                        { label: 'Transferred', value: summary.transferred },
-                        { label: 'Avg Sentiment', value: summary.avgSentiment != null ? Number(summary.avgSentiment).toFixed(2) : '—' },
-                    ].map(s => (
-                        <div key={s.label} className="bg-muted/40 rounded-xl px-4 py-3 border border-border/40">
-                            <div className="text-lg font-bold text-foreground">{s.value ?? '—'}</div>
-                            <div className="text-[11px] text-muted-foreground mt-0.5">{s.label}</div>
-                        </div>
-                    ))}
+        <div className="flex items-center justify-between gap-6 px-6 py-5 hover:bg-red-50/30 transition-colors">
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+                <div className={cn(
+                    "p-2.5 rounded-xl shrink-0 mt-0.5",
+                    variant === 'destructive' ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-600"
+                )}>
+                    <Icon className="w-4 h-4" />
                 </div>
-            )}
-
-            {/* Log list */}
-            <div className="space-y-2">
-                {logs.map(log => {
-                    const statusKey = log.call_status || 'unknown'
-                    const statusStyle = CALL_STATUS_STYLE[statusKey] || CALL_STATUS_STYLE.unknown
-                    const mins = log.duration ? Math.floor(log.duration / 60) : 0
-                    const secs = log.duration ? log.duration % 60 : 0
-                    const durationStr = log.duration ? `${mins}m ${secs}s` : null
-                    const score = log.sentiment_score != null ? Number(log.sentiment_score) : null
-
-                    return (
-                        <div key={log.id} className="group flex items-start gap-4 p-4 rounded-xl border border-border/50 bg-card hover:border-border hover:shadow-sm transition-all duration-150">
-                            {/* Avatar */}
-                            <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0 text-sm font-semibold text-muted-foreground">
-                                {(log.lead?.name || '?').charAt(0).toUpperCase()}
-                            </div>
-
-                            {/* Main content */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-sm text-foreground">{log.lead?.name || log.lead?.phone || '—'}</span>
-                                    <Badge variant="outline" className={`text-[10px] px-2 py-0.5 font-medium border ${statusStyle}`}>
-                                        {statusKey.replace('_', ' ')}
-                                    </Badge>
-                                    {log.transferred && (
-                                        <Badge variant="outline" className="text-[10px] px-2 py-0.5 border bg-blue-500/10 text-blue-700 border-blue-200">
-                                            transferred
-                                        </Badge>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-                                    {log.created_at && (
-                                        <span>{new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                                    )}
-                                    {durationStr && (
-                                        <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3" /> {durationStr}
-                                        </span>
-                                    )}
-                                    {log.disconnect_reason && (
-                                        <span className="capitalize">{log.disconnect_reason.replace('_', ' ')}</span>
-                                    )}
-                                </div>
-                                {log.summary && (
-                                    <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{log.summary}</p>
-                                )}
-                            </div>
-
-                            {/* Sentiment */}
-                            <div className="shrink-0 flex flex-col items-end gap-1">
-                                {score != null && (
-                                    <div className={`flex items-center gap-1 text-xs font-medium ${score > 0.3 ? 'text-emerald-600' : score < -0.1 ? 'text-red-500' : 'text-amber-500'}`}>
-                                        {score > 0.3 ? <TrendingUp className="w-3.5 h-3.5" /> : score < -0.1 ? <TrendingDown className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
-                                        <span>{score.toFixed(2)}</span>
-                                    </div>
-                                )}
-                                {log.interest_level && (
-                                    <span className="text-[10px] text-muted-foreground capitalize">{log.interest_level}</span>
-                                )}
-                            </div>
-                        </div>
-                    )
-                })}
+                <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900">{title}</p>
+                    <p className="text-xs font-medium text-slate-500 mt-1 leading-relaxed">{description}</p>
+                </div>
             </div>
-
-            {/* Pagination */}
-            {(page > 1 || hasMore) && (
-                <div className="flex items-center justify-center gap-3 pt-2">
-                    <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page === 1}>
-                        <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={disabled}
+                        className={cn(
+                            "h-9 px-4 font-bold text-[11px] uppercase tracking-wider shrink-0 transition-all",
+                            variant === 'destructive' 
+                                ? "border-red-200 text-red-600 hover:bg-red-600 hover:text-white hover:border-red-600" 
+                                : "border-amber-200 text-amber-700 hover:bg-amber-600 hover:text-white hover:border-amber-600"
+                        )}
+                    >
+                        {triggerLabel}
                     </Button>
-                    <span className="text-sm text-muted-foreground tabular-nums">Page {page}</span>
-                    <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={!hasMore}>
-                        Next <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
-                </div>
-            )}
+                </AlertDialogTrigger>
+                <AlertDialogContent className="max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                            <Icon className="w-5 h-5" /> {confirmTitle}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm font-medium text-slate-500">
+                            {confirmDescription}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2 pt-2">
+                        <AlertDialogCancel className="font-bold text-xs uppercase tracking-wider">Keep it</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={onConfirm}
+                            className={cn(
+                                "font-bold text-xs uppercase tracking-wider text-white",
+                                variant === 'destructive' ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"
+                            )}
+                        >
+                            {confirmLabel}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
 
-// ─── Settings Tab ──────────────────────────────────────────────────────────────
-function SettingsTab({ campaign }) {
-    const [form, setForm] = useState({
-        name: campaign.name || '',
-        description: campaign.description || '',
-        time_start: campaign.time_start || '',
-        time_end: campaign.time_end || '',
-        credit_cap: campaign.credit_cap ?? '',
-        ai_script: campaign.ai_script || '',
-        call_settings: campaign.call_settings || { language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 },
-        dnd_compliance: campaign.dnd_compliance !== false,
-    })
+function DangerZone({ campaign, canDelete, canRun, onCancel, onArchive, onDelete, isPending }) {
+    const s = campaign.status
+    const canCancel  = canRun && ['running', 'paused'].includes(s)
+    const canArchive = ['completed', 'cancelled', 'failed'].includes(s)
+    const canDelBtn  = (canDelete || canRun) && s === 'scheduled'
 
-    const updateCampaign = useUpdateCampaign(campaign.id)
-    const isLocked = ['completed', 'cancelled', 'archived'].includes(campaign.status)
-    const isRunning = ['running', 'paused'].includes(campaign.status)
-
-    async function handleSave() {
-        const body = {
-            name: form.name,
-            description: form.description,
-            time_start: form.time_start,
-            time_end: form.time_end,
-            credit_cap: form.credit_cap !== '' ? Number(form.credit_cap) : null,
-            ai_script: form.ai_script || null,
-            call_settings: form.call_settings,
-            dnd_compliance: form.dnd_compliance,
-        }
-        await updateCampaign.mutateAsync(body)
-    }
-
-    function field(key) {
-        return { value: form[key], onChange: e => setForm(f => ({ ...f, [key]: e.target.value })) }
-    }
+    if (!canCancel && !canArchive && !canDelBtn) return (
+        <div className="py-20 flex flex-col items-center justify-center text-center opacity-40 grayscale">
+            <Lock className="w-10 h-10 text-slate-300 mb-3" />
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No terminal actions available</p>
+        </div>
+    )
 
     return (
-        <div className="space-y-6 max-w-2xl">
-            {isLocked && (
-                <div className="flex items-center gap-2 p-3 bg-muted border border-border rounded-lg text-sm text-muted-foreground">
-                    <AlertTriangle className="w-4 h-4" /> This campaign is {campaign.status} and cannot be edited.
-                </div>
-            )}
-            {isRunning && (
-                <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-200 rounded-lg text-sm text-amber-700">
-                    <AlertTriangle className="w-4 h-4" /> Campaign is {campaign.status}. Structural fields (project, dates) are locked. AI script changes take effect on the next call.
-                </div>
-            )}
-
-            <div className="space-y-4">
-                <div className="space-y-1.5">
-                    <Label>Campaign Name</Label>
-                    <Input {...field('name')} disabled={isLocked} />
-                </div>
-                <div className="space-y-1.5">
-                    <Label>Description</Label>
-                    <Textarea {...field('description')} disabled={isLocked} rows={2} />
-                </div>
-
-                {/* Read-only when running */}
-                {isRunning && (
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-muted-foreground">Project (locked)</Label>
-                            <div className="px-3 py-2 rounded-md border border-border/50 bg-muted/30 text-sm text-muted-foreground">
-                              {(campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name).join(', ') || '—'}
-                            </div>
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-muted-foreground">Date Range (locked)</Label>
-                            <div className="px-3 py-2 rounded-md border border-border/50 bg-muted/30 text-sm text-muted-foreground">{campaign.start_date} – {campaign.end_date}</div>
-                        </div>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                        <Label>Daily Start Time</Label>
-                        <Input type="time" {...field('time_start')} disabled={isLocked} />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label>Daily End Time</Label>
-                        <Input type="time" {...field('time_end')} disabled={isLocked} />
-                    </div>
-                </div>
-
-                <div className="space-y-1.5">
-                    <Label>Credit Cap (₹) <span className="text-muted-foreground text-xs font-normal">— leave blank for unlimited</span></Label>
-                    <Input type="number" min={0} step={0.5} {...field('credit_cap')} disabled={isLocked} placeholder="e.g. 100" />
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={form.dnd_compliance}
-                        onChange={e => setForm(f => ({ ...f, dnd_compliance: e.target.checked }))}
-                        disabled={isLocked}
-                        className="rounded"
+        <div className="max-w-2xl space-y-6 mt-2">
+            <div className="bg-red-50/50 border border-red-100 rounded-2xl overflow-hidden divide-y divide-red-100 shadow-sm">
+                {canCancel && (
+                    <DangerRow
+                        icon={XCircle}
+                        title="Cancel Campaign"
+                        description="Stop all queued calls immediately. Active calls will finish naturally. This action is final and cannot be resumed."
+                        triggerLabel="Cancel Campaign"
+                        confirmTitle="Cancel this campaign?"
+                        confirmDescription="All remaining calls will be stopped. You can still view logs, but the campaign cannot be restarted."
+                        confirmLabel="Yes, cancel it"
+                        onConfirm={onCancel}
+                        disabled={isPending}
+                        variant="destructive"
                     />
-                    <span className="text-sm">DND Compliance — restrict calls to 9am–9pm IST (TRAI)</span>
-                </label>
-
-                <div className="pt-2 border-t border-border/50 space-y-4">
-                    <Label className="text-sm font-semibold">AI Call Settings</Label>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground">Language</Label>
-                            <select
-                                value={form.call_settings.language || 'hinglish'}
-                                onChange={e => setForm(f => ({ ...f, call_settings: { ...f.call_settings, language: e.target.value } }))}
-                                disabled={isLocked}
-                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                            >
-                                <option value="hinglish">Hinglish</option>
-                                <option value="hindi">Hindi</option>
-                                <option value="english">English</option>
-                                <option value="gujarati">Gujarati</option>
-                            </select>
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground">AI Voice</Label>
-                            <select
-                                value={form.call_settings.voice_id || 'shimmer'}
-                                onChange={e => setForm(f => ({ ...f, call_settings: { ...f.call_settings, voice_id: e.target.value } }))}
-                                disabled={isLocked}
-                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                            >
-                                <option value="shimmer">Shimmer (Female)</option>
-                                <option value="alloy">Alloy (Neutral)</option>
-                                <option value="echo">Echo (Male)</option>
-                                <option value="nova">Nova (Female)</option>
-                                <option value="onyx">Onyx (Male)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">
-                            AI Script {isRunning && <span className="text-amber-600">(takes effect on next call)</span>}
-                        </Label>
-                        <Textarea
-                            value={form.ai_script}
-                            onChange={e => setForm(f => ({ ...f, ai_script: e.target.value }))}
-                            rows={5}
-                            disabled={isLocked}
-                            placeholder="Custom instructions for the AI agent..."
-                        />
-                    </div>
-                </div>
+                )}
+                {canArchive && (
+                    <DangerRow
+                        icon={Archive}
+                        title="Archive Campaign"
+                        description="Move this to your archive. Data is preserved, but the campaign is locked from all future edits or runs."
+                        triggerLabel="Archive"
+                        confirmTitle="Archive this campaign?"
+                        confirmDescription="The campaign will be moved to the archive list. All call records and analytics will remain accessible."
+                        confirmLabel="Archive"
+                        onConfirm={onArchive}
+                        disabled={isPending}
+                        variant="warning"
+                    />
+                )}
+                {canDelBtn && (
+                    <DangerRow
+                        icon={Trash2}
+                        title="Delete Permanently"
+                        description="Remove this campaign and all its configuration. Since it hasn't run yet, no logs will be lost. This is irreversible."
+                        triggerLabel="Delete"
+                        confirmTitle="Delete everything?"
+                        confirmDescription={`This will permanently delete "${campaign.name}" and all its configuration. This action cannot be undone.`}
+                        confirmLabel="Delete permanently"
+                        onConfirm={onDelete}
+                        disabled={isPending}
+                        variant="destructive"
+                    />
+                )}
             </div>
-
-            {!isLocked && (
-                <Button onClick={handleSave} disabled={updateCampaign.isPending}>
-                    {updateCampaign.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Changes'}
-                </Button>
-            )}
         </div>
     )
+}
+
+// ─── Detail Action Button ──────────────────────────────────────────────────────
+function DetailActionBtn({ icon, label, onClick, disabled, tooltip, className = '' }) {
+    const btn = (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+        >
+            {icon}{label}
+        </button>
+    )
+    if (tooltip && disabled) return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild><span>{btn}</span></TooltipTrigger>
+                <TooltipContent><p>{tooltip}</p></TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
+    return btn
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -1074,24 +1077,25 @@ export default function CampaignDetailPage() {
 
     const canRun = usePermission('run_campaigns')
     const canEdit = usePermission('edit_campaigns')
+    const canDelete = usePermission('delete_campaigns')
     const { isExpired: subExpired } = useSubscription()
 
     const { data, isLoading, error } = useCampaign(id)
     const campaign = data?.campaign
 
-    const isRunning = campaign?.status === 'running'
-    const { data: progress } = useCampaignProgress(id, isRunning)
+    const { data: progress } = useCampaignProgress(id, campaign?.status === 'running')
 
-    const start = useStartCampaign()
-    const pause = usePauseCampaign()
-    const resume = useResumeCampaign()
-    const cancel = useCancelCampaign()
+    const start    = useStartCampaign()
+    const pause    = usePauseCampaign()
+    const resume   = useResumeCampaign()
+    const cancel   = useCancelCampaign()
     const complete = useCompleteCampaign()
-    const archive = useArchiveCampaign()
-    const restore = useRestoreCampaign()
-    const restart = useRestartCampaign()
+    const archive  = useArchiveCampaign()
+    const deleteCampaign = useDeleteCampaign()
 
-    const [confirmAction, setConfirmAction] = useState(null)
+    const [showEnrollDialog, setShowEnrollDialog] = useState(false)
+
+    const anyPending = [start, pause, resume, cancel, complete, archive, deleteCampaign].some(m => m.isPending)
 
     if (isLoading) return (
         <div className="flex items-center justify-center min-h-screen">
@@ -1108,176 +1112,293 @@ export default function CampaignDetailPage() {
     )
 
     const s = campaign.status
+    const pausedForNight = isRunningButPausedForNight(campaign)
+    const readyToStart   = isReadyToStart(campaign)
 
-    async function doAction(action) {
-        setConfirmAction(null)
-        if (action === 'start') {
-            await start.mutateAsync(id)
-            router.push('/dashboard/admin/crm/calls/live')
-            return
-        }
-        else if (action === 'pause') await pause.mutateAsync(id)
-        else if (action === 'resume') await resume.mutateAsync(id)
-        else if (action === 'cancel') await cancel.mutateAsync(id)
-        else if (action === 'complete') await complete.mutateAsync({ id })
-        else if (action === 'archive') await archive.mutateAsync(id)
-        else if (action === 'restore') await restore.mutateAsync(id)
-        else if (action === 'restart') await restart.mutateAsync(id)
-    }
+    async function handleStart()   { await start.mutateAsync(id);          router.push('/dashboard/admin/crm/calls/live') }
+    async function handlePause()   { await pause.mutateAsync(id) }
+    async function handleResume()  { await resume.mutateAsync(id) }
+    async function handleCancel()  { await cancel.mutateAsync(id) }
+    async function handleComplete(){ await complete.mutateAsync({ id, force: true }) }
+    async function handleArchive() { await archive.mutateAsync(id) }
+    async function handleDelete()  { await deleteCampaign.mutateAsync(id); router.push('/dashboard/admin/crm/campaigns') }
 
-    const anyPending = [start, pause, resume, cancel, complete, archive, restore, restart].some(m => m.isPending)
+    const projectNames = (campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name)
+    const hasDangerActions = (canRun && ['running','paused'].includes(s)) || (canEdit && ['completed','cancelled','failed'].includes(s)) || (canDelete && ['scheduled','archived','cancelled','completed','failed'].includes(s))
+    const blockReason = (canRun && !subExpired) ? null : subExpired ? 'Subscription expired' : 'No permission'
 
     return (
-        <div className="min-h-screen bg-muted/5">
-            {/* Header */}
-            <div className="sticky top-0 z-10 bg-background border-b border-border">
-                <div className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
-                    <div className="flex items-center gap-3">
-                        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/admin/crm/campaigns')} className="h-8 w-8 p-0">
-                            <ArrowLeft className="w-4 h-4" />
-                        </Button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-lg font-semibold text-foreground">{campaign.name}</h1>
-                                <StatusBadge status={s} />
+        <div className="min-h-screen bg-gray-50/60 pb-8">
+            <div className="mx-6 pt-4 space-y-4">
+                {/* Header Card */}
+                <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
+                    {/* Row 1: Back · Title · Status · Metadata */}
+                    <div className="px-6 py-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
+                            <button
+                                onClick={() => router.push('/dashboard/admin/crm/campaigns')}
+                                className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all shrink-0"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                            </button>
+
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <h1 className="text-xl font-bold text-slate-900 truncate">{campaign.name}</h1>
+                                    <CampaignStatusBadge status={s} isReadyToStart={readyToStart} isPausedForNight={pausedForNight} />
+                                </div>
+                                <div className="flex items-center gap-4 mt-2 flex-wrap">
+                                    {campaign.projects?.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {campaign.projects.map(p => (
+                                                <span key={p.id} className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 font-bold">
+                                                    <Building2 className="w-2.5 h-2.5" />
+                                                    {p.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {campaign.start_date && (
+                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-bold uppercase tracking-wider">
+                                            <Calendar className="w-3 h-3 text-slate-400" />
+                                            <span>{campaign.start_date} → {campaign.end_date || '∞'}</span>
+                                        </div>
+                                    )}
+                                    {campaign.time_start && (
+                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-bold uppercase tracking-wider">
+                                            <Clock className="w-3 h-3 text-slate-400" />
+                                            <span>{campaign.time_start.slice(0,5)} – {campaign.time_end.slice(0,5)} IST</span>
+                                        </div>
+                                    )}
+                                    {campaign.total_enrolled > 0 && (
+                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-bold uppercase tracking-wider">
+                                            <Users className="w-3 h-3 text-slate-400" />
+                                            <span>{campaign.total_enrolled} Leads</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                <Building2 className="w-3 h-3" /> {(campaign.projects?.length > 0 ? campaign.projects : (campaign.project ? [campaign.project] : [])).map(p => p.name).join(', ') || '—'}
+                        </div>
+
+                        {/* Actions Row 1 (Primary ones) */}
+                        <div className="flex items-center gap-2 shrink-0">
+                            {/* Refresh */}
+                            <button
+                                onClick={() => qc.invalidateQueries({ queryKey: ['campaign', id] })}
+                                disabled={anyPending}
+                                className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-40"
+                                title="Refresh data"
+                            >
+                                <RefreshCw className={cn("w-4 h-4", anyPending && "animate-spin")} />
+                            </button>
+
+                            {/* Archive — terminal states only */}
+                            {['completed','cancelled','failed'].includes(s) && canEdit && (
+                                <button
+                                    onClick={handleArchive} disabled={anyPending}
+                                    className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-40"
+                                    title="Archive campaign"
+                                >
+                                    {anyPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                                </button>
+                            )}
+
+                            {/* Main Action Group */}
+                            <div className="h-9 w-px bg-slate-200 mx-1 hidden md:block" />
+                            
+                            <div className="flex items-center gap-2">
+                                {/* Start */}
+                                {s === 'scheduled' && (
+                                    <Button
+                                        onClick={handleStart}
+                                        disabled={!canRun || subExpired || anyPending}
+                                        className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-xs uppercase tracking-wide"
+                                    >
+                                        {anyPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                                        Start Campaign
+                                    </Button>
+                                )}
+
+                                {/* Pause */}
+                                {s === 'running' && !pausedForNight && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={handlePause}
+                                        disabled={!canRun || anyPending}
+                                        className="h-9 px-4 rounded-lg border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 font-bold text-xs uppercase tracking-wider"
+                                    >
+                                        {anyPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Pause className="w-3.5 h-3.5" />}
+                                        Pause
+                                    </Button>
+                                )}
+
+                                {/* Resume */}
+                                {s === 'paused' && (
+                                    <Button
+                                        onClick={handleResume}
+                                        disabled={!canRun || subExpired || anyPending}
+                                        className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-xs uppercase tracking-wider"
+                                    >
+                                        {anyPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                                        Resume
+                                    </Button>
+                                )}
+
+                                {/* Enroll leads */}
+                                {canEdit && !['completed','cancelled','archived'].includes(s) && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setShowEnrollDialog(true)}
+                                        className="h-9 px-4 rounded-lg border-slate-200 font-bold text-xs uppercase tracking-wider"
+                                    >
+                                        <UserPlus className="w-3.5 h-3.5" />
+                                        Enroll Leads
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {canRun && (
-                            <>
-                                {['draft', 'scheduled'].includes(s) && (
-                                    <Button
-                                        size="sm"
-                                        onClick={() => setConfirmAction('start')}
-                                        disabled={anyPending || subExpired}
-                                        title={subExpired ? 'Subscription expired — renew to start campaigns' : undefined}
-                                    >
-                                        <Play className="w-3.5 h-3.5 mr-1.5" /> Start
-                                    </Button>
-                                )}
-                                {s === 'running' && (
-                                    <>
-                                        <Button variant="outline" size="sm" onClick={() => setConfirmAction('pause')} disabled={anyPending} className="border-amber-300 text-amber-700 hover:bg-amber-50">
-                                            <Pause className="w-3.5 h-3.5 mr-1.5" /> Pause
-                                        </Button>
-                                        <Button variant="outline" size="sm" onClick={() => setConfirmAction('complete')} disabled={anyPending}>
-                                            <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Complete
-                                        </Button>
-                                        <Button variant="outline" size="sm" onClick={() => setConfirmAction('cancel')} disabled={anyPending} className="border-red-300 text-red-600 hover:bg-red-50">
-                                            <XCircle className="w-3.5 h-3.5 mr-1.5" /> Cancel
-                                        </Button>
-                                    </>
-                                )}
-                                {s === 'paused' && (
-                                    <>
-                                        <Button
-                                            size="sm"
-                                            onClick={() => setConfirmAction('resume')}
-                                            disabled={anyPending || subExpired}
-                                            title={subExpired ? 'Subscription expired — renew to resume campaigns' : undefined}
+                    {/* Failed banner */}
+                    {s === 'failed' && (campaign.metadata?.fail_reason || campaign.fail_reason) && (
+                        <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-sm font-bold text-red-800 uppercase tracking-tight">Campaign Failed</p>
+                                <p className="text-xs text-red-600 font-medium mt-1">
+                                    {FAIL_REASON_MESSAGES[campaign.metadata?.fail_reason || campaign.fail_reason] || campaign.metadata?.fail_reason || campaign.fail_reason}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Night pause indicator */}
+                    {s === 'running' && pausedForNight && (
+                        <div className="mx-6 mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-3">
+                            <Moon className="w-5 h-5 text-indigo-500" />
+                            <div className="flex-1">
+                                <p className="text-sm font-bold text-indigo-800">Paused for the night</p>
+                                <p className="text-xs text-indigo-600 font-medium mt-0.5">Calls will automatically resume at {campaign.time_start} IST</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Row 2: Tabs and Secondary Actions */}
+                    <div className="px-6 py-2.5 flex items-center justify-between bg-slate-50/50">
+                        <Tabs defaultValue="overview" className="w-full">
+                            <div className="flex items-center justify-between">
+                                <TabsList className="bg-slate-100 p-1 h-auto rounded-lg">
+                                    {[
+                                        { value: 'overview',  label: 'Overview' },
+                                        { value: 'leads',     label: 'Leads' },
+                                        { value: 'logs',      label: 'Call Logs' },
+                                        { value: 'analytics', label: 'Analytics' },
+                                        ...(hasDangerActions ? [{ value: 'danger', label: 'Danger Zone', danger: true }] : []),
+                                    ].map(tab => (
+                                        <TabsTrigger
+                                            key={tab.value}
+                                            value={tab.value}
+                                            className={cn(
+                                                "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+                                                "data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-slate-900",
+                                                tab.danger ? "data-[state=active]:text-red-600 hover:text-red-600" : "text-slate-500 hover:text-slate-700"
+                                            )}
                                         >
-                                            <Play className="w-3.5 h-3.5 mr-1.5" /> Resume
-                                        </Button>
-                                        <Button variant="outline" size="sm" onClick={() => setConfirmAction('cancel')} disabled={anyPending} className="border-red-300 text-red-600 hover:bg-red-50">
-                                            <XCircle className="w-3.5 h-3.5 mr-1.5" /> Cancel
-                                        </Button>
-                                    </>
+                                            {tab.label}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+
+                                {/* Row 2 Right side: Campaign Actions */}
+                                <div className="flex items-center gap-2 pr-2">
+                                    {/* Complete — running only */}
+                                    {canRun && s === 'running' && (
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button size="sm" className="h-8 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-bold text-[10px] uppercase tracking-wider shadow-none">
+                                                    <CheckCircle2 className="w-3.5 h-3.5" /> Complete Campaign
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Complete this campaign?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will stop the automated worker. Any leads currently in the queue will be left as-is, and the campaign will be marked as finished.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Go Back</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={handleComplete} className="bg-emerald-600 hover:bg-emerald-700">Complete Campaign</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    )}
+
+                                    {/* Cancel — active only */}
+                                    {['running','paused'].includes(s) && canRun && (
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button size="sm" className="h-8 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 font-bold text-[10px] uppercase tracking-wider shadow-none">
+                                                    <XCircle className="w-3.5 h-3.5" /> Cancel Campaign
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle className="text-red-600">Cancel this campaign?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will stop all queued calls immediately. Active calls will be allowed to finish naturally. This action cannot be reversed.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Keep Running</AlertDialogCancel>
+                                                    <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleCancel}>Cancel Campaign</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Tab Content Area */}
+                            <div className="pt-3 -mx-6 px-6 bg-slate-50/50 min-h-[60vh]">
+                                <TabsContent value="overview" className="mt-0 outline-none">
+                                    <CampaignOverviewTab campaign={campaign} />
+                                </TabsContent>
+                                <TabsContent value="leads" className="mt-0 outline-none">
+                                    <EnrolledLeadsTab campaignId={id} campaignStatus={s} projectIds={campaign.projects?.map(p => p.id) || [campaign.project_id]} />
+                                </TabsContent>
+                                <TabsContent value="logs" className="mt-0 outline-none">
+                                    <CampaignCallLogsTab campaignId={id} />
+                                </TabsContent>
+                                <TabsContent value="analytics" className="mt-0 outline-none">
+                                    <CampaignAnalyticsTab campaignId={id} />
+                                </TabsContent>
+                                {hasDangerActions && (
+                                    <TabsContent value="danger" className="mt-0 outline-none">
+                                        <DangerZone
+                                            campaign={campaign}
+                                            canDelete={canDelete}
+                                            canRun={canRun}
+                                            onCancel={handleCancel}
+                                            onArchive={handleArchive}
+                                            onDelete={handleDelete}
+                                            isPending={anyPending}
+                                        />
+                                    </TabsContent>
                                 )}
-                                {['completed', 'cancelled'].includes(s) && (
-                                    <Button variant="outline" size="sm" onClick={() => setConfirmAction('archive')} disabled={anyPending}>
-                                        <Archive className="w-3.5 h-3.5 mr-1.5" /> Archive
-                                    </Button>
-                                )}
-                                {s === 'archived' && (
-                                    <Button variant="outline" size="sm" onClick={() => setConfirmAction('restore')} disabled={anyPending}>
-                                        <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restore
-                                    </Button>
-                                )}
-                                {['running', 'paused', 'completed', 'cancelled', 'failed'].includes(s) && (
-                                    <Button variant="outline" size="sm" onClick={() => setConfirmAction('restart')} disabled={anyPending} className="border-orange-300 text-orange-600 hover:bg-orange-50">
-                                        <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restart
-                                    </Button>
-                                )}
-                            </>
-                        )}
-                        <Button variant="ghost" size="sm" onClick={() => qc.invalidateQueries({ queryKey: ['campaign', id] })} disabled={anyPending} className="h-8 w-8 p-0">
-                            <RefreshCw className={`w-4 h-4 ${anyPending ? 'animate-spin' : ''}`} />
-                        </Button>
+                            </div>
+                        </Tabs>
                     </div>
                 </div>
-
-                {/* Live progress strip for running campaigns */}
-                {isRunning && progress && (
-                    <div className="px-6 pb-3">
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden flex gap-px">
-                                <div className="bg-emerald-500 h-full transition-all duration-700" style={{ width: `${((progress.called || 0) / Math.max(progress.total, 1)) * 100}%` }} />
-                                <div className="bg-amber-400 h-full transition-all duration-700" style={{ width: `${((progress.calling || 0) / Math.max(progress.total, 1)) * 100}%` }} />
-                                <div className="bg-blue-400 h-full transition-all duration-700" style={{ width: `${((progress.queued || 0) / Math.max(progress.total, 1)) * 100}%` }} />
-                            </div>
-                            <span className="tabular-nums font-medium">{progress.percentage}%</span>
-                            <span className="text-muted-foreground/60">{progress.processed}/{progress.total}</span>
-                        </div>
-                    </div>
-                )}
             </div>
 
-            {/* Tabs */}
-            <div className="p-6">
-                <Tabs defaultValue="overview">
-                    <TabsList className="mb-6">
-                        <TabsTrigger value="overview"><BarChart3 className="w-4 h-4 mr-1.5" /> Overview</TabsTrigger>
-                        <TabsTrigger value="leads"><Users className="w-4 h-4 mr-1.5" /> Enrolled Leads</TabsTrigger>
-                        <TabsTrigger value="calls"><Phone className="w-4 h-4 mr-1.5" /> Call Results</TabsTrigger>
-                        <TabsTrigger value="settings"><Settings className="w-4 h-4 mr-1.5" /> Settings</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="overview">
-                        <OverviewTab campaign={campaign} progress={progress} />
-                    </TabsContent>
-                    <TabsContent value="leads">
-                        <EnrolledLeadsTab campaignId={id} campaignStatus={s} projectId={campaign?.project_id} />
-                    </TabsContent>
-                    <TabsContent value="calls">
-                        <CallResultsTab campaignId={id} />
-                    </TabsContent>
-                    <TabsContent value="settings">
-                        <SettingsTab campaign={campaign} />
-                    </TabsContent>
-                </Tabs>
-            </div>
-
-            {/* Confirm Dialog */}
-            <Dialog open={!!confirmAction} onOpenChange={(v) => { if (!v) setConfirmAction(null) }}>
-                <DialogContent className="max-w-sm">
-                    <DialogHeader>
-                        <DialogTitle className="capitalize">{confirmAction} Campaign?</DialogTitle>
-                        <DialogDescription>
-                            {confirmAction === 'cancel' && 'This will cancel the campaign and clean up all queued calls. Active calls will complete naturally.'}
-                            {confirmAction === 'complete' && 'This will mark the campaign as completed. Any pending leads will be left in their current state.'}
-                            {confirmAction === 'archive' && 'This will archive the campaign data. You can restore it later.'}
-                            {confirmAction === 'restore' && 'This will restore the campaign to draft status.'}
-                            {['start', 'pause', 'resume'].includes(confirmAction) && `Confirm ${confirmAction} this campaign?`}
-                            {confirmAction === 'restart' && 'This will delete all call logs, clear the call queue, reset all enrolled leads back to "enrolled" status, and set the campaign back to "scheduled". This cannot be undone.'}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2">
-                        <Button variant="outline" onClick={() => setConfirmAction(null)}>Cancel</Button>
-                        <Button
-                            onClick={() => doAction(confirmAction)}
-                            className={['cancel', 'restart'].includes(confirmAction) ? 'bg-red-600 hover:bg-red-700 text-white' : ''}
-                        >
-                            Confirm
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <LeadEnrollmentPanel
+                open={showEnrollDialog}
+                onClose={() => setShowEnrollDialog(false)}
+                campaignId={id}
+                projectIds={campaign.projects?.map(p => p.id) || [campaign.project_id]}
+            />
         </div>
     )
 }
+

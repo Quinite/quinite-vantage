@@ -13,6 +13,66 @@ export function validateAndNormalizePhone(raw) {
     return { valid, normalized: valid ? normalized : null }
 }
 
+export async function assertCampaignOwnership(adminClient, campaignId, organizationId) {
+  const { data: campaign, error } = await adminClient
+    .from('campaigns')
+    .select('id, organization_id, status')
+    .eq('id', campaignId)
+    .single();
+
+  if (error || !campaign) {
+    const err = new Error('Campaign not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (campaign.organization_id !== organizationId) {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
+  }
+
+  return campaign;
+}
+
+export function validateCampaignStartConditions(campaign, orgCredits, subscriptionStatus) {
+  const nowIST = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Kolkata', hour12: false });
+  const [datePart, timePart] = nowIST.split(', ');
+  const todayIST = datePart;
+  const timeIST = timePart?.slice(0, 5);
+
+  if (campaign.start_date && todayIST < campaign.start_date) {
+    const d = new Date(campaign.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return { valid: false, code: 'BEFORE_START_DATE', error: `Campaign starts on ${d}. Adjust the date or come back then.` };
+  }
+
+  if (campaign.end_date && todayIST > campaign.end_date) {
+    return { valid: false, code: 'AFTER_END_DATE', error: 'Campaign end date has passed. Edit the end date to extend it.' };
+  }
+
+  if (campaign.time_start && timeIST < campaign.time_start) {
+    return { valid: false, code: 'BEFORE_TIME_WINDOW', error: `Calling window opens at ${campaign.time_start}. Come back then.` };
+  }
+
+  if (campaign.time_end && timeIST > campaign.time_end) {
+    return { valid: false, code: 'AFTER_TIME_WINDOW', error: `Today's calling window has closed (${campaign.time_end}). Come back tomorrow.` };
+  }
+
+  if (campaign.dnd_compliance !== false && (timeIST < '09:00' || timeIST > '21:00')) {
+    return { valid: false, code: 'DND_VIOLATION', error: 'DND rules restrict calls to 9 AM–9 PM IST.' };
+  }
+
+  if (typeof orgCredits === 'number' && orgCredits < 1) {
+    return { valid: false, code: 'INSUFFICIENT_CREDITS', error: 'Insufficient call credits. Top up to start.' };
+  }
+
+  if (!['active', 'trialing'].includes(subscriptionStatus)) {
+    return { valid: false, code: 'SUBSCRIPTION_INACTIVE', error: 'Your subscription is inactive.' };
+  }
+
+  return { valid: true };
+}
+
 /**
  * Campaign Service
  * Centralized business logic for campaign operations
@@ -56,6 +116,28 @@ export class CampaignService {
 
         if (error) throw error
 
+        // Get status counts for the organization (respecting project filter if present)
+        let statsQuery = adminClient
+            .from('campaigns')
+            .select('status')
+            .eq('organization_id', organizationId)
+        
+        if (filters.projectId) {
+            statsQuery = statsQuery.contains('project_ids', [filters.projectId])
+        }
+
+        const { data: statusRows } = await statsQuery
+        const statusCounts = (statusRows || []).reduce((acc, row) => {
+            acc[row.status] = (acc[row.status] || 0) + 1
+            return acc
+        }, {})
+
+        const groupCounts = {
+            active: (statusCounts['scheduled'] || 0) + (statusCounts['running'] || 0) + (statusCounts['paused'] || 0),
+            completed: (statusCounts['completed'] || 0) + (statusCounts['cancelled'] || 0) + (statusCounts['failed'] || 0),
+            archived: statusCounts['archived'] || 0
+        }
+
         const normalized = (campaigns || []).map(c => ({
             ...c,
             projects: c.campaign_projects?.map(cp => cp.project).filter(Boolean)
@@ -68,7 +150,8 @@ export class CampaignService {
                 total: count || 0,
                 page,
                 limit,
-                hasMore: (from + limit) < (count || 0)
+                hasMore: (from + limit) < (count || 0),
+                statusGroups: groupCounts
             }
         }
     }
@@ -93,11 +176,10 @@ export class CampaignService {
 
         if (error) throw error
 
-        return {
-            ...campaign,
-            projects: campaign.campaign_projects?.map(cp => cp.project).filter(Boolean)
-                || (campaign.project ? [campaign.project] : [])
-        }
+        const projects = (campaign.campaign_projects || []).map(cp => cp.project).filter(Boolean).map(p => ({ id: p.id, name: p.name }))
+            || (campaign.project ? [{ id: campaign.project.id, name: campaign.project.name }] : []);
+        const { project_id, project_ids, ...cleanCampaign } = campaign;
+        return { ...cleanCampaign, projects };
     }
 
     /**
@@ -530,7 +612,7 @@ export class CampaignService {
             .from('campaign_leads')
             .select(`
                 *,
-                lead:leads(id, name, phone, email, score, interest_level, do_not_call, archived_at),
+                lead:leads(id, name, phone, email, score, interest_level, do_not_call, archived_at, avatar_url, source),
                 call_log:call_logs(call_status, duration, sentiment_score, summary)
             `, { count: 'exact' })
             .eq('campaign_id', campaignId)
@@ -564,18 +646,18 @@ export class CampaignService {
             rows = rows.filter(r => r.lead?.name?.toLowerCase().includes(s) || r.lead?.phone?.includes(s))
         }
 
-        // Fetch call_queue retry info for failed leads (no FK so queried separately)
-        const failedLeadIds = rows.filter(r => r.status === 'failed').map(r => r.lead_id)
-        if (failedLeadIds.length > 0) {
+        // Fetch call_queue retry info for failed or retrying leads (no FK so queried separately)
+        const retryingLeadIds = rows.filter(r => (r.status === 'failed' || (r.status === 'queued' && r.attempt_count > 0))).map(r => r.lead_id)
+        if (retryingLeadIds.length > 0) {
             const { data: queueRows } = await adminClient
                 .from('call_queue')
                 .select('lead_id, attempt_count, next_retry_at')
                 .eq('campaign_id', campaignId)
-                .in('lead_id', failedLeadIds)
+                .in('lead_id', retryingLeadIds)
             if (queueRows?.length) {
                 const queueMap = {}
                 for (const q of queueRows) queueMap[q.lead_id] = q
-                rows = rows.map(r => r.status === 'failed' ? { ...r, queue_item: queueMap[r.lead_id] || null } : r)
+                rows = rows.map(r => (r.status === 'failed' || (r.status === 'queued' && r.attempt_count > 0)) ? { ...r, queue_item: queueMap[r.lead_id] || null } : r)
             }
         }
 

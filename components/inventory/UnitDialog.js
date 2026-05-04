@@ -262,6 +262,7 @@ export default function UnitDialog({
   const selectedCategory = selectedConfig?.category || projectType
   const isResidential = selectedCategory === 'residential'
   const isLand = selectedCategory === 'land'
+  const isApartment = selectedConfig?.property_type === 'Apartment'
   const finalPrice = calculateFinalPrice(formData.base_price || 0, formData.floor_rise_price || 0, formData.plc_price || 0)
   const statusCfg = getStatusConfig(formData.status)
 
@@ -461,6 +462,7 @@ export default function UnitDialog({
                     setFormData={setFormData}
                     isResidential={isResidential}
                     isLand={isLand}
+                    isApartment={isApartment}
                     finalPrice={finalPrice}
                     selectedConfig={selectedConfig}
                   />

@@ -188,7 +188,7 @@ export default function IdentitySection({
         <div className="space-y-1.5">
           <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Transaction</Label>
           <div className="flex bg-slate-100 p-0.5 rounded-xl h-9 gap-0.5">
-            {['sell', 'rent'].map((t) => (
+            {['sell', 'rent', 'lease'].map((t) => (
               <button
                 key={t}
                 type="button"

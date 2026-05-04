@@ -253,7 +253,7 @@ export default function UnitTypesTab({ projectId, project }) {
                                                     </Tooltip>
                                                 </TooltipProvider>
                                                 <Badge variant="outline" className="text-[9px] bg-slate-50 uppercase tracking-widest font-bold">
-                                                    {config.transaction_type || 'Sell'}
+                                                    {config.transaction_type || 'sell'}
                                                 </Badge>
                                             </div>
                                         </div>

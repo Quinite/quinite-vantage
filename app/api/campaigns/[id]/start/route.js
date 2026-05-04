@@ -4,16 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logAudit } from '@/lib/permissions'
 import { corsJSON } from '@/lib/cors'
 import { hasDashboardPermission } from '@/lib/dashboardPermissions'
-import { CampaignService } from '@/services/campaign.service'
+import { CampaignService, assertCampaignOwnership, validateCampaignStartConditions } from '@/services/campaign.service'
 import { requireActiveSubscription } from '@/lib/middleware/subscription'
 
-// IST helpers
-function getISTDateTime() {
-    const now = new Date()
-    const currentDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    const currentTime = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false }).substring(0, 5)
-    return { currentDate, currentTime }
-}
 
 export async function POST(request, { params }) {
     try {
@@ -55,37 +48,15 @@ export async function POST(request, { params }) {
             return corsJSON({ error: 'CAMPAIGN_NOT_STARTABLE', message: `Cannot start a ${campaign.status} campaign` }, { status: 400 })
         }
 
-        // ── Time window validation (IST) ──────────────────────────────────────
-        const { currentDate, currentTime } = getISTDateTime()
+        // ── Credit + org fetch ────────────────────────────────────────────────
+        const [{ data: credits }, { data: org }] = await Promise.all([
+            adminClient.from('call_credits').select('balance').eq('organization_id', profile.organization_id).single(),
+            adminClient.from('organizations').select('subscription_status').eq('id', profile.organization_id).single(),
+        ])
 
-        if (campaign.start_date && campaign.end_date) {
-            if (currentDate < campaign.start_date || currentDate > campaign.end_date) {
-                return corsJSON({ error: 'TIME_WINDOW_VIOLATION', message: 'Current date is outside the campaign date range', details: { currentDate, start_date: campaign.start_date, end_date: campaign.end_date } }, { status: 400 })
-            }
-        }
-        if (campaign.time_start && campaign.time_end) {
-            if (currentTime < campaign.time_start || currentTime > campaign.time_end) {
-                return corsJSON({ error: 'TIME_WINDOW_VIOLATION', message: 'Current time is outside the campaign time window', details: { currentTime, time_start: campaign.time_start, time_end: campaign.time_end } }, { status: 400 })
-            }
-        }
-
-        // ── DND compliance (9am–9pm IST) ──────────────────────────────────────
-        if (campaign.dnd_compliance !== false) {
-            if (currentTime < '09:00' || currentTime > '21:00') {
-                return corsJSON({ error: 'DND_HOURS_VIOLATION', message: 'Calling outside DND-compliant hours (9:00–21:00 IST)', allowed_window: '09:00–21:00 IST' }, { status: 400 })
-            }
-        }
-
-        // ── Credit check ──────────────────────────────────────────────────────
-        const { data: credits } = await adminClient
-            .from('call_credits')
-            .select('balance')
-            .eq('organization_id', profile.organization_id)
-            .single()
-
-        if (!credits || credits.balance < 1.0) {
-            return corsJSON({ error: 'INSUFFICIENT_CREDITS', balance: credits?.balance || 0 }, { status: 400 })
-        }
+        // ── Shared validation (dates, time window, DND, credits, subscription) ─
+        const validation = validateCampaignStartConditions(campaign, credits?.balance, org?.subscription_status)
+        if (!validation.valid) return corsJSON({ error: validation.error, code: validation.code }, { status: 422 })
 
         let creditCapRemaining = Infinity
         if (campaign.credit_cap != null) {
