@@ -6,6 +6,7 @@ import { useInventoryProjects, useInventoryUnits } from '@/hooks/useInventory'
 import { formatINR } from '@/lib/inventory'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import {
@@ -131,25 +132,26 @@ export default function InventoryOverviewPage() {
             <div className="space-y-5">
 
                 {/* ── Header ─────────────────────────────────────────────── */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground">Inventory Overview</h1>
-                        <p className="text-sm text-muted-foreground mt-0.5">
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Inventory Overview</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">
                             {projects.length} active project{projects.length !== 1 ? 's' : ''}&nbsp;·&nbsp;{totalUnits} total units
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        <Link href="/dashboard/admin/inventory/units">
-                            <span className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-200 bg-white hover:bg-blue-50 transition-all cursor-pointer">
-                                <Home className="w-3.5 h-3.5" />
+
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <Link href="/dashboard/admin/inventory/units" className="w-full sm:w-auto">
+                            <Button variant="outline" className="gap-2 h-10 w-full justify-center border-slate-200 text-slate-600 hover:bg-slate-50">
+                                <Home className="w-4 h-4" />
                                 All Units
-                            </span>
+                            </Button>
                         </Link>
-                        <Link href="/dashboard/admin/inventory/analytics">
-                            <span className="flex items-center gap-1.5 text-sm font-medium text-white px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer">
-                                <BarChart3 className="w-3.5 h-3.5" />
-                                Analytics
-                            </span>
+                        <Link href="/dashboard/admin/inventory/analytics" className="w-full sm:w-auto">
+                            <Button className="gap-2 h-10 w-full justify-center bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-100">
+                                <BarChart3 className="w-4 h-4" />
+                                View Analytics
+                            </Button>
                         </Link>
                     </div>
                 </div>

@@ -268,12 +268,12 @@ export function UnitsView({ projectId = null }) {
             <div className="bg-white border-b border-slate-200 px-5 py-3 flex flex-col gap-3 sticky top-0 z-10">
 
                 {/* Row 1: search + add */}
-                <div className="flex items-center gap-3">
-                    <div className="relative flex-1 max-w-sm">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <div className="relative flex-1 w-full max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                         <Input
                             placeholder="Search unit, tower, config…"
-                            className="pl-9 h-9 bg-slate-50 border-slate-200 text-sm rounded-lg focus:bg-white transition-colors"
+                            className="pl-9 h-9 bg-slate-50 border-slate-200 text-sm rounded-lg focus:bg-white transition-colors w-full"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                         />
@@ -284,7 +284,7 @@ export function UnitsView({ projectId = null }) {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2 ml-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-between sm:justify-end">
                         {selectedCount > 0 && (
                             <span className="text-xs font-medium text-slate-500 mr-1">
                                 {selectedCount} selected
@@ -293,7 +293,7 @@ export function UnitsView({ projectId = null }) {
                         {canManage && (
                             <Button
                                 onClick={() => setDrawerState({ open: true, mode: 'add', unit: null })}
-                                className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium gap-1.5"
+                                className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium gap-1.5 w-full sm:w-auto justify-center"
                             >
                                 <Plus className="w-3.5 h-3.5" />
                                 Add Unit
@@ -301,6 +301,7 @@ export function UnitsView({ projectId = null }) {
                         )}
                     </div>
                 </div>
+
 
                 {/* Row 2: filters */}
                 <div className="flex items-center gap-2 flex-wrap">

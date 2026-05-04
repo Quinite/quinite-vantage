@@ -333,15 +333,26 @@ export default function CrmSettingsPage() {
         >
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <Settings2 className="h-6 w-6 text-blue-600" />
-                            Pipeline Stages
-                        </h1>
-                        <p className="text-gray-500 mt-1">Customize your sales pipeline by adding, removing, and reordering stages.</p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center">
+                            <Settings2 className="h-7 w-7 text-blue-600" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Pipeline Settings</h1>
+                            <p className="text-sm md:text-base text-slate-500 mt-1">Customize your sales pipeline stages and workflow.</p>
+                        </div>
                     </div>
-
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <Button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="w-full md:w-auto h-10 px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all duration-200"
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                            {saving ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Pipeline Stages Card */}
@@ -393,14 +404,7 @@ export default function CrmSettingsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Save Button */}
-                <div className="flex justify-end">
-                    <Button onClick={handleSave} disabled={saving} size="lg" className="w-full sm:w-auto sm:min-w-[140px]">
-                        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {!saving && <Save className="h-4 w-4 mr-2" />}
-                        {saving ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                </div>
+
 
                 <AlertDialog open={!!stageToDelete} onOpenChange={(open) => !open && setStageToDelete(null)}>
                     <AlertDialogContent>

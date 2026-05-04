@@ -85,69 +85,73 @@ export default function SiteVisitsPage() {
     const conversionRate  = completedCount > 0 ? Math.round((interestedCount / completedCount) * 100) : 0
 
     return (
-        <div className="flex flex-col h-full gap-4 p-4 md:p-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col h-full gap-4 md:gap-6 p-3 md:p-8 bg-slate-50/50 overflow-y-auto">
+            {/* Standardized Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
-                    <h1 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-primary" />
+                    <h1 className="text-xl md:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                        <MapPin className="w-6 h-6 md:w-8 md:h-8 text-indigo-600" />
                         Site Visits
                     </h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                        {isLoading ? 'Loading…' : `${visits.length} total this period`}
+                    <p className="text-sm md:text-base text-slate-500 mt-1">
+                        {isLoading ? 'Loading site visits...' : `Track and manage ${visits.length} scheduled property viewings.`}
                     </p>
                 </div>
 
-                {/* Filters */}
+                {/* Filters Row */}
                 {(users.length > 0 || projects.length > 0) && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
-                        
-                        {/* Project Filter */}
-                        <Select value={filterProject} onValueChange={setFilterProject}>
-                            <SelectTrigger className="h-8 w-36 text-xs">
-                                <SelectValue placeholder="All projects" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All projects</SelectItem>
-                                {projects.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 flex-1 overflow-x-auto no-scrollbar min-w-0">
+                            {/* Project Filter */}
+                            <Select value={filterProject} onValueChange={setFilterProject}>
+                                <SelectTrigger className="h-9 w-[130px] text-xs border-none bg-transparent focus:ring-0">
+                                    <SelectValue placeholder="All projects" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All projects</SelectItem>
+                                    {projects.map(p => (
+                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
 
-                        {/* Agent Filter */}
-                        <Select value={filterAgent} onValueChange={setFilterAgent}>
-                            <SelectTrigger className="h-8 w-36 text-xs">
-                                <SelectValue placeholder="All agents" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All agents</SelectItem>
-                                {users.map(u => (
-                                    <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            <div className="w-px h-4 bg-slate-200 shrink-0" />
 
-                        {/* Status Filter */}
-                        <Select value={filterStatus} onValueChange={setFilterStatus}>
-                            <SelectTrigger className="h-8 w-32 text-xs">
-                                <SelectValue placeholder="All status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__all__">All status</SelectItem>
-                                <SelectItem value="scheduled">Scheduled</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                                <SelectItem value="no_show">No Show</SelectItem>
-                                <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                        </Select>
+                            {/* Agent Filter */}
+                            <Select value={filterAgent} onValueChange={setFilterAgent}>
+                                <SelectTrigger className="h-9 w-[130px] text-xs border-none bg-transparent focus:ring-0">
+                                    <SelectValue placeholder="All agents" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All agents</SelectItem>
+                                    {users.map(u => (
+                                        <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <div className="w-px h-4 bg-slate-200 shrink-0" />
+
+                            {/* Status Filter */}
+                            <Select value={filterStatus} onValueChange={setFilterStatus}>
+                                <SelectTrigger className="h-9 w-[120px] text-xs border-none bg-transparent focus:ring-0">
+                                    <SelectValue placeholder="All status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All status</SelectItem>
+                                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                    <SelectItem value="no_show">No Show</SelectItem>
+                                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
                         {(filterAgent !== '__all__' || filterProject !== '__all__' || filterStatus !== '__all__' || search) && (
                             <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                                className="h-9 text-xs text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-3 rounded-xl"
                                 onClick={() => { 
                                     setFilterAgent('__all__'); 
                                     setFilterProject('__all__'); 
@@ -155,7 +159,7 @@ export default function SiteVisitsPage() {
                                     setSearch('');
                                 }}
                             >
-                                Clear
+                                Reset
                             </Button>
                         )}
                     </div>
@@ -163,7 +167,7 @@ export default function SiteVisitsPage() {
             </div>
 
             {/* Stat Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
                 {[
                     {
                         label: 'Scheduled',
@@ -196,10 +200,10 @@ export default function SiteVisitsPage() {
                         label: 'Cancelled',
                         value: cancelledCount,
                         icon: XCircle,
-                        color: 'text-zinc-500',
-                        bg: 'bg-zinc-50',
-                        border: 'border-zinc-200',
-                        bar: 'bg-zinc-400',
+                        color: 'text-slate-500',
+                        bg: 'bg-slate-50',
+                        border: 'border-slate-200',
+                        bar: 'bg-slate-400',
                     },
                     {
                         label: 'Conversion',
@@ -212,39 +216,66 @@ export default function SiteVisitsPage() {
                         sub: `${interestedCount} interested`,
                     },
                 ].map(({ label, value, icon: Icon, color, bg, border, bar, sub }) => (
-                    <div key={label} className={`relative flex flex-col gap-2 rounded-xl border ${border} bg-card p-4 overflow-hidden`}>
-                        <div className={`absolute top-0 left-0 right-0 h-0.5 ${bar}`} />
+                    <div key={label} className={`relative flex flex-col gap-3 rounded-2xl border ${border} bg-white p-5 shadow-sm transition-all hover:shadow-md overflow-hidden group`}>
+                        <div className={`absolute top-0 left-0 right-0 h-1 ${bar} opacity-70 group-hover:opacity-100 transition-opacity`} />
                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">{label}</span>
-                            <span className={`w-7 h-7 rounded-lg ${bg} flex items-center justify-center`}>
-                                <Icon className={`w-3.5 h-3.5 ${color}`} />
-                            </span>
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                            <div className={`w-8 h-8 rounded-xl ${bg} flex items-center justify-center`}>
+                                <Icon className={`w-4 h-4 ${color}`} />
+                            </div>
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-foreground leading-none">{isLoading ? '—' : value}</p>
-                            {sub && <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>}
+                            <p className="text-2xl md:text-3xl font-bold text-slate-900 leading-none tabular-nums tracking-tight">{isLoading ? '—' : value}</p>
+                            {sub && <p className="text-[11px] font-medium text-slate-500 mt-2">{sub}</p>}
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Controls Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-3 rounded-xl border border-border/50">
-                <div className="flex items-center gap-4 flex-1">
-                    <div className="relative flex-1 max-w-sm">
+            <div className="flex flex-col gap-3 bg-muted/30 p-3 rounded-xl border border-border/50">
+                {/* Top: search + view toggle */}
+                <div className="flex items-center gap-2">
+                    <div className="relative flex-1 min-w-0">
                         <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
                             placeholder="Search leads or notes..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="h-8 pl-8 text-xs bg-background"
+                            className="h-9 pl-8 text-xs bg-background w-full"
                         />
                     </div>
-                    {viewMode !== 'calendar' && (
+
+                    {/* View Toggle */}
+                    <div className="flex items-center bg-background p-1 rounded-lg border shadow-sm shrink-0">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewMode('calendar')}
+                            className={`h-7 px-2 md:px-3 text-xs gap-1 md:gap-1.5 rounded-md transition-all ${viewMode === 'calendar' ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <CalendarDays className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Calendar</span>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewMode('table')}
+                            className={`h-7 px-2 md:px-3 text-xs gap-1 md:gap-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <List className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">List</span>
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Bottom row: sort (list view) + legend (desktop) */}
+                <div className="flex items-center justify-between gap-2">
+                    {viewMode !== 'calendar' ? (
                         <div className="flex items-center gap-2">
-                            <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                            <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                             <Select value={sortBy} onValueChange={setSortBy}>
-                                <SelectTrigger className="h-8 w-44 text-xs bg-background border-none shadow-none focus:ring-0">
+                                <SelectTrigger className="h-8 w-40 text-xs bg-background border-none shadow-none focus:ring-0">
                                     <SelectValue placeholder="Sort by" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -256,10 +287,8 @@ export default function SiteVisitsPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                    )}
-                </div>
+                    ) : <div />}
 
-                <div className="flex items-center gap-4">
                     {/* Status legend */}
                     <div className="hidden md:flex items-center gap-4 text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
                         {[
@@ -273,28 +302,6 @@ export default function SiteVisitsPage() {
                                 {label}
                             </span>
                         ))}
-                    </div>
-
-                    {/* View Toggle */}
-                    <div className="flex items-center bg-background p-1 rounded-lg border shadow-sm">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setViewMode('calendar')}
-                            className={`h-7 px-3 text-xs gap-1.5 rounded-md transition-all ${viewMode === 'calendar' ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                            <CalendarDays className="w-3.5 h-3.5" />
-                            Calendar
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setViewMode('table')}
-                            className={`h-7 px-3 text-xs gap-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                            <List className="w-3.5 h-3.5" />
-                            List
-                        </Button>
                     </div>
                 </div>
             </div>

@@ -433,65 +433,69 @@ export default function ProjectsPage() {
     <div className="min-h-screen bg-muted/5">
       {/* Header */}
       <div className="px-6 py-5 border-b border-border bg-background">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Title */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-foreground">Projects</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Projects</h1>
             {!loading && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {projects.length} project{projects.length !== 1 ? 's' : ''}
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {projects.length} project{projects.length !== 1 ? 's' : ''} in your workspace
               </p>
             )}
           </div>
 
-          {/* Search */}
-          <div className="w-64 shrink-0">
-            <Input
-              placeholder="Search projects…"
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
-              className="h-9 bg-muted/40 border-border/60 focus:bg-background"
-            />
-          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            {/* Search */}
+            <div className="relative w-full sm:w-64">
+              <Input
+                placeholder="Search projects…"
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
+                className="h-10 bg-muted/40 border-border/60 focus:bg-background w-full"
+              />
+            </div>
 
-          {/* View toggle */}
-          <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/50 shrink-0">
-            {[['grid', LayoutGrid], ['list', List]].map(([mode, Icon]) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`h-7 w-7 flex items-center justify-center rounded-md transition-all ${
-                  viewMode === mode ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-                }`}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* View toggle */}
+              <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border/50 shrink-0">
+                {[['grid', LayoutGrid], ['list', List]].map(([mode, Icon]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`h-9 w-9 flex items-center justify-center rounded-md transition-all ${
+                      viewMode === mode ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 shrink-0"
+                onClick={() => refetch()}
+                disabled={isFetching}
               >
-                <Icon className="w-3.5 h-3.5" />
-              </button>
-            ))}
+                <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+              </Button>
+
+              <PermissionTooltip
+                hasPermission={canCreate && !subExpired}
+                message={subExpired ? 'Subscription expired. Renew to create projects.' : "You need 'Create Projects' permission to add new projects. Contact your administrator."}
+              >
+                <Button
+                  onClick={() => setCreateOpen(true)}
+                  disabled={!canCreate || subExpired}
+                  className="h-10 flex-1 sm:flex-initial gap-2 px-4"
+                >
+                  {(!canCreate || subExpired) ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  <span className="whitespace-nowrap">New Project</span>
+                </Button>
+              </PermissionTooltip>
+            </div>
           </div>
-
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            onClick={() => refetch()}
-            disabled={isFetching}
-          >
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-          </Button>
-
-          <PermissionTooltip
-            hasPermission={canCreate && !subExpired}
-            message={subExpired ? 'Subscription expired. Renew to create projects.' : "You need 'Create Projects' permission to add new projects. Contact your administrator."}
-          >
-            <Button
-              onClick={() => setCreateOpen(true)}
-              disabled={!canCreate || subExpired}
-              className="h-9 shrink-0"
-            >
-              {(!canCreate || subExpired) ? <Lock className="w-3.5 h-3.5 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-              New Project
-            </Button>
-          </PermissionTooltip>
         </div>
       </div>
 

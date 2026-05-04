@@ -106,10 +106,10 @@ export default function ProjectList({
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                            <TableHead className="w-[100px]">Image</TableHead>
+                            <TableHead className="w-[80px] md:w-[100px]">Image</TableHead>
                             <TableHead>Project Info</TableHead>
-                            <TableHead>Location</TableHead>
-                            <TableHead>Type</TableHead>
+                            <TableHead className="hidden sm:table-cell">Location</TableHead>
+                            <TableHead className="hidden lg:table-cell">Type</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -146,28 +146,30 @@ export default function ProjectList({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="font-medium text-foreground">{project.name}</div>
-                                            {(project.is_draft || project.project_status === 'draft') && (
-                                                <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-orange-100 text-orange-600 font-bold uppercase tracking-wider border border-orange-200">
-                                                    Draft
-                                                </span>
-                                            )}
-                                            {isArchived && (
-                                                <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 font-bold uppercase tracking-wider border border-slate-200">
-                                                    Archived
-                                                </span>
-                                            )}
+                                        <div className="flex flex-col gap-0.5 min-w-0 max-w-[220px]">
+                                            <div className="flex items-center gap-2">
+                                                <div className="font-bold text-sm text-foreground truncate">{project.name}</div>
+                                                {(project.is_draft || project.project_status === 'draft') && (
+                                                    <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-orange-100 text-orange-600 font-bold uppercase tracking-wider border border-orange-200 shrink-0">
+                                                        Draft
+                                                    </span>
+                                                )}
+                                                {isArchived && (
+                                                    <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 font-bold uppercase tracking-wider border border-slate-200 shrink-0">
+                                                        Archived
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-[11px] text-muted-foreground truncate">{project.address}</div>
                                         </div>
-                                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">{project.address}</div>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden sm:table-cell">
                                         <div className="text-sm text-muted-foreground flex items-center gap-1">
                                             <MapPin className="w-3 h-3 opacity-70" />
                                             {loc.city || 'N/A'}, {loc.locality || ''}
                                         </div>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden lg:table-cell">
                                         <div className="text-sm">
                                             <span className="capitalize px-2 py-1 bg-muted rounded text-muted-foreground text-xs font-medium border border-border/50">
                                                 {prop.category || 'Project'}

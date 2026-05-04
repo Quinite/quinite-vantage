@@ -45,24 +45,27 @@ function CrmPipelineContent() {
         <div className="min-h-screen bg-muted/5 flex flex-col">
             {/* Header */}
             <div className="p-6 border-b border-border bg-background sticky top-0 z-10">
-                <div className="flex items-center justify-between gap-4 mb-0">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-                        CRM Pipeline
-                    </h1>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-0">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
+                            CRM Pipeline
+                        </h1>
+                        <p className="text-sm text-slate-500 mt-1">Track and manage your leads through the sales stages.</p>
+                    </div>
 
                     <PermissionGate feature={['manage_crm_settings', 'view_settings']}>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
                             <Button
                                 onClick={() => setTriggersOpen(true)}
                                 variant="outline"
-                                className="h-10 px-4 gap-2 border-dashed"
+                                className="h-10 px-4 gap-2 border-dashed w-full sm:w-auto justify-center"
                             >
                                 <Zap className="w-4 h-4" />
                                 Pipeline Triggers
                             </Button>
                             <Button
                                 onClick={() => setManageStagesOpen(true)}
-                                className="bg-white hover:bg-zinc-50 text-foreground border border-border shadow-sm h-10 px-4 transition-all"
+                                className="bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 shadow-sm h-10 px-4 transition-all w-full sm:w-auto justify-center"
                             >
                                 <Settings className="w-4 h-4 mr-2" />
                                 Manage Pipeline

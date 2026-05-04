@@ -25,7 +25,8 @@ import {
     Phone,
     Clock,
     TrendingUp,
-    CheckSquare
+    CheckSquare,
+    MapPin
 } from 'lucide-react'
 import {
     DropdownMenu,
@@ -99,6 +100,7 @@ export default function AdminHeader({ user, profile }) {
         { label: 'Overview', href: '/dashboard/admin', icon: LayoutDashboard }, // Public to dashboard users
         { label: 'CRM', href: '/dashboard/admin/crm/dashboard', icon: KanbanSquare }, // Could gate, but sub-items are gated
         { label: 'Inventory', href: '/dashboard/admin/inventory', icon: Building, permission: 'view_inventory' },
+        { label: 'Settings', href: '/dashboard/admin/settings', icon: Settings, permission: 'view_settings' },
     ]
 
     // [NEW] Define permissions for CRM nav items
@@ -108,6 +110,7 @@ export default function AdminHeader({ user, profile }) {
         { label: 'Projects', href: '/dashboard/admin/crm/projects', icon: FolderKanban, permission: 'view_projects' },
         { label: 'Campaigns', href: '/dashboard/admin/crm/campaigns', icon: Megaphone, permission: 'view_campaigns' },
         { label: 'Leads', href: '/dashboard/admin/crm/leads', icon: Users, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
+        { label: 'Site Visits', href: '/dashboard/admin/crm/site-visits', icon: MapPin, permission: 'view_site_visits' },
         { label: 'Pipeline', href: '/dashboard/admin/crm?tab=pipeline', icon: KanbanSquare, permission: ['view_own_leads', 'view_team_leads', 'view_all_leads'] },
         { label: 'Live Calls', href: '/dashboard/admin/crm/calls/live', icon: Phone, permission: 'view_live_calls' },
         { label: 'Call History', href: '/dashboard/admin/crm/calls/history', icon: Clock, permission: 'view_call_history' },
@@ -125,6 +128,15 @@ export default function AdminHeader({ user, profile }) {
         { label: 'Analytics', href: '/dashboard/admin/inventory/analytics', icon: BarChart3, permission: 'view_inventory' },
     ]
 
+    // [NEW] Define permissions for Settings nav items
+    const settingsNavItems = [
+        { label: 'General', href: '/dashboard/admin/settings/organization', icon: Building2, permission: 'view_settings' },
+        { label: 'Website', href: '/dashboard/admin/settings/website', icon: LayoutDashboard, permission: 'view_settings' },
+        { label: 'Integrations', href: '/dashboard/admin/settings/integrations', icon: Zap, permission: 'view_settings' },
+        { label: 'Team Members', href: '/dashboard/admin/settings/members', icon: Users, permission: 'view_settings' },
+        { label: 'Subscription', href: '/dashboard/admin/settings/subscription', icon: FileText, permission: 'view_settings' },
+    ]
+
     // Helper to filter items
     const filterItems = (items) => {
         if (permissionsLoading) return [] // Hide during load or logic choice
@@ -140,9 +152,11 @@ export default function AdminHeader({ user, profile }) {
     const filteredNavItems = filterItems(navItems)
     const filteredCrmItems = filterItems(crmNavItems)
     const filteredInventoryItems = filterItems(inventoryNavItems)
+    const filteredSettingsItems = filterItems(settingsNavItems)
 
     const isCrmModule = pathname?.startsWith('/dashboard/admin/crm')
     const isInventoryModule = pathname?.startsWith('/dashboard/admin/inventory')
+    const isSettingsModule = pathname?.startsWith('/dashboard/admin/settings')
 
     return (
         <header className="sticky top-0 z-30 w-full  border-border bg-white">
@@ -186,6 +200,9 @@ export default function AdminHeader({ user, profile }) {
                                                 } else if (item.label === 'Inventory') {
                                                     // Inventory is active for any path starting with /dashboard/admin/inventory
                                                     isActive = pathname?.startsWith('/dashboard/admin/inventory')
+                                                } else if (item.label === 'Settings') {
+                                                    // Settings is active for any path starting with /dashboard/admin/settings
+                                                    isActive = pathname?.startsWith('/dashboard/admin/settings')
                                                 } else if (item.label === 'Analytics') {
                                                     // Analytics is active for exact match (not CRM or Inventory analytics)
                                                     isActive = pathname === '/dashboard/admin/analytics'
@@ -268,6 +285,35 @@ export default function AdminHeader({ user, profile }) {
                                                     })}
                                                 </>
                                             )}
+                                            {/* Settings Module Sub-Navigation */}
+                                            {isSettingsModule && (
+                                                <>
+                                                    <div className="my-2 border-t border-border" />
+                                                    <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase tracking-wider">
+                                                        Settings Module
+                                                    </div>
+                                                    {filteredSettingsItems.map((item) => {
+                                                        const isActive = pathname === item.href
+                                                        const Icon = item.icon
+                                                        return (
+                                                            <Link
+                                                                key={item.href}
+                                                                href={item.href}
+                                                                onClick={() => setOpen(false)}
+                                                                className={cn(
+                                                                    "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                                                                    isActive
+                                                                        ? "bg-blue-50 text-blue-700"
+                                                                        : "text-muted-foreground hover:bg-slate-50 hover:text-foreground"
+                                                                )}
+                                                            >
+                                                                <Icon className="w-4 h-4" />
+                                                                {item.label}
+                                                            </Link>
+                                                        )
+                                                    })}
+                                                </>
+                                            )}
                                         </div>
                                     </SheetContent>
                                 </Sheet>
@@ -320,6 +366,9 @@ export default function AdminHeader({ user, profile }) {
                                     } else if (item.label === 'Inventory') {
                                         // Inventory is active for any path starting with /dashboard/admin/inventory
                                         isActive = pathname?.startsWith('/dashboard/admin/inventory')
+                                    } else if (item.label === 'Settings') {
+                                        // Settings is active for any path starting with /dashboard/admin/settings
+                                        isActive = pathname?.startsWith('/dashboard/admin/settings')
                                     } else if (item.label === 'Analytics') {
                                         // Analytics is active for exact match (not CRM or Inventory analytics)
                                         isActive = pathname === '/dashboard/admin/analytics'

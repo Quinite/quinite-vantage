@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Edit, Trash2, Phone, Mail, User, ArrowUpDown, ArrowUp, ArrowDown, Archive, RefreshCcw, Star, Zap, Globe, Eye } from 'lucide-react'
+import { Edit, Trash2, Phone, Mail, User, Users, ArrowUpDown, ArrowUp, ArrowDown, Archive, RefreshCcw, Star, Zap, Globe, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getDefaultAvatar } from '@/lib/avatar-utils'
@@ -118,8 +118,26 @@ export function LeadTable({
             {/* Mobile Card View */}
             <div className="block sm:hidden space-y-4">
                 {leads.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card text-sm">
-                        No leads found
+                    <div className="mx-4 my-8 text-center py-16 px-6 text-muted-foreground border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50 animate-in fade-in zoom-in duration-300">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-20 h-20 bg-white rounded-full shadow-xl flex items-center justify-center ring-8 ring-slate-50">
+                                <Users className="w-10 h-10 text-slate-200" />
+                            </div>
+                            <div className="max-w-[240px] mx-auto">
+                                <h4 className="text-lg font-bold text-slate-900 leading-tight">No leads discovered</h4>
+                                <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                                    We couldn't find any leads matching your current criteria. Try broading your search or filters.
+                                </p>
+                            </div>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="mt-2 rounded-xl border-slate-200 font-bold text-xs"
+                                onClick={() => window.location.reload()}
+                            >
+                                Refresh Leads
+                            </Button>
+                        </div>
                     </div>
                 ) : (
                     leads.map((lead) => (
@@ -367,11 +385,17 @@ export function LeadTable({
                     <TableBody>
                         {leads.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center py-16 text-muted-foreground">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <User className="w-8 h-8 text-slate-200" />
-                                        <p className="text-sm font-medium text-slate-500">No leads found</p>
-                                        <p className="text-xs text-slate-400">Try adjusting your filters</p>
+                                <TableCell colSpan={10} className="h-96 text-center">
+                                    <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-300">
+                                        <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center shadow-inner">
+                                            <Users className="w-12 h-12 text-slate-200" />
+                                        </div>
+                                        <div className="max-w-sm mx-auto">
+                                            <h3 className="text-xl font-bold text-slate-900">No matching leads</h3>
+                                            <p className="text-sm text-slate-500 mt-2">
+                                                Your current filters didn't return any results. Try adjusting your search query or removing some filters to see more leads.
+                                            </p>
+                                        </div>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -557,50 +581,54 @@ export function LeadTable({
             </div>
 
             {/* Pagination Footer */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
-                <div className="flex items-center gap-4">
-                    <div className="text-sm text-muted-foreground">
-                        {totalLeads} leads found
-                    </div>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 bg-white">
+                <div className="text-sm text-slate-500 font-medium order-2 sm:order-1">
+                    Showing <span className="font-bold text-slate-900">{leads.length}</span> of <span className="font-bold text-slate-900">{totalLeads}</span> leads
                 </div>
-                <div className="flex items-center space-x-2">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
+                
+                <div className="flex items-center gap-4 order-1 sm:order-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <div className="hidden md:flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-xl border border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Rows</span>
                         <Select
                             value={String(limit)}
                             onValueChange={(val) => onLimitChange?.(parseInt(val))}
                         >
-                            <SelectTrigger className="h-8 w-[70px]">
+                            <SelectTrigger className="h-7 w-[65px] border-0 bg-transparent p-0 focus:ring-0 text-xs font-bold text-slate-700">
                                 <SelectValue placeholder={limit} />
                             </SelectTrigger>
-                            <SelectContent side="top">
+                            <SelectContent side="top" className="rounded-xl shadow-xl border-slate-100">
                                 {[10, 20, 50, 100].map((pageSize) => (
-                                    <SelectItem key={pageSize} value={String(pageSize)}>
+                                    <SelectItem key={pageSize} value={String(pageSize)} className="text-xs">
                                         {pageSize}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onPageChange(page - 1)}
-                        disabled={page === 1 || loading || isLoadingMore}
-                    >
-                        Previous
-                    </Button>
-                    <div className="text-sm text-muted-foreground min-w-[60px] text-center">
-                        Page {page}
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onPageChange(page - 1)}
+                            disabled={page === 1 || loading || isLoadingMore}
+                            className="h-9 px-4 rounded-xl border-slate-200 bg-white shadow-sm disabled:opacity-50 flex-1 sm:flex-none font-semibold text-xs"
+                        >
+                            Previous
+                        </Button>
+                        <div className="bg-slate-50 border border-slate-100 rounded-xl h-9 px-4 flex items-center justify-center min-w-[90px] shadow-inner">
+                            <span className="text-xs font-bold text-slate-600">Page {page}</span>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onPageChange(page + 1)}
+                            disabled={!hasMore || loading || isLoadingMore}
+                            className="h-9 px-4 rounded-xl border-slate-200 bg-white shadow-sm disabled:opacity-50 flex-1 sm:flex-none font-semibold text-xs"
+                        >
+                            Next
+                        </Button>
                     </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onPageChange(page + 1)}
-                        disabled={!hasMore || loading || isLoadingMore}
-                    >
-                        Next
-                    </Button>
                 </div>
             </div>
             {/* Bulk Action Bar */}

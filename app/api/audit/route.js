@@ -78,15 +78,16 @@ export async function GET(request) {
       }
 
       // [User Request Fix] Users should not see other users' logs unless they are Admins/Owners
-      // We check the role name. Ideally this should be a permission like 'view_all_audit_logs'.
-      const viewAllRoles = ['Owner', 'Admin', 'Super Admin']
-      const canViewOthers = viewAllRoles.some(r => r.toLowerCase() === profile.role?.toLowerCase())
+      // We check the role name using a normalized string comparison.
+      const viewAllRoles = ['owner', 'admin', 'super_admin', 'org_admin']
+      const userRole = profile?.role?.toLowerCase().replace(' ', '_')
+      const canViewOthers = viewAllRoles.includes(userRole)
 
       // Also check specific permission if available (future proofing)
       const hasViewAllPermission = await hasDashboardPermission(user.id, 'view_all_audit_logs')
 
       if (!canViewOthers && !hasViewAllPermission) {
-        console.log(`🔒 [Audit API] Restricting to user: ${user.id}`);
+        console.log(`🔒 [Audit API] Restricting to user: ${user.id} (Role: ${userRole})`);
         query = query.eq('user_id', user.id)
       }
     } else {

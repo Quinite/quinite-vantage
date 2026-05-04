@@ -108,7 +108,7 @@ export function SystemStatus() {
                     )}></span>
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-64 p-0 shadow-2xl border-slate-200" align="end">
+            <PopoverContent className="w-64 max-w-[calc(100vw-32px)] p-0 shadow-2xl border-slate-200" align="end" collisionPadding={16}>
                 <div className="py-2 px-4 border-b bg-slate-50/50 flex justify-between items-center">
                     <div>
                         <h4 className="font-bold text-sm text-slate-900">System Status</h4>

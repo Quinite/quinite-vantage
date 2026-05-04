@@ -122,16 +122,20 @@ export default function RolePermissionsPage() {
     const total = getTotalCount()
 
     return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="flex-1 space-y-6 p-8 pt-6 bg-slate-50/30 min-h-screen">
             {/* Header */}
-            <div>
-                <h1 className="text-3xl font-semibold tracking-tight flex items-center gap-2">
-                    <Shield className="w-8 h-8 text-blue-600" />
-                    Role Permissions
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                    Changes save automatically. Affects all users with this role.
-                </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center">
+                        <Shield className="w-7 h-7 text-blue-600" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Role Permissions</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">
+                            Changes save automatically. Affects all users with this role.
+                        </p>
+                    </div>
+                </div>
             </div>
 
             {/* Role Tabs */}

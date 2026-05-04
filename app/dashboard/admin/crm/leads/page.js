@@ -322,14 +322,17 @@ export default function LeadsPage() {
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Leads</h2>
-        <div className="flex items-center gap-2">
-          {/* View toggle removed */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Lead Management</h1>
+          <p className="text-sm md:text-base text-slate-500 mt-1">Manage and track your sales pipeline and lead interactions.</p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
           <Button
             onClick={() => setIsSourceDialogOpen(true)}
             disabled={!canCreate || subExpired}
             title={subExpired ? 'Subscription expired — renew to add leads' : undefined}
+            className="w-full md:w-auto justify-center h-10 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all duration-200"
           >
             <Plus className="mr-2 h-4 w-4" /> Add Lead
           </Button>
@@ -381,7 +384,6 @@ export default function LeadsPage() {
         onStatusUpdate={handleStatusUpdate}
         stages={allStages}
         onBulkArchive={handleBulkArchive}
-        onBulkRestore={handleBulkRestore}
         onBulkAssign={handleBulkAssign}
         users={users}
 

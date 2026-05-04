@@ -1527,96 +1527,112 @@ export default function TasksPageView() {
     return (
         <TooltipProvider delayDuration={0}>
             <div className="flex-1 space-y-6 p-8 pt-6 min-h-0 overflow-y-auto bg-slate-50/30">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Task Management</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">Track and manage your daily activities and follow-ups.</p>
+                    </div>
+                    {canCreate && (
+                        <Button 
+                            onClick={() => setCreateOpen(true)} 
+                            className="h-10 gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6 font-bold shadow-md w-full md:w-auto justify-center"
+                        >
+                            <Plus className="w-4 h-4" /> Add Task
+                        </Button>
+                    )}
+                </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
-                        { label: 'Pending',      value: pendingCount,      icon: Clock,        color: 'blue' },
-                        { label: 'Overdue',      value: overdueCount,      icon: AlertCircle,  color: 'red' },
-                        { label: 'High Priority',value: highPriorityCount, icon: Zap,          color: 'rose' },
-                        { label: 'Completed',    value: completedCount,    icon: CheckCircle2, color: 'emerald' },
-                    ].map(({ label, value, icon: Icon, color }) => (
-                        <Card key={label} className="border-0 shadow-sm ring-1 ring-gray-100 bg-white">
-                            <CardContent className="p-4 flex items-center gap-4">
-                                <div className={cn("p-2.5 rounded-xl",
-                                    color === 'blue'    ? 'bg-blue-50 text-blue-600' :
-                                    color === 'red'     ? 'bg-red-50 text-red-600' :
-                                    color === 'rose'    ? 'bg-rose-50 text-rose-600' :
-                                    'bg-emerald-50 text-emerald-600'
-                                )}>
-                                    <Icon className="w-5 h-5" />
+                        { label: 'Pending',       value: pendingCount,       icon: Clock,        color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-blue-100', shadow: 'shadow-blue-50' },
+                        { label: 'Overdue',       value: overdueCount,       icon: AlertCircle,  color: 'text-red-600',     bg: 'bg-red-50',     border: 'border-red-100', shadow: 'shadow-red-50' },
+                        { label: 'High Priority', value: highPriorityCount,  icon: Zap,          color: 'text-rose-600',    bg: 'bg-rose-50',    border: 'border-rose-100', shadow: 'shadow-rose-50' },
+                        { label: 'Completed',     value: completedCount,     icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', shadow: 'shadow-emerald-50' },
+                    ].map(({ label, value, icon: Icon, color, bg, border, shadow }) => (
+                        <div key={label} className={cn("relative bg-white rounded-2xl p-5 border shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5", border, shadow)}>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className={cn("p-2 rounded-xl", bg)}>
+                                    <Icon className={cn("w-5 h-5", color)} />
                                 </div>
-                                <div className="min-w-0">
-                                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">{label}</p>
-                                    <p className={cn("text-base font-black mt-0.5", label === 'Overdue' && value > 0 ? 'text-red-600' : 'text-gray-900')}>{value}</p>
+                                {label === 'Overdue' && value > 0 && (
+                                    <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{label}</p>
+                                <div className="flex items-baseline gap-2">
+                                    <p className={cn("text-3xl font-black tabular-nums leading-none", label === 'Overdue' && value > 0 ? 'text-red-600' : 'text-slate-900')}>
+                                        {value}
+                                    </p>
+                                    {label === 'Overdue' && value > 0 && (
+                                        <p className="text-[10px] font-bold text-red-500 uppercase tracking-tight">Attention</p>
+                                    )}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     ))}
                 </div>
 
                 {/* Filter bar */}
-                <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-100 overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     {/* Row 1: search + view toggle + actions */}
-                    <div className="flex items-center gap-2 p-2 flex-wrap">
-                        <div className="relative flex-1 min-w-[180px] max-w-sm group">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                    <div className="flex items-center gap-3 p-3 flex-wrap">
+                        <div className="relative flex-1 min-w-[240px] max-w-sm group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                             <Input
-                                placeholder="Search tasks, lead or project..."
+                                placeholder="Search tasks, leads, or projects..."
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className="pl-9 h-9 text-xs border-slate-100 bg-slate-50/50 rounded-lg"
+                                className="pl-10 h-10 text-sm border-slate-200 bg-slate-50/50 rounded-xl focus-visible:ring-indigo-500 focus-visible:border-indigo-500 transition-all"
                             />
                         </div>
 
-                        {/* Filters toggle button */}
-                        <button
-                            onClick={() => setShowAdvFilters(v => !v)}
-                            className={cn(
-                                "flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-semibold border transition-all",
-                                showAdvFilters || activeFilterCount > 0
-                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                    : "bg-slate-50 text-slate-500 border-slate-100 hover:text-slate-700"
-                            )}
-                        >
-                            <SlidersHorizontal className="w-3.5 h-3.5" />
-                            Filters
-                            {activeFilterCount > 0 && (
-                                <span className="ml-0.5 bg-indigo-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                                    {activeFilterCount}
-                                </span>
-                            )}
-                        </button>
-
-                        <div className="flex-1" />
-
-                        {/* View toggle */}
-                        <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg shrink-0">
+                        <div className="flex items-center gap-2 ml-auto sm:ml-0">
+                            {/* Filters toggle button */}
                             <button
-                                onClick={() => setViewMode('list')}
+                                onClick={() => setShowAdvFilters(v => !v)}
                                 className={cn(
-                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
-                                    viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                    "flex items-center gap-2 h-10 px-4 rounded-xl text-sm font-bold border transition-all",
+                                    showAdvFilters || activeFilterCount > 0
+                                        ? "bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm"
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                                 )}
                             >
-                                <LayoutList className="w-3.5 h-3.5" /> List
-                            </button>
-                            <button
-                                onClick={() => setViewMode('calendar')}
-                                className={cn(
-                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
-                                    viewMode === 'calendar' ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                                <SlidersHorizontal className="w-4 h-4" />
+                                <span>Filters</span>
+                                {activeFilterCount > 0 && (
+                                    <span className="ml-1 bg-indigo-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                                        {activeFilterCount}
+                                    </span>
                                 )}
-                            >
-                                <CalendarDays className="w-3.5 h-3.5" /> Calendar
                             </button>
+
+                            {/* View toggle */}
+                            <div className="flex items-center gap-1 p-1 bg-slate-100/80 rounded-xl border border-slate-200/50 shrink-0">
+                                <button
+                                    onClick={() => setViewMode('list')}
+                                    className={cn(
+                                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                        viewMode === 'list' ? "bg-white text-indigo-600 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
+                                    )}
+                                >
+                                    <LayoutList className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">List</span>
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('calendar')}
+                                    className={cn(
+                                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                        viewMode === 'calendar' ? "bg-white text-indigo-600 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
+                                    )}
+                                >
+                                    <CalendarDays className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">Calendar</span>
+                                </button>
+                            </div>
                         </div>
-
-                        {canCreate && (
-                            <Button onClick={() => setCreateOpen(true)} size="sm" className="h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 font-bold shadow-md shrink-0">
-                                <Plus className="w-4 h-4" /> Add Task
-                            </Button>
-                        )}
                     </div>
 
                     {/* Row 2: advanced filters (collapsible) */}

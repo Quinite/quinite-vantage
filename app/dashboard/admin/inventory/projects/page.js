@@ -95,41 +95,43 @@ export default function InventoryProjectsPage() {
             <div className="space-y-5">
 
                 {/* ── Header ──────────────────────────────────────────────── */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground">Projects</h1>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                            {enriched.length} project{enriched.length !== 1 ? 's' : ''} in inventory
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Project Inventory</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">
+                            {enriched.length} project{enriched.length !== 1 ? 's' : ''} managed in your inventory.
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                         {/* View toggle */}
-                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5 w-full sm:w-auto justify-center">
                             <button
                                 onClick={() => setViewMode('grid')}
                                 className={cn(
-                                    'h-7 w-7 rounded-md flex items-center justify-center transition-all',
+                                    'h-7 w-full sm:w-7 px-4 sm:px-0 rounded-md flex items-center justify-center transition-all',
                                     viewMode === 'grid' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'
                                 )}
                             >
-                                <LayoutGrid className="w-3.5 h-3.5" />
+                                <LayoutGrid className="w-3.5 h-3.5 sm:mr-0 mr-1.5" />
+                                <span className="sm:hidden text-xs font-medium">Grid</span>
                             </button>
                             <button
                                 onClick={() => setViewMode('list')}
                                 className={cn(
-                                    'h-7 w-7 rounded-md flex items-center justify-center transition-all',
+                                    'h-7 w-full sm:w-7 px-4 sm:px-0 rounded-md flex items-center justify-center transition-all',
                                     viewMode === 'list' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'
                                 )}
                             >
-                                <List className="w-3.5 h-3.5" />
+                                <List className="w-3.5 h-3.5 sm:mr-0 mr-1.5" />
+                                <span className="sm:hidden text-xs font-medium">List</span>
                             </button>
                         </div>
                         {/* Search */}
-                        <div className="relative">
+                        <div className="relative w-full sm:w-auto">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                             <Input
                                 placeholder="Search projects..."
-                                className="pl-9 h-9 text-sm w-52 bg-white"
+                                className="pl-9 h-9 text-sm w-full sm:w-52 bg-white"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                             />

@@ -140,9 +140,11 @@ export default function PipelineSettingsPage() {
 
     return (
         <div className="max-w-2xl mx-auto space-y-6 py-8 px-4">
-            <div>
-                <h1 className="text-2xl font-bold text-foreground">Pipeline Settings</h1>
-                <p className="text-sm text-muted-foreground mt-1">Manage your sales pipelines. To edit stages and automation rules, open a pipeline from the CRM.</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Pipeline Settings</h1>
+                    <p className="text-sm text-slate-500 mt-1">Manage your sales pipelines. To edit stages and automation rules, open a pipeline from the CRM.</p>
+                </div>
             </div>
 
             {/* Edit stages CTA */}

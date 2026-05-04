@@ -1,5 +1,6 @@
 'use client'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
@@ -224,24 +225,26 @@ export default function MembersPage() {
         <div className="h-full bg-gray-50/50 overflow-y-auto">
             <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Team Members</h1>
-                        <p className="text-muted-foreground text-slate-500 mt-1">Manage your team members, roles, and access permissions.</p>
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Team Management</h1>
+                        <p className="text-sm md:text-base text-slate-500 mt-1">Manage your team members, roles, and access permissions.</p>
                     </div>
-                    <PermissionTooltip
-                        hasPermission={canInvite}
-                        message="You need 'Create Users' permission to add new users."
-                    >
-                        <button
-                            onClick={() => { setEditingUser(null); setShowModal(true) }}
-                            disabled={!canInvite}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <PermissionTooltip
+                            hasPermission={canInvite}
+                            message="You need 'Create Users' permission to add new users."
                         >
-                            <Plus className="w-4 h-4" />
-                            Add New User
-                        </button>
-                    </PermissionTooltip>
+                            <Button
+                                onClick={() => { setEditingUser(null); setShowModal(true) }}
+                                disabled={!canInvite}
+                                className="w-full md:w-auto h-10 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all duration-200"
+                            >
+                                <Plus className="w-4 h-4 mr-2" />
+                                Add New User
+                            </Button>
+                        </PermissionTooltip>
+                    </div>
                 </div>
 
                 {/* Controls */}
