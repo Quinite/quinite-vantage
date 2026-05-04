@@ -385,7 +385,7 @@ export function LeadTable({
                     <TableBody>
                         {leads.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-96 text-center">
+                                <TableCell colSpan={10} className="h-96 text-center">
                                     <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-300">
                                         <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center shadow-inner">
                                             <Users className="w-12 h-12 text-slate-200" />
