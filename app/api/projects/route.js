@@ -37,7 +37,7 @@ export const GET = withPermission('view_projects', async (request, context) => {
     const admin = createAdminClient()
     let query = admin
       .from('projects')
-      .select('*, campaigns(*), unit_configs(id, config_name, property_type, category, base_price, carpet_area, transaction_type, amenities)')
+      .select('*, campaigns!campaigns_project_id_fkey(*), unit_configs(id, config_name, property_type, category, base_price, carpet_area, transaction_type, amenities)')
       .eq('organization_id', profile.organization_id)
     
     // Optional archive filtering

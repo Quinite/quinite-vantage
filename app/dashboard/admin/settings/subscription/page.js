@@ -221,11 +221,6 @@ export default function SubscriptionPage() {
         },
     ] : []
 
-    // AI minutes
-    const monthlyUsedPct = credits?.monthly_included > 0
-        ? Math.min(100, (credits.monthly_used / credits.monthly_included) * 100)
-        : 0
-    const monthlyBarColor = monthlyUsedPct >= 90 ? 'bg-red-500' : monthlyUsedPct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
 
     return (
         <div className="flex-1 space-y-6 p-8 pt-6 bg-slate-50/30 min-h-screen">
@@ -358,48 +353,23 @@ export default function SubscriptionPage() {
 
                                     {/* two-column breakdown */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {/* Monthly included */}
+                                        {/* Available balance */}
                                         <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Monthly Included</p>
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Available</p>
                                             <div>
-                                                <span className="text-2xl font-bold text-slate-900 tabular-nums">{credits.monthly_balance ?? 0}</span>
-                                                <span className="text-sm text-slate-500 ml-1">/ {credits.monthly_included ?? 0} min</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={cn('h-full rounded-full transition-all duration-300', monthlyBarColor)}
-                                                        style={{ width: `${monthlyUsedPct}%` }}
-                                                    />
-                                                </div>
-                                                <p className="text-xs text-slate-400">
-                                                    {credits.monthly_used ?? 0} used ({Math.round(monthlyUsedPct)}%)
-                                                </p>
-                                            </div>
-                                            {credits.monthly_reset_at && (
-                                                <p className="text-xs text-slate-400 border-t border-slate-200 pt-2">
-                                                    Resets {formatDate(credits.monthly_reset_at)}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* Purchased */}
-                                        <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Purchased</p>
-                                            <div>
-                                                <span className="text-2xl font-bold text-slate-900 tabular-nums">{credits.purchased_balance ?? 0}</span>
+                                                <span className="text-2xl font-bold text-slate-900 tabular-nums">{credits.balance ?? 0}</span>
                                                 <span className="text-sm text-slate-500 ml-1">min</span>
                                             </div>
-                                            <p className="text-xs text-slate-400">never expire</p>
                                         </div>
-                                    </div>
 
-                                    {/* total row */}
-                                    <div className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-3 border border-slate-100">
-                                        <span className="text-sm font-medium text-slate-600">Total available</span>
-                                        <span className="text-base font-bold text-slate-900 tabular-nums">
-                                            {credits.total_balance ?? 0} min
-                                        </span>
+                                        {/* Total consumed */}
+                                        <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Used all time</p>
+                                            <div>
+                                                <span className="text-2xl font-bold text-slate-900 tabular-nums">{credits.total_consumed ?? 0}</span>
+                                                <span className="text-sm text-slate-500 ml-1">min</span>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {/* CTA */}

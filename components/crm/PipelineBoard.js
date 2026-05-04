@@ -32,33 +32,14 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import LeadForm from './LeadForm'
+import BookSiteVisitDialog from './site-visits/BookSiteVisitDialog'
 import { usePermission } from '@/contexts/PermissionContext'
 import { useLeads } from '@/hooks/useLeads'
 import { usePipelines, useUsers } from '@/hooks/usePipelines'
 import { useProjects } from '@/hooks/useProjects'
 import { toast } from 'sonner'
 import { Plus, Filter, X } from 'lucide-react'
-import { isSiteVisitScheduledStage, isSiteVisitDoneStage } from '@/lib/site-visit-stages'
-import { useSiteVisits, useAllSiteVisits } from '@/hooks/useSiteVisits'
-import SiteVisitStageGateDialog from '@/components/crm/site-visits/SiteVisitStageGateDialog'
-import SiteVisitOutcomeDialog from '@/components/crm/site-visits/SiteVisitOutcomeDialog'
-
-function SiteVisitOutcomeDialogForPipeline({ open, onOpenChange, leadId, onSuccess }) {
-    const { data: visits = [] } = useSiteVisits(leadId)
-    const latestScheduled = visits
-        .filter(v => v.status === 'scheduled')
-        .sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at))[0] ?? null
-
-    return (
-        <SiteVisitOutcomeDialog
-            open={open}
-            onOpenChange={onOpenChange}
-            leadId={leadId}
-            visit={latestScheduled}
-            onSuccess={onSuccess}
-        />
-    )
-}
+import { useAllSiteVisits } from '@/hooks/useSiteVisits'
 
 const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {}, showFilters = true }, ref) => {
     const { data: pipelines = [], isLoading: pipesLoading, refetch: refetchPipelines } = usePipelines()
@@ -85,15 +66,42 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
     const [targetStageId, setTargetStageId] = useState(null)
     const [submitting, setSubmitting] = useState(false)
     const [settingsStage, setSettingsStage] = useState(null)
-
-    const [svGateOpen, setSvGateOpen] = useState(false)
-    const [svOutcomeOpen, setSvOutcomeOpen] = useState(false)
-    const [pendingMove, setPendingMove] = useState(null)
+    const [postMoveDialog, setPostMoveDialog] = useState(null) // { type: 'book'|'outcome', lead, visit? }
 
     // Filters
     const [filterAgent, setFilterAgent] = useState('__all__')
     const [filterProject, setFilterProject] = useState('__all__')
     const [filterStaleOnly, setFilterStaleOnly] = useState(false)
+
+    const boardRef = useRef(null)
+    const dragScroll = useRef({ isDown: false, startX: 0, scrollLeft: 0 })
+
+    const onMouseDown = useCallback((e) => {
+        // Don't hijack clicks on interactive elements or when a dnd drag is active
+        if (e.target.closest('button, a, input, [data-radix-collection-item]')) return
+        const el = boardRef.current
+        if (!el) return
+        dragScroll.current = { isDown: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft }
+        el.style.cursor = 'grabbing'
+        el.style.userSelect = 'none'
+    }, [])
+
+    const onMouseLeaveOrUp = useCallback(() => {
+        if (!dragScroll.current.isDown) return
+        dragScroll.current.isDown = false
+        const el = boardRef.current
+        if (el) { el.style.cursor = ''; el.style.userSelect = '' }
+    }, [])
+
+    const onMouseMove = useCallback((e) => {
+        if (!dragScroll.current.isDown) return
+        e.preventDefault()
+        const el = boardRef.current
+        if (!el) return
+        const x = e.pageX - el.offsetLeft
+        const walk = (x - dragScroll.current.startX) * 1.5
+        el.scrollLeft = dragScroll.current.scrollLeft - walk
+    }, [])
 
     const canManageDeals = usePermission('manage_deals')
     const canManageSettings = usePermission('manage_crm_settings')
@@ -163,22 +171,6 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
 
         if (!newStageId) return
 
-        const targetStage = stages.find(s => s.id === newStageId)
-        const stageName   = targetStage?.name ?? ''
-        const movingLead  = leads.find(l => l.id === active.id)
-
-        if (isSiteVisitScheduledStage(stageName)) {
-            setPendingMove({ leadId: active.id, newStageId, lead: movingLead })
-            setSvGateOpen(true)
-            return
-        }
-
-        if (isSiteVisitDoneStage(stageName)) {
-            setPendingMove({ leadId: active.id, newStageId, lead: movingLead })
-            setSvOutcomeOpen(true)
-            return
-        }
-
         moveLead(active.id, newStageId)
     }
 
@@ -197,45 +189,49 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
         })
 
         try {
-            const res = await fetch(`/api/leads/${leadId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stageId: newStageId }),
-            })
+            // Fire all three requests in parallel — PUT, automations, and site-visits
+            const [res, automationsData, visitsData] = await Promise.all([
+                fetch(`/api/leads/${leadId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stageId: newStageId }),
+                }),
+                activePipeline?.id
+                    ? fetch(`/api/pipeline/automations?pipeline_id=${activePipeline.id}`)
+                        .then(r => r.ok ? r.json() : { automations: [] })
+                        .catch(() => ({ automations: [] }))
+                    : Promise.resolve({ automations: [] }),
+                fetch(`/api/leads/${leadId}/site-visits`)
+                    .then(r => r.ok ? r.json() : { visits: [] })
+                    .catch(() => ({ visits: [] })),
+            ])
+
             if (!res.ok) throw new Error('Update failed')
-            await refetchLeads()
+            // Await refetch before clearing optimistic override to avoid flicker
+            await Promise.all([refetchLeads(), refetchPipelines()])
             setOptimisticMoves(prev => { const next = new Map(prev); next.delete(leadId); return next })
+
+            // Check for post-move automation prompts
+            const { automations = [] } = automationsData
+            const stageEnterRules = automations.filter(a =>
+                a.is_active &&
+                a.trigger_type === 'stage_enter' &&
+                (a.trigger_config?.stage_id === newStageId || !a.trigger_config?.stage_id)
+            )
+            const hasBookForm = stageEnterRules.some(a => a.action_type === 'show_site_visit_form')
+
+            if (hasBookForm) {
+                const { visits = [] } = visitsData
+                const scheduledVisit = visits.find(v => v.status === 'scheduled')
+                if (!scheduledVisit) {
+                    setPostMoveDialog({ type: 'book', lead, previousStageId })
+                }
+            }
         } catch {
             rollbackRef.current?.()
             toast.error('Failed to move lead')
         }
-    }, [leads, refetchLeads])
-
-    const handleSiteVisitGateConfirm = useCallback(async (visitPayload) => {
-        if (!pendingMove) return
-        const { leadId, newStageId } = pendingMove
-        if (visitPayload) {
-            try {
-                await fetch(`/api/leads/${leadId}/site-visits`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...visitPayload, pipeline_stage_id: newStageId }),
-                })
-            } catch {
-                toast.error('Visit could not be saved — moving lead anyway.')
-            }
-        }
-        await moveLead(leadId, newStageId)
-        setSvGateOpen(false)
-        setPendingMove(null)
-    }, [pendingMove, moveLead])
-
-    const handleSiteVisitOutcomeConfirm = useCallback(async () => {
-        if (!pendingMove) return
-        await moveLead(pendingMove.leadId, pendingMove.newStageId)
-        setSvOutcomeOpen(false)
-        setPendingMove(null)
-    }, [pendingMove, moveLead])
+    }, [leads, refetchLeads, activePipeline])
 
     const handleStageUpdate = useCallback(async (stageId, updates) => {
         try {
@@ -285,7 +281,7 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
             const result = await res.json()
             if (!res.ok) throw new Error(result.error || 'Failed to create lead')
             toast.success('Lead created')
-            refetchLeads()
+            await Promise.all([refetchLeads(), refetchPipelines()])
             setAddDialogOpen(false)
         } catch (error) {
             toast.error(error.message)
@@ -385,7 +381,14 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                             >
-                <div className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-380px)]">
+                <div
+                    ref={boardRef}
+                    className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-380px)] cursor-grab"
+                    onMouseDown={onMouseDown}
+                    onMouseMove={onMouseMove}
+                    onMouseUp={onMouseLeaveOrUp}
+                    onMouseLeave={onMouseLeaveOrUp}
+                >
                     {Array.isArray(activePipeline?.stages) && activePipeline.stages.map(stage => {
                         const stageLeads = filteredLeads
                             .filter(l => l.stage_id === stage.id || (!l.stage_id && stage.order_index === 0))
@@ -463,29 +466,36 @@ const PipelineBoard = forwardRef(({ projectId, campaignId, externalFilters = {},
                 />
             )}
 
-            {/* Site Visit Stage Gate — fires when lead is dropped into a "Site Visit Scheduled" stage */}
-            <SiteVisitStageGateDialog
-                open={svGateOpen}
-                onOpenChange={(o) => {
-                    if (!o) { setSvGateOpen(false); setPendingMove(null) }
-                }}
-                lead={pendingMove?.lead}
-                agents={users ?? []}
-                defaultAgentId={pendingMove?.lead?.assigned_to}
-                onConfirm={handleSiteVisitGateConfirm}
-            />
-
-            {/* Site Visit Outcome Gate — fires when lead is dropped into a "Site Visit Done" stage */}
-            {pendingMove?.lead && (
-                <SiteVisitOutcomeDialogForPipeline
-                    open={svOutcomeOpen}
-                    onOpenChange={(o) => {
-                        if (!o) { setSvOutcomeOpen(false); setPendingMove(null) }
+            {/* Post-move site visit prompts */}
+            {postMoveDialog?.type === 'book' && (
+                <BookSiteVisitDialog
+                    open={true}
+                    onOpenChange={open => {
+                        if (!open) {
+                            // User dismissed without booking — snap back visually, then persist rollback
+                            const { lead, previousStageId } = postMoveDialog
+                            setPostMoveDialog(null)
+                            if (previousStageId) {
+                                // Optimistic override to previousStageId so board shows correct stage instantly
+                                setOptimisticMoves(prev => new Map(prev).set(lead.id, previousStageId))
+                                fetch(`/api/leads/${lead.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ stageId: previousStageId }),
+                                })
+                                    .then(() => refetchLeads())
+                                    .then(() => setOptimisticMoves(prev => { const next = new Map(prev); next.delete(lead.id); return next }))
+                                    .catch(() => setOptimisticMoves(prev => { const next = new Map(prev); next.delete(lead.id); return next }))
+                            }
+                        }
                     }}
-                    leadId={pendingMove.lead.id}
-                    onSuccess={handleSiteVisitOutcomeConfirm}
+                    leadId={postMoveDialog.lead.id}
+                    lead={postMoveDialog.lead}
+                    agents={users}
+                    onSuccess={() => { setPostMoveDialog(null); refetchLeads() }}
                 />
             )}
+
         </>
     )
 })

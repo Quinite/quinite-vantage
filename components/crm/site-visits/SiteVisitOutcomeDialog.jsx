@@ -25,6 +25,7 @@ export default function SiteVisitOutcomeDialog({ open, onOpenChange, leadId, vis
 
     const handleSubmit = async (e) => {
         e.preventDefault()
+        e.stopPropagation()
         if (!outcome) { toast.error('Please select an outcome'); return }
         try {
             await updateMutation.mutateAsync({

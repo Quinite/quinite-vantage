@@ -1,387 +1,603 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-    Phone, Search, Calendar, Clock, User, Building2,
-    PhoneForwarded, PhoneOff, Activity, MessageSquare,
-    Flag, TrendingUp, MessageCircle, IndianRupee
-} from 'lucide-react'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatDistanceToNow, format } from 'date-fns'
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+    Phone, Search, Clock, PhoneForwarded, PhoneOff,
+    MessageSquare, MessageCircle, Flag, TrendingUp, TrendingDown,
+    Minus, Lock, ChevronDown, ChevronUp, Zap,
+    Building2, Calendar, CheckCircle2, X, PlayCircle
+} from 'lucide-react'
+import { format } from 'date-fns'
 import { usePermission } from '@/contexts/PermissionContext'
-import { Lock } from 'lucide-react'
+import { toast } from 'react-hot-toast'
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function fmtDuration(secs) {
+    if (!secs) return '0:00'
+    const m = Math.floor(secs / 60)
+    const s = String(secs % 60).padStart(2, '0')
+    return `${m}:${s}`
+}
+
+function initials(name) {
+    if (!name) return '?'
+    return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+}
+
+function fmtDate(iso) {
+    try { return format(new Date(iso), 'dd MMM, h:mm a') } catch { return '—' }
+}
+
+function sentimentMeta(score) {
+    if (score == null) return { label: '—', color: 'text-muted-foreground', bar: 'bg-muted', pct: 0, icon: Minus }
+    if (score >= 0.3)  return { label: 'Positive', color: 'text-emerald-600', bar: 'bg-emerald-500', pct: Math.round((score + 1) * 50), icon: TrendingUp }
+    if (score < -0.1)  return { label: 'Negative', color: 'text-red-500',     bar: 'bg-red-500',     pct: Math.round((score + 1) * 50), icon: TrendingDown }
+    return                    { label: 'Neutral',  color: 'text-amber-500',   bar: 'bg-amber-400',   pct: Math.round((score + 1) * 50), icon: Minus }
+}
+
+const STATUS_META = {
+    completed:    { label: 'Completed',    cls: 'bg-emerald-500/10 text-emerald-700 border-emerald-200' },
+    transferred:  { label: 'Transferred',  cls: 'bg-blue-500/10 text-blue-700 border-blue-200' },
+    failed:       { label: 'Failed',       cls: 'bg-red-500/10 text-red-600 border-red-200' },
+    in_progress:  { label: 'In Progress',  cls: 'bg-amber-500/10 text-amber-700 border-amber-200' },
+    disconnected: { label: 'Disconnected', cls: 'bg-zinc-400/10 text-zinc-600 border-zinc-200' },
+    unknown:      { label: 'Unknown',      cls: 'bg-zinc-400/10 text-zinc-500 border-zinc-200' },
+}
+
+const INTEREST_META = {
+    high:   { cls: 'bg-emerald-500/10 text-emerald-700 border-emerald-200' },
+    medium: { cls: 'bg-amber-500/10 text-amber-700 border-amber-200' },
+    low:    { cls: 'bg-zinc-400/10 text-zinc-500 border-zinc-200' },
+    none:   { cls: 'bg-zinc-300/10 text-zinc-400 border-zinc-100' },
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub, icon: Icon, accent }) {
+    return (
+        <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <div className="flex items-start justify-between">
+                <div className="p-2 rounded-lg bg-muted/60">
+                    <Icon className="w-4 h-4 text-muted-foreground" />
+                </div>
+            </div>
+            <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+                <p className={`text-3xl font-bold mt-0.5 tabular-nums ${accent || 'text-foreground'}`}>{value}</p>
+                {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+            </div>
+        </div>
+    )
+}
+
+// ─── Transcript panel ─────────────────────────────────────────────────────────
+
+function TranscriptPanel({ transcript, onClose }) {
+    return (
+        <div className="mt-4 pt-4 border-t border-border">
+            <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5" /> Conversation Transcript
+                </p>
+                <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="w-4 h-4" />
+                </button>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-xl p-4 max-h-80 overflow-y-auto">
+                <pre className="whitespace-pre-wrap text-xs text-foreground/80 font-mono leading-relaxed">{transcript}</pre>
+            </div>
+        </div>
+    )
+}
+
+// ─── Call row ─────────────────────────────────────────────────────────────────
+
+function CallRow({ call, isSelected, onSelect, onWhatsApp }) {
+    const [showRecording, setShowRecording] = useState(false)
+    const statusKey = call.call_status || 'unknown'
+    const sm = STATUS_META[statusKey] || STATUS_META.unknown
+    const sent = sentimentMeta(call.sentiment_score != null ? Number(call.sentiment_score) : null)
+    const SentIcon = sent.icon
+    const interestKey = call.interest_level || call.ai_metadata?.interest_level
+    const im = INTEREST_META[interestKey]
+    const hasInsights = call.summary || call.sentiment_score != null
+
+    return (
+        <div className={`bg-card border rounded-xl overflow-hidden transition-all duration-150
+            ${isSelected ? 'border-border shadow-sm' : 'border-border/60 hover:border-border hover:shadow-sm'}`}
+        >
+            {/* top accent */}
+            <div className={`h-0.5 w-full ${statusKey === 'completed' ? 'bg-emerald-500' : statusKey === 'transferred' ? 'bg-blue-500' : statusKey === 'failed' ? 'bg-red-500' : 'bg-muted'}`} />
+
+            <div className="p-4">
+                {/* main row */}
+                <div className="flex items-start gap-3">
+                    {/* avatar */}
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
+                        {initials(call.lead?.name)}
+                    </div>
+
+                    {/* body */}
+                    <div className="flex-1 min-w-0">
+                        {/* name + badges */}
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="font-semibold text-sm text-foreground truncate">{call.lead?.name || 'Unknown Lead'}</span>
+                            <Badge variant="outline" className={`text-[10px] px-2 py-0.5 font-medium border ${sm.cls}`}>
+                                {sm.label}
+                            </Badge>
+                            {call.transferred && statusKey !== 'transferred' && (
+                                <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-medium border bg-blue-500/10 text-blue-700 border-blue-200">
+                                    <PhoneForwarded className="w-2.5 h-2.5 mr-1" />Transferred to Human
+                                </Badge>
+                            )}
+                            {interestKey && im && (
+                                <Badge variant="outline" className={`text-[10px] px-2 py-0.5 font-medium border capitalize ${im.cls}`}>
+                                    {interestKey}
+                                </Badge>
+                            )}
+                            {(call.priority_score || call.ai_metadata?.priority_score) != null && (
+                                <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-medium border bg-amber-500/10 text-amber-700 border-amber-200">
+                                    <Flag className="w-2.5 h-2.5 mr-1" />Priority {call.priority_score || call.ai_metadata?.priority_score}
+                                </Badge>
+                            )}
+                        </div>
+
+                        {/* meta row */}
+                        <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                            <span className="font-mono">{call.lead?.phone || call.callee_number || '—'}</span>
+                            {call.campaign?.name && (
+                                <span className="flex items-center gap-1">
+                                    <Building2 className="w-3 h-3 shrink-0" />
+                                    <span className="truncate max-w-[160px]">{call.campaign.name}</span>
+                                </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 shrink-0" />
+                                {fmtDuration(call.duration)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3 shrink-0" />
+                                {fmtDate(call.created_at)}
+                            </span>
+                            {call.call_cost != null && (
+                                <span className="font-mono">
+                                    {parseFloat(call.call_cost).toFixed(2)} cr
+                                </span>
+                            )}
+                        </div>
+
+                        {/* insights row */}
+                        {hasInsights ? (
+                            <div className="flex items-center gap-4 mt-2.5 flex-wrap">
+                                {/* sentiment */}
+                                {call.sentiment_score != null && (
+                                    <div className="flex items-center gap-1.5">
+                                        <SentIcon className={`w-3.5 h-3.5 ${sent.color}`} />
+                                        <span className={`text-xs font-medium ${sent.color}`}>{sent.label}</span>
+                                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                            <div className={`h-full rounded-full ${sent.bar}`} style={{ width: `${sent.pct}%` }} />
+                                        </div>
+                                        <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                                            {Number(call.sentiment_score).toFixed(2)}
+                                        </span>
+                                    </div>
+                                )}
+                                {/* summary */}
+                                {call.summary && (
+                                    <p className="text-xs text-muted-foreground line-clamp-1 italic flex-1 min-w-0">"{call.summary}"</p>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-muted-foreground/60 mt-2 italic">No insights yet</p>
+                        )}
+                    </div>
+
+                    {/* actions */}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                        {call.recording_url && (
+                            <Button
+                                variant="ghost" size="sm"
+                                onClick={() => setShowRecording(v => !v)}
+                                className="h-7 px-2 text-muted-foreground hover:text-blue-600"
+                                title={showRecording ? 'Hide recording' : 'Play recording'}
+                            >
+                                <PlayCircle className="w-3.5 h-3.5" />
+                                {showRecording ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
+                            </Button>
+                        )}
+                        {call.conversation_transcript && (
+                            <Button
+                                variant="ghost" size="sm"
+                                onClick={onSelect}
+                                className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                title={isSelected ? 'Hide transcript' : 'View transcript'}
+                            >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                {isSelected ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
+                            </Button>
+                        )}
+                            {call.lead?.id && !call.ai_metadata?.whatsapp_brochure_requested && (
+                            <Button
+                                variant="ghost" size="sm"
+                                onClick={onWhatsApp}
+                                className="h-7 px-2 text-muted-foreground hover:text-emerald-600"
+                                title="Create WhatsApp brochure task"
+                            >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                {/* recording player */}
+                {showRecording && call.recording_url && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                        <p className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                            <PlayCircle className="w-3.5 h-3.5" /> Call Recording
+                        </p>
+                        <audio controls src={call.recording_url} className="w-full h-9 rounded-lg" />
+                    </div>
+                )}
+
+                {/* transcript */}
+                {isSelected && call.conversation_transcript && (
+                    <TranscriptPanel transcript={call.conversation_transcript} onClose={onSelect} />
+                )}
+
+                {/* disconnect reason */}
+                {call.disconnect_reason && (
+                    <div className="mt-3 flex items-center gap-1.5">
+                        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Disconnect:</span>
+                        <span className="text-[10px] text-muted-foreground capitalize">{call.disconnect_reason.replace(/_/g, ' ')}</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function HistorySkeleton() {
+    return (
+        <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
+            <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                    <Skeleton className="h-7 w-40" />
+                    <Skeleton className="h-4 w-56" />
+                </div>
+                <Skeleton className="h-7 w-20 rounded-full" />
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-3 w-20" />
+                            <Skeleton className="h-8 w-12" />
+                            <Skeleton className="h-3 w-24" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4">
+                <div className="flex gap-3 flex-wrap">
+                    <Skeleton className="h-9 flex-1 min-w-40 rounded-lg" />
+                    <Skeleton className="h-9 w-32 rounded-lg" />
+                    <Skeleton className="h-9 w-32 rounded-lg" />
+                    <Skeleton className="h-9 w-36 rounded-lg" />
+                </div>
+            </div>
+            <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                    <div key={i} className="bg-card border border-border rounded-xl overflow-hidden">
+                        <div className="h-0.5 bg-muted" />
+                        <div className="p-4 flex gap-3">
+                            <Skeleton className="h-9 w-9 rounded-full shrink-0" />
+                            <div className="flex-1 space-y-2">
+                                <Skeleton className="h-4 w-48" />
+                                <Skeleton className="h-3 w-72" />
+                                <Skeleton className="h-3 w-56" />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CallHistory() {
     const [calls, setCalls] = useState([])
-    const [filteredCalls, setFilteredCalls] = useState([])
+    const [filtered, setFiltered] = useState([])
     const [loading, setLoading] = useState(true)
-    const [searchTerm, setSearchTerm] = useState('')
+    const [search, setSearch] = useState('')
     const [dateFrom, setDateFrom] = useState('')
     const [dateTo, setDateTo] = useState('')
+    const [statusFilter, setStatusFilter] = useState('all')
     const [interestFilter, setInterestFilter] = useState('all')
-    const [selectedCall, setSelectedCall] = useState(null)
-    const [analyzing, setAnalyzing] = useState(null)
+    const [selectedId, setSelectedId] = useState(null)
     const [user, setUser] = useState(null)
-    const [organizationId, setOrganizationId] = useState(null)
-    const supabase = createClient()
+    const [orgId, setOrgId] = useState(null)
 
+    const supabase = createClient()
     const hasAccess = usePermission('view_call_history')
 
+    // ── bootstrap ─────────────────────────────────────────────────────────────
     useEffect(() => {
-        const getUser = async () => {
+        ;(async () => {
             const { data: { user } } = await supabase.auth.getUser()
             setUser(user)
             if (user) {
-                const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single()
-                if (profile?.organization_id) setOrganizationId(profile.organization_id)
+                const { data: profile } = await supabase.from('profiles')
+                    .select('organization_id').eq('id', user.id).single()
+                if (profile?.organization_id) setOrgId(profile.organization_id)
             }
-        }
-        getUser()
+        })()
     }, [])
 
     useEffect(() => {
-        if (user && hasAccess && organizationId) {
-            fetchCallHistory()
-        } else if (!loading && !hasAccess) {
-            setLoading(false)
-        }
-    }, [user, hasAccess, organizationId, dateFrom, dateTo, interestFilter])
+        if (user && hasAccess && orgId) fetchHistory()
+        else if (!loading && !hasAccess) setLoading(false)
+    }, [user, hasAccess, orgId, dateFrom, dateTo, statusFilter, interestFilter])
 
+    // ── client-side search filter ─────────────────────────────────────────────
     useEffect(() => {
-        filterCalls()
-    }, [searchTerm, interestFilter, calls])
+        if (!search.trim()) { setFiltered(calls); return }
+        const q = search.toLowerCase()
+        setFiltered(calls.filter(c =>
+            c.lead?.name?.toLowerCase().includes(q) ||
+            c.lead?.phone?.includes(search) ||
+            c.campaign?.name?.toLowerCase().includes(q) ||
+            c.callee_number?.includes(search)
+        ))
+    }, [search, calls])
 
-    const fetchCallHistory = async () => {
-        if (!user || !organizationId) return
-
-        let query = supabase
+    // ── data fetch ────────────────────────────────────────────────────────────
+    const fetchHistory = async () => {
+        if (!orgId) return
+        let q = supabase
             .from('call_logs')
             .select(`
                 id, call_status, duration, call_cost, created_at,
                 conversation_transcript, sentiment_score,
                 interest_level, summary, ai_metadata, transferred,
-                disconnect_reason, callee_number,
-                lead:leads!call_logs_lead_id_fkey(id, name, phone, email, assigned_to),
+                disconnect_reason, callee_number, recording_url,
+                lead:leads!call_logs_lead_id_fkey(id, name, phone, assigned_to),
                 campaign:campaigns(id, name)
             `)
-            .eq('organization_id', organizationId)
+            .eq('organization_id', orgId)
+            .not('call_status', 'in', '("in_progress","ringing")')
             .order('created_at', { ascending: false })
             .limit(200)
 
-        if (dateFrom) query = query.gte('created_at', dateFrom)
-        if (dateTo) query = query.lte('created_at', dateTo + 'T23:59:59')
-        if (interestFilter !== 'all') query = query.eq('interest_level', interestFilter)
+        if (dateFrom) q = q.gte('created_at', dateFrom)
+        if (dateTo)   q = q.lte('created_at', dateTo + 'T23:59:59')
+        if (statusFilter !== 'all') q = q.eq('call_status', statusFilter)
+        if (interestFilter !== 'all') q = q.eq('interest_level', interestFilter)
 
-        const { data, error } = await query
-
-        if (error) {
-            console.error('Call history fetch error:', error)
-        }
-        if (!error && data) {
-            setCalls(data)
-            setFilteredCalls(data)
-        }
+        const { data, error } = await q
+        if (!error && data) { setCalls(data); setFiltered(data) }
         setLoading(false)
     }
 
-    const filterCalls = () => {
-        let result = calls
-        if (interestFilter !== 'all') {
-            result = result.filter(c => c.interest_level === interestFilter)
-        }
-        if (searchTerm) {
-            const q = searchTerm.toLowerCase()
-            result = result.filter(call =>
-                call.lead?.name?.toLowerCase().includes(q) ||
-                call.lead?.phone?.includes(searchTerm) ||
-                call.campaign?.name?.toLowerCase().includes(q) ||
-                call.call_status?.toLowerCase().includes(q)
-            )
-        }
-        setFilteredCalls(result)
-    }
-
+    // ── actions ───────────────────────────────────────────────────────────────
     const createWhatsAppTask = async (call) => {
-        const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single()
-        const { error } = await supabase.from('tasks').insert({
-            lead_id: call.lead?.id,
-            organization_id: profile?.organization_id,
-            title: 'Send project brochure via WhatsApp',
-            description: `Requested from call history. Call ID: ${call.id}`,
-            assigned_to: call.lead?.assigned_to,
-            created_by: user.id,
-            priority: 'medium',
-            status: 'pending',
-            due_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
-        })
-        if (!error) alert('WhatsApp brochure task created for the assigned agent.')
-        else alert('Failed to create task: ' + error.message)
-    }
-
-    const analyzeCall = async (callId) => {
-        setAnalyzing(callId)
         try {
-            const response = await fetch(`/api/calls/${callId}/analyze`, {
-                method: 'POST'
+            const { error } = await supabase.from('tasks').insert({
+                lead_id: call.lead?.id,
+                organization_id: orgId,
+                title: 'Send project brochure via WhatsApp',
+                description: `Requested from call history. Call ID: ${call.id}`,
+                assigned_to: call.lead?.assigned_to,
+                created_by: user.id,
+                priority: 'medium',
+                status: 'pending',
+                due_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
             })
-
-            if (response.ok) {
-                await fetchCallHistory()
-            } else {
-                const error = await response.json()
-                alert(`Analysis failed: ${error.error}`)
-            }
-        } catch (error) {
-            console.error('Analysis error:', error)
-        } finally {
-            setAnalyzing(null)
+            if (error) throw error
+            toast.success('WhatsApp task created')
+        } catch {
+            toast.error('Failed to create task')
         }
     }
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'completed': return 'bg-green-100 text-green-800'
-            case 'disconnected': return 'bg-gray-100 text-gray-800'
-            case 'transferred': return 'bg-blue-100 text-blue-800'
-            case 'failed': return 'bg-red-100 text-red-800'
-            default: return 'bg-gray-100 text-gray-800'
-        }
+    const clearFilters = () => {
+        setSearch(''); setDateFrom(''); setDateTo('')
+        setStatusFilter('all'); setInterestFilter('all')
     }
+    const hasFilters = search || dateFrom || dateTo || statusFilter !== 'all' || interestFilter !== 'all'
 
-    const getSentimentColor = (sentiment) => {
-        if (!sentiment) return 'text-gray-400'
-        if (sentiment > 0.3) return 'text-green-600'
-        if (sentiment < -0.3) return 'text-red-600'
-        return 'text-yellow-600'
-    }
+    // ── derived stats ─────────────────────────────────────────────────────────
+    const completed   = calls.filter(c => ['completed', 'transferred', 'disconnected'].includes(c.call_status)).length
+    const transferred = calls.filter(c => c.transferred).length
+    const analyzed    = calls.filter(c => c.summary || c.sentiment_score != null).length
+    const avgDur      = calls.length ? Math.round(calls.reduce((a, c) => a + (c.duration || 0), 0) / calls.length) : 0
 
-    const formatDuration = (seconds) => {
-        if (!seconds || seconds === 0) return '0s'
-        const mins = Math.floor(seconds / 60)
-        const secs = seconds % 60
-        return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
-    }
-
+    // ── guards ────────────────────────────────────────────────────────────────
     if (!hasAccess && !loading) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
-                <div className="p-4 bg-gray-100 rounded-full mb-4">
-                    <Lock className="w-8 h-8 text-gray-400" />
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-6">
+                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+                    <Lock className="w-6 h-6 text-muted-foreground" />
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900">Access Restricted</h2>
+                <div className="text-center">
+                    <h2 className="text-base font-semibold text-foreground">Access Restricted</h2>
+                    <p className="text-sm text-muted-foreground mt-1">You don't have permission to view call history.</p>
+                </div>
             </div>
         )
     }
 
-    if (loading) return <CallHistorySkeleton />
+    if (loading) return <HistorySkeleton />
 
+    // ── render ────────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen bg-slate-50 p-4 md:p-6 space-y-4 md:space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-                        <Phone className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Call History</h1>
-                        <p className="text-sm text-gray-500">View and analyze AI call interactions</p>
-                    </div>
+        <div className="min-h-screen bg-muted/5 p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
+
+            {/* ── Header ── */}
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="text-xl font-bold text-foreground tracking-tight">Call History</h1>
+                    <p className="text-xs text-muted-foreground mt-0.5">AI call interactions · last 200 records</p>
                 </div>
-                <Badge variant="outline" className="px-4 py-2 border-purple-200 text-purple-700 bg-purple-50">
-                    {calls.length} Total Calls
-                </Badge>
+                <span className="text-xs font-medium px-2.5 py-1 rounded-full border border-border bg-card text-muted-foreground tabular-nums">
+                    {calls.length} calls
+                </span>
             </div>
 
-            <Card className="border-0 shadow-sm">
-                <CardContent className="pt-6">
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                                placeholder="Search by lead, phone, campaign..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
-                        <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-auto" title="From date" />
-                        <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-auto" title="To date" />
-                        <Select value={interestFilter} onValueChange={setInterestFilter}>
-                            <SelectTrigger className="w-40">
-                                <SelectValue placeholder="Interest level" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Interest</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="none">None</SelectItem>
-                            </SelectContent>
-                        </Select>
+            {/* ── Stat cards ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                <StatCard
+                    label="Completed"
+                    value={completed}
+                    sub={`${calls.length ? Math.round((completed / calls.length) * 100) : 0}% success rate`}
+                    icon={CheckCircle2}
+                    accent="text-emerald-600"
+                />
+                <StatCard
+                    label="Transferred"
+                    value={transferred}
+                    sub="Escalated to human"
+                    icon={PhoneForwarded}
+                    accent="text-blue-600"
+                />
+                <StatCard
+                    label="Avg Duration"
+                    value={fmtDuration(avgDur)}
+                    sub="Per call"
+                    icon={Clock}
+                />
+                <StatCard
+                    label="AI Analyzed"
+                    value={analyzed}
+                    sub={`${calls.length ? Math.round((analyzed / calls.length) * 100) : 0}% of calls`}
+                    icon={Zap}
+                    accent="text-violet-600"
+                />
+            </div>
+
+            {/* ── Filters ── */}
+            <div className="bg-card border border-border rounded-xl p-4">
+                <div className="flex gap-2.5 flex-wrap">
+                    {/* search */}
+                    <div className="relative flex-1 min-w-52">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search lead, phone, campaign…"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="pl-8 h-9 text-sm"
+                        />
                     </div>
-                </CardContent>
-            </Card>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                <StatCard title="Completed" value={calls.filter(c => ['completed', 'transferred', 'disconnected'].includes(c.call_status)).length} icon={<Phone className="w-5 h-5" />} description="Success" />
-                <StatCard title="Transferred" value={calls.filter(c => c.transferred).length} icon={<PhoneForwarded className="w-5 h-5" />} description="To Agents" />
-                <StatCard title="Avg Duration" value={formatDuration(Math.round(calls.reduce((acc, c) => acc + (c.duration || 0), 0) / (calls.length || 1)))} icon={<Clock className="w-5 h-5" />} description="Call length" />
-                <StatCard title="With Insights" value={calls.filter(c => c.summary || c.sentiment_label).length} icon={<Activity className="w-5 h-5" />} description="AI Analyzed" />
+                    {/* date from */}
+                    <Input
+                        type="date"
+                        value={dateFrom}
+                        onChange={e => setDateFrom(e.target.value)}
+                        className="h-9 w-36 text-sm"
+                        title="From date"
+                    />
+
+                    {/* date to */}
+                    <Input
+                        type="date"
+                        value={dateTo}
+                        onChange={e => setDateTo(e.target.value)}
+                        className="h-9 w-36 text-sm"
+                        title="To date"
+                    />
+
+                    {/* status */}
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="h-9 w-36 text-sm">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="transferred">Transferred</SelectItem>
+                            <SelectItem value="failed">Failed</SelectItem>
+                            <SelectItem value="disconnected">Disconnected</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    {/* interest */}
+                    <Select value={interestFilter} onValueChange={setInterestFilter}>
+                        <SelectTrigger className="h-9 w-36 text-sm">
+                            <SelectValue placeholder="Interest" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Interest</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    {hasFilters && (
+                        <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 px-3 text-muted-foreground hover:text-foreground">
+                            <X className="w-3.5 h-3.5 mr-1.5" /> Clear
+                        </Button>
+                    )}
+                </div>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Call Records</CardTitle>
-                    <CardDescription>{filteredCalls.length} logs found</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {!filteredCalls.length ? (
-                        <div className="text-center py-12 text-gray-500">
-                            <PhoneOff className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                            <p>No calls found</p>
+            {/* ── Call list ── */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                    <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-semibold text-foreground">Call Records</span>
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">
+                            {filtered.length}
+                        </span>
+                    </div>
+                    {hasFilters && filtered.length !== calls.length && (
+                        <p className="text-xs text-muted-foreground">{calls.length - filtered.length} filtered out</p>
+                    )}
+                </div>
+
+                <div className="p-4 space-y-2.5">
+                    {filtered.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-muted/60 flex items-center justify-center mb-4">
+                                <PhoneOff className="w-6 h-6 text-muted-foreground/50" />
+                            </div>
+                            <p className="text-sm font-semibold text-foreground">No calls found</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {hasFilters ? 'Try adjusting your filters.' : 'Call logs will appear here after campaigns run.'}
+                            </p>
+                            {hasFilters && (
+                                <Button variant="outline" size="sm" onClick={clearFilters} className="mt-3">
+                                    Clear filters
+                                </Button>
+                            )}
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            {filteredCalls.map((call) => (
-                                <CallRow
-                                    key={call.id}
-                                    call={call}
-                                    getStatusColor={getStatusColor}
-                                    getSentimentColor={getSentimentColor}
-                                    formatDuration={formatDuration}
-                                    isSelected={selectedCall?.id === call.id}
-                                    onSelect={() => setSelectedCall(selectedCall?.id === call.id ? null : call)}
-                                    onAnalyze={() => analyzeCall(call.id)}
-                                    analyzing={analyzing}
-                                    onWhatsApp={() => createWhatsAppTask(call)}
-                                />
-                            ))}
-                        </div>
+                        filtered.map(call => (
+                            <CallRow
+                                key={call.id}
+                                call={call}
+                                isSelected={selectedId === call.id}
+                                onSelect={() => setSelectedId(selectedId === call.id ? null : call.id)}
+                                        onWhatsApp={() => createWhatsAppTask(call)}
+                            />
+                        ))
                     )}
-                </CardContent>
-            </Card>
-        </div>
-    )
-}
-
-function StatCard({ title, value, icon, description }) {
-    return (
-        <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all">
-            <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="text-muted-foreground p-2 rounded-lg bg-secondary/50">{icon}</div>
-                    <TrendingUp className="w-4 h-4 text-muted-foreground" />
                 </div>
-                <p className="text-sm font-medium text-muted-foreground">{title}</p>
-                <h3 className="text-2xl font-semibold mt-1">{value}</h3>
-                <p className="text-xs text-muted-foreground mt-1">{description}</p>
-            </CardContent>
-        </Card>
-    )
-}
-
-function CallRow({ call, getStatusColor, getSentimentColor, formatDuration, isSelected, onSelect, onAnalyze, analyzing, onWhatsApp }) {
-    return (
-        <TooltipProvider>
-            <div className="border rounded-lg p-4 hover:bg-gray-50/50 transition-colors">
-                <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h3 className="font-semibold text-lg">{call.lead?.name || 'Unknown Lead'}</h3>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Badge className={`cursor-default ${getStatusColor(call.call_status)}`}>
-                                        {call.call_status?.toUpperCase()}
-                                    </Badge>
-                                </TooltipTrigger>
-                                {call.disconnect_reason && (
-                                    <TooltipContent><p className="text-xs">{call.disconnect_reason}</p></TooltipContent>
-                                )}
-                            </Tooltip>
-                            {call.transferred && <Badge variant="outline" className="text-blue-600 border-blue-600">Transferred</Badge>}
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm text-gray-600 mb-3">
-                            <div className="flex items-center gap-1"><Phone className="h-3 w-3" /> {call.lead?.phone || call.callee_number}</div>
-                            <div className="flex items-center gap-1"><Building2 className="h-3 w-3" /> {call.campaign?.name || 'No Campaign'}</div>
-                            <div className="flex items-center gap-1"><Clock className="h-3 w-3" /> {formatDuration(call.duration)}</div>
-                            <div className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {format(new Date(call.created_at), 'MMM d, h:mm a')}</div>
-                            <div className="flex items-center gap-1">
-                                <IndianRupee className="h-3 w-3" />
-                                <span className="font-mono">{call.call_cost != null ? `₹${parseFloat(call.call_cost).toFixed(2)}` : '—'}</span>
-                            </div>
-                        </div>
-
-                        {(call.sentiment_score != null || call.interest_level) ? (
-                            <div className="flex items-center gap-4 text-sm flex-wrap">
-                                <div className="flex items-center gap-1">
-                                    <Activity className={`h-4 w-4 ${getSentimentColor(call.sentiment_score)}`} />
-                                    <span className="font-medium">Sentiment: {call.sentiment_score != null ? (call.sentiment_score > 0.3 ? 'Positive' : call.sentiment_score < -0.3 ? 'Negative' : 'Neutral') + ` (${call.sentiment_score.toFixed(2)})` : '—'}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <User className="h-4 w-4 text-gray-400" />
-                                    <span>Interest: <span className="font-medium capitalize">{call.interest_level || call.ai_metadata?.interest_level || '—'}</span></span>
-                                </div>
-                                {call.ai_metadata?.priority_score && (
-                                    <div className="flex items-center gap-1">
-                                        <Flag className="h-4 w-4 text-yellow-500" />
-                                        <span>Priority: {call.ai_metadata.priority_score}</span>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-sm text-gray-400 italic">Pending analysis</div>
-                        )}
-                    </div>
-
-                    <div className="flex flex-col gap-2 ml-4 shrink-0">
-                        <Button size="sm" variant="outline" onClick={onSelect}>
-                            <MessageSquare className="h-4 w-4 mr-1" />
-                            {isSelected ? 'Hide' : 'View'} Transcript
-                        </Button>
-                        {(call.sentiment_score == null && !call.summary) && call.conversation_transcript && (
-                            <Button size="sm" onClick={onAnalyze} disabled={analyzing === call.id}>
-                                <Activity className="h-4 w-4 mr-1" />
-                                {analyzing === call.id ? 'Analyzing...' : 'Analyze'}
-                            </Button>
-                        )}
-                        {call.lead?.id && !call.ai_metadata?.whatsapp_brochure_requested && (
-                            <Button size="sm" variant="outline" className="text-green-700 border-green-200 hover:bg-green-50" onClick={onWhatsApp}>
-                                <MessageCircle className="h-4 w-4 mr-1" />
-                                WhatsApp
-                            </Button>
-                        )}
-                    </div>
-                </div>
-
-                {isSelected && call.conversation_transcript && (
-                    <div className="mt-4 pt-4 border-t">
-                        <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
-                            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono">{call.conversation_transcript}</pre>
-                        </div>
-                    </div>
-                )}
             </div>
-        </TooltipProvider>
-    )
-}
-
-function CallHistorySkeleton() {
-    return (
-        <div className="space-y-6 p-6">
-            <Skeleton className="h-10 w-48" />
-            <div className="grid grid-cols-4 gap-6">
-                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 w-full" />)}
-            </div>
-            <Skeleton className="h-[400px] w-full" />
         </div>
     )
 }

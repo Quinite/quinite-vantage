@@ -49,6 +49,7 @@ export const GET = withAuth(async (request, context) => {
                 id,
                 lead_id,
                 project_id,
+                unit_id,
                 title,
                 description,
                 due_date,
@@ -77,6 +78,11 @@ export const GET = withAuth(async (request, context) => {
                     name,
                     city,
                     address
+                ),
+                unit:units!tasks_unit_id_fkey(
+                    id, unit_number, bedrooms, bathrooms, floor_number, facing, 
+                    carpet_area, total_price, status, construction_status,
+                    tower:towers(name)
                 )
             `)
             .eq('organization_id', profile.organization_id)
@@ -163,6 +169,7 @@ export const POST = withAuth(async (request, context) => {
                 assigned_to:     body.assigned_to   || null,
                 lead_id:         body.lead_id        || null,
                 project_id:      body.project_id     || null,
+                unit_id:         body.unit_id        || null,
                 created_by:      user.id,
             })
             .select('*')

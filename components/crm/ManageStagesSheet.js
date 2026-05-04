@@ -31,8 +31,18 @@ import {
     verticalListSortingStrategy,
     useSortable,
 } from '@dnd-kit/sortable'
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Trash2, Save, Loader2 } from 'lucide-react'
+import { GripVertical, Trash2, Save, Loader2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 function SortableStageItem({ stage, onRename, onDelete }) {
@@ -69,7 +79,7 @@ function SortableStageItem({ stage, onRename, onDelete }) {
                     value={stage.name}
                     onChange={(e) => onRename(stage.id, e.target.value)}
                     disabled={stage.is_default}
-                    className="h-9 w-full bg-background disabled:bg-muted/30 disabled:text-muted-foreground font-medium"
+                    className={`h-9 w-full bg-background disabled:bg-muted/30 disabled:text-muted-foreground font-medium ${!stage.name?.trim() ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                     placeholder="Stage Name"
                 />
             </div>
@@ -109,12 +119,41 @@ function SortableStageItem({ stage, onRename, onDelete }) {
 export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }) {
     const [stages, setStages] = useState([])
     const [saving, setSaving] = useState(false)
+    const [newStageName, setNewStageName] = useState('')
+    const [addingStage, setAddingStage] = useState(false)
+    const [dependencies, setDependencies] = useState({ triggers: [], automations: [] })
+    const [loadingDeps, setLoadingDeps] = useState(false)
+    const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, msg: '', title: '' })
 
     useEffect(() => {
         if (pipeline?.stages) {
-            // Clone and sort by order_index
             const sortedStages = [...pipeline.stages].sort((a, b) => a.order_index - b.order_index)
             setStages(sortedStages)
+        }
+        if (open && pipeline?.id) {
+            // Fetch dependencies to check before delete
+            const fetchDeps = async () => {
+                setLoadingDeps(true)
+                try {
+                    const [tRes, aRes] = await Promise.all([
+                        fetch('/api/pipeline/triggers').then(r => r.json()),
+                        fetch(`/api/pipeline/automations?pipeline_id=${pipeline.id}`).then(r => r.json())
+                    ])
+                    setDependencies({
+                        triggers: tRes.triggers || [],
+                        automations: aRes.automations || []
+                    })
+                } catch (e) {
+                    console.error('Failed to fetch dependencies', e)
+                } finally {
+                    setLoadingDeps(false)
+                }
+            }
+            fetchDeps()
+        }
+        if (!open) {
+            setNewStageName('')
+            setAddingStage(false)
         }
     }, [pipeline, open])
 
@@ -141,43 +180,93 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
         setStages(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s))
     }
 
-    const handleDelete = async (id) => {
+    const handleAddStage = () => {
+        const name = newStageName.trim()
+        if (!name) return
+        // Temp id prefixed so we can identify new stages on save
+        const tempId = `__new__${Date.now()}`
+        const maxOrder = stages.length > 0 ? Math.max(...stages.map(s => s.order_index ?? 0)) : -1
+        setStages(prev => [...prev, { id: tempId, name, order_index: maxOrder + 1, lead_count: 0, is_default: false, _isNew: true }])
+        setNewStageName('')
+        setAddingStage(false)
+    }
+
+    const handleDelete = (id) => {
         if (stages.length <= 1) {
             toast.error('Pipeline must have at least one stage')
             return
         }
-        if (!confirm('Are you sure? This will affect leads in this stage.')) return
+
+        const stage = stages.find(s => s.id === id)
+        const inTriggers = dependencies.triggers.filter(t => t.target_stage_id === id)
+        const inAutomations = dependencies.automations.filter(a => 
+            a.trigger_config?.stage_id === id || a.action_config?.stage_id === id
+        )
+
+        let title = `Delete "${stage.name}"?`
+        let msg = 'Are you sure you want to remove this stage? This action cannot be undone until you refresh the page without saving.'
         
+        if (inTriggers.length > 0 || inAutomations.length > 0) {
+            msg = `This stage is currently used in ${inTriggers.length} trigger(s) and ${inAutomations.length} automation rule(s). Deleting it will cause these rules to stop working or require manual updates.`
+        } else if (stage.lead_count > 0) {
+            msg = `There are ${stage.lead_count} leads currently in this stage. You must move them to another stage before these changes can be finalized.`
+        }
+
+        setDeleteConfirm({ open: true, id, msg, title })
+    }
+
+    const confirmDelete = () => {
+        const id = deleteConfirm.id
         setStages(prev => prev.filter(s => s.id !== id))
+        setDeleteConfirm({ open: false, id: null, msg: '', title: '' })
     }
 
     const handleSave = async () => {
+        if (!pipeline?.id) return
+        
+        // Validate all stage names are non-empty
+        const hasEmptyName = stages.some(s => !s.name || !s.name.trim())
+        if (hasEmptyName) {
+            toast.error('All stage names must be filled')
+            return
+        }
+
         setSaving(true)
         try {
-            // Calculate final order_index for all stages
-            const updatedStages = stages.map((s, idx) => ({
+            // 1. POST any new stages first to get real ids
+            let resolvedStages = [...stages]
+            const newStages = resolvedStages.filter(s => s._isNew)
+            for (const ns of newStages) {
+                const res = await fetch('/api/pipeline/stages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline_id: pipeline.id, name: ns.name, order_index: 999 }),
+                })
+                if (!res.ok) throw new Error(`Failed to create stage "${ns.name}"`)
+                const { stage } = await res.json()
+                // Replace temp entry with real stage
+                resolvedStages = resolvedStages.map(s => s.id === ns.id ? { ...stage, _isNew: false } : s)
+            }
+
+            // 2. PUT full list with final order_index values
+            const updatedStages = resolvedStages.map((s, idx) => ({
                 id: s.id,
                 name: s.name,
-                order_index: idx
+                order_index: idx,
             }))
 
-            // We need to handle deletions as well. 
-            // In a real app, you might want a separate API for deletion or handle it in the bulk update.
-            // For now, we'll assume the API handles partial lists or we can send the full desired state.
-            
             const res = await fetch('/api/pipeline/stages', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ stages: updatedStages, fullSync: true }),
             })
-
             if (!res.ok) throw new Error('Save failed')
-            
+
             toast.success('Pipeline stages updated')
             onRefresh?.()
             onClose()
         } catch (error) {
-            toast.error('Failed to save changes')
+            toast.error(error.message || 'Failed to save changes')
             console.error(error)
         } finally {
             setSaving(false)
@@ -189,7 +278,7 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
             <SheetContent className="w-full sm:max-w-md flex flex-col h-full p-0">
                 <SheetHeader className="p-6 border-b">
                     <SheetTitle>Manage Pipeline Stages</SheetTitle>
-                    <SheetDescription>
+                    <SheetDescription className='!mt-0'>
                         Reorder, rename, or remove stages from your CRM pipeline.
                     </SheetDescription>
                 </SheetHeader>
@@ -218,6 +307,36 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
                     </DndContext>
                 </div>
 
+                {/* Add Stage */}
+                <div className="px-6 pb-0">
+                    {addingStage ? (
+                        <div className="flex items-center gap-2">
+                            <Input
+                                autoFocus
+                                value={newStageName}
+                                onChange={e => setNewStageName(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') handleAddStage()
+                                    if (e.key === 'Escape') { setAddingStage(false); setNewStageName('') }
+                                }}
+                                placeholder="Stage name…"
+                                className="h-9 flex-1"
+                            />
+                            <Button size="sm" onClick={handleAddStage} disabled={!newStageName.trim()} className="h-9">Add</Button>
+                            <Button size="sm" variant="ghost" className="h-9" onClick={() => { setAddingStage(false); setNewStageName('') }}>Cancel</Button>
+                        </div>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            className="w-full border-dashed text-muted-foreground hover:text-primary hover:border-primary gap-2"
+                            onClick={() => setAddingStage(true)}
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Stage
+                        </Button>
+                    )}
+                </div>
+
                 <div className="p-6 border-t bg-muted/20 flex gap-3">
                     <Button variant="outline" className="flex-1" onClick={onClose}>
                         Cancel
@@ -225,13 +344,33 @@ export default function ManageStagesSheet({ open, onClose, pipeline, onRefresh }
                     <Button 
                         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" 
                         onClick={handleSave}
-                        disabled={saving}
+                        disabled={saving || stages.some(s => !s.name?.trim())}
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                         Save Changes
                     </Button>
                 </div>
             </SheetContent>
+
+            <AlertDialog open={deleteConfirm.open} onOpenChange={(v) => !v && setDeleteConfirm(prev => ({ ...prev, open: false }))}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{deleteConfirm.title}</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
+                            {deleteConfirm.msg}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete Stage
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </Sheet>
     )
 }

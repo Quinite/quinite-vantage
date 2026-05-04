@@ -1,19 +1,22 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { calculateFinalPrice, generateUnitNumber, getStatusConfig } from '@/lib/inventory'
 import { toast } from 'react-hot-toast'
-import { Trash2, X, MapPin, Home, Layout, ClipboardList, CalendarDays } from 'lucide-react'
+import { Trash2, X, MapPin, Home, Layout, ClipboardList, CalendarDays, UserCheck, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import Link from 'next/link'
 
 import IdentitySection from './unit-dialog/IdentitySection'
 import PricingSection from './unit-dialog/PricingSection'
 import ConstructionSection from './unit-dialog/ConstructionSection'
 import SiteVisitsPanel from './unit-dialog/SiteVisitsPanel'
 import UnitDealsPanel from './unit-dialog/UnitDealsPanel'
+import { useUnitDeals } from '@/hooks/useUnitDeals'
+import { createClient } from '@/lib/supabase/client'
 
 const EMPTY_FORM = {
   unit_number: '',
@@ -33,6 +36,7 @@ const EMPTY_FORM = {
   balconies: null,
   is_corner: false,
   is_vastu_compliant: false,
+  price_undisclosed: false,
   construction_status: 'under_construction',
   possession_date: null,
   completion_date: null,
@@ -43,8 +47,9 @@ const EMPTY_FORM = {
 
 function normalizeProjectStatus(status) {
   const s = (status || '').toLowerCase()
-  if (s.includes('ready') || s.includes('move')) return 'ready_to_move'
-  if (s.includes('complete') || s.includes('finished')) return 'completed'
+  if (s === 'ready_to_move' || s.includes('ready') || s.includes('move')) return 'ready_to_move'
+  if (s === 'completed' || s.includes('complete') || s.includes('finished')) return 'completed'
+  // Planning or anything else defaults to under_construction for the unit
   return 'under_construction'
 }
 
@@ -64,11 +69,48 @@ export default function UnitDialog({
   organizationId,
   onSave,
   onDelete,
+  existingUnitNumbers = [],
 }) {
   const [formData, setFormData] = useState(EMPTY_FORM)
   const [activeTab, setActiveTab] = useState('details')
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // Tower/floor picker — only used when mode==='add' and no towerId prop supplied
+  const needsTowerPicker = mode === 'add' && !towerId
+  const [towers, setTowers] = useState([])
+  const [towersLoading, setTowersLoading] = useState(false) // used in JSX below
+  const [pickedTowerId, setPickedTowerId] = useState('')
+  const [pickedFloor, setPickedFloor] = useState('')
+
+  useEffect(() => {
+    if (!open || !needsTowerPicker || !projectId) return
+    setPickedTowerId(''); setPickedFloor('')
+    setTowersLoading(true)
+    createClient()
+      .from('towers')
+      .select('id, name, total_floors, units_per_floor')
+      .eq('project_id', projectId)
+      .order('order_index')
+      .then(({ data }) => { setTowers(data || []); setTowersLoading(false) })
+  }, [open, needsTowerPicker, projectId])
+
+  // Auto-regenerate unit number when tower or floor changes
+  useEffect(() => {
+    if (!needsTowerPicker) return
+    const t = towers.find(t => t.id === pickedTowerId)
+    const floor = parseInt(pickedFloor)
+    if (t && !isNaN(floor)) {
+      setFormData(prev => ({ ...prev, unit_number: generateUnitNumber(t.name, floor, 0) }))
+    } else {
+      setFormData(prev => ({ ...prev, unit_number: '' }))
+    }
+  }, [pickedTowerId, pickedFloor, towers, needsTowerPicker])
+
+  const { data: dealsData } = useUnitDeals(unit?.id)
+  const activeDeal = dealsData?.deals?.find(d => d.status === 'reserved' || d.status === 'won')
+  const dealLeadName = activeDeal?.lead?.name
+  const dealLeadId = activeDeal?.lead?.id
 
   useEffect(() => {
     if (!open) { setActiveTab('details'); setConfirmDelete(false); return }
@@ -92,6 +134,7 @@ export default function UnitDialog({
         balconies: unit.balconies ?? null,
         is_corner: unit.is_corner || false,
         is_vastu_compliant: unit.is_vastu_compliant || false,
+        price_undisclosed: unit.price_undisclosed || false,
         construction_status: unit.construction_status || 'under_construction',
         possession_date: unit.possession_date || null,
         completion_date: unit.completion_date || null,
@@ -101,13 +144,27 @@ export default function UnitDialog({
       })
     } else {
       const generated = tower ? generateUnitNumber(tower.name, floorNumber, slotIndex || 0) : ''
-      const projectStatus = normalizeProjectStatus(project?.status)
+      const pStatus = project?.status || project?.project_status || ''
+      const projectStatus = normalizeProjectStatus(pStatus)
+      const projectPossession = project?.possession_date || null
+      const projectCompletion = project?.completion_date || null
+      
+      console.log('[UnitDialog] project detected:', {
+        hasProject: !!project,
+        pStatus,
+        projectStatus,
+        projectPossession,
+        projectCompletion,
+        projectKeys: project ? Object.keys(project) : []
+      })
+
       setFormData({
         ...EMPTY_FORM,
         unit_number: generated,
         construction_status: projectStatus,
-        possession_date: project?.possession_date || null,
-        completion_date: project?.completion_date || null,
+        // If ready/complete, we prefer completion_date, otherwise possession_date
+        possession_date: projectPossession,
+        completion_date: projectCompletion || (['ready_to_move', 'completed'].includes(projectStatus) ? projectPossession : null),
         metadata: { slot_index: slotIndex },
       })
     }
@@ -140,10 +197,31 @@ export default function UnitDialog({
       toast.error('Unit number and config are required')
       return
     }
+
+    const takenNumbers = mode === 'edit' && unit?.unit_number
+      ? existingUnitNumbers.filter(n => n?.toLowerCase() !== unit.unit_number.toLowerCase())
+      : existingUnitNumbers
+    if (takenNumbers.some(n => n?.trim().toLowerCase() === formData.unit_number.trim().toLowerCase())) {
+      toast.error('Unit number already exists — please choose a different one')
+      return
+    }
+
+    // For tower units added via picker, require tower + floor selection
+    const isLandOrVilla = ['land', 'villa'].includes(selectedConfig?.category) || selectedConfig?.property_type === 'Villa'
+    const resolvedTowerId = needsTowerPicker ? (isLandOrVilla ? null : pickedTowerId || null) : towerId
+    const resolvedFloor   = needsTowerPicker ? (isLandOrVilla ? null : (pickedFloor !== '' ? parseInt(pickedFloor) : null)) : floorNumber
+    if (needsTowerPicker && !isLandOrVilla && !resolvedTowerId) {
+      toast.error('Please select a tower')
+      return
+    }
+    if (needsTowerPicker && !isLandOrVilla && resolvedFloor === null) {
+      toast.error('Please select a floor')
+      return
+    }
+
     const finalPrice = calculateFinalPrice(formData.base_price || 0, formData.floor_rise_price || 0, formData.plc_price || 0)
     const numericFields = ['base_price', 'floor_rise_price', 'plc_price', 'carpet_area', 'built_up_area', 'super_built_up_area', 'plot_area', 'bedrooms', 'bathrooms', 'balconies']
     const cleaned = { ...formData }
-    // strip internal cache keys
     delete cleaned._lead_name
     delete cleaned._lead_phone
     numericFields.forEach(f => {
@@ -153,8 +231,8 @@ export default function UnitDialog({
     const payload = {
       ...cleaned,
       total_price: finalPrice,
-      tower_id: towerId,
-      floor_number: floorNumber,
+      tower_id: resolvedTowerId,
+      floor_number: resolvedFloor,
       project_id: projectId,
       organization_id: organizationId,
     }
@@ -186,6 +264,10 @@ export default function UnitDialog({
   const isLand = selectedCategory === 'land'
   const finalPrice = calculateFinalPrice(formData.base_price || 0, formData.floor_rise_price || 0, formData.plc_price || 0)
   const statusCfg = getStatusConfig(formData.status)
+
+  const isLandOrVilla = selectedConfig?.category === 'land' || selectedConfig?.property_type === 'Villa'
+  const towerPickerComplete = !needsTowerPicker || isLandOrVilla || (!!pickedTowerId && pickedFloor !== '')
+  const canSubmit = !!formData.unit_number && !!formData.config_id && towerPickerComplete
 
   const siteVisitCount = 0 // will be populated by panel itself; badge is informational
 
@@ -317,12 +399,62 @@ export default function UnitDialog({
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {activeTab === 'details' ? (
                 <>
+                  {(formData.status === 'reserved' || formData.status === 'sold') && (() => {
+                    const isSold = formData.status === 'sold'
+                    const theme = isSold 
+                      ? { bg: 'bg-emerald-50/80', border: 'border-emerald-200', text: 'text-emerald-900', sub: 'text-emerald-700/90', icon: 'text-emerald-600', iconBg: 'bg-white border-emerald-100', hover: 'hover:text-emerald-900' }
+                      : { bg: 'bg-amber-50/80', border: 'border-amber-200', text: 'text-amber-900', sub: 'text-amber-700/90', icon: 'text-amber-600', iconBg: 'bg-white border-amber-100', hover: 'hover:text-amber-900' }
+                    
+                    return (
+                      <div className={cn("rounded-2xl p-4 flex gap-3.5 shadow-sm mb-2 border", theme.bg, theme.border)}>
+                        <div className={cn("w-10 h-10 rounded-xl shadow-sm flex items-center justify-center shrink-0 border", theme.iconBg)}>
+                          <UserCheck className={cn("w-5 h-5", theme.icon)} />
+                        </div>
+                        <div className="flex flex-col justify-center">
+                          <h4 className={cn("text-[13px] font-bold leading-tight flex items-center gap-1.5 flex-wrap", theme.text)}>
+                            <span>Unit is {isSold ? 'Sold' : 'Reserved'}</span>
+                            {dealLeadName && dealLeadId ? (
+                              <span className="flex items-center gap-1">
+                                {isSold ? 'to' : 'by'} 
+                                <Link 
+                                  href={`/dashboard/admin/crm/leads/${dealLeadId}`} 
+                                  target="_blank"
+                                  className="underline decoration-current/40 hover:decoration-current transition-all inline-flex items-center gap-0.5"
+                                >
+                                  {dealLeadName}
+                                  <ExternalLink className="w-3 h-3 opacity-70" />
+                                </Link>
+                              </span>
+                            ) : dealLeadName ? (
+                              <span>{isSold ? `to ${dealLeadName}` : `by ${dealLeadName}`}</span>
+                            ) : null}
+                          </h4>
+                          <p className={cn("text-[12px] mt-0.5 leading-snug", theme.sub)}>
+                            Buyer and transaction details are managed exclusively through the <span className={cn("font-bold underline cursor-pointer transition-colors", theme.hover)} onClick={() => setActiveTab('deals')}>Deals</span> tab.
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })()}
                   <IdentitySection
                     formData={formData}
                     setFormData={setFormData}
                     unitConfigs={unitConfigs}
                     onConfigChange={handleConfigChange}
                     selectedConfig={selectedConfig}
+                    towerPicker={needsTowerPicker ? {
+                      towers,
+                      towersLoading,
+                      pickedTowerId,
+                      pickedFloor,
+                      setPickedTowerId,
+                      setPickedFloor,
+                    } : null}
+                    existingUnitNumbers={
+                      mode === 'edit' && unit?.unit_number
+                        ? existingUnitNumbers.filter(n => n?.toLowerCase() !== unit.unit_number.toLowerCase())
+                        : existingUnitNumbers
+                    }
                   />
                   <PricingSection
                     formData={formData}
@@ -378,8 +510,8 @@ export default function UnitDialog({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={saving}
-                  className="h-9 px-5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all disabled:opacity-60"
+                  disabled={saving || !canSubmit}
+                  className="h-9 px-5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving…' : mode === 'add' ? 'Create Unit' : 'Save Changes'}
                 </Button>

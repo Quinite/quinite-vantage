@@ -28,6 +28,7 @@ export async function PUT(request, { params }) {
             priority:    body.priority,
             status:      body.status,
             assigned_to: body.assigned_to ?? null,
+            unit_id:     body.unit_id     ?? null,
             updated_by:  user.id,
         }
 
@@ -47,7 +48,8 @@ export async function PUT(request, { params }) {
                     id, name, email, phone, mobile, score, interest_level, assigned_to,
                     stage:pipeline_stages!leads_stage_id_fkey(id, name, color)
                 ),
-                project:projects!tasks_project_id_fkey(id, name, city, address)
+                project:projects!tasks_project_id_fkey(id, name, city, address),
+                unit:units!tasks_unit_id_fkey(id, unit_number, title, tower:towers(id, name))
             `)
             .single()
 
@@ -96,6 +98,7 @@ export async function PATCH(request, { params }) {
         if (body.due_time    !== undefined) updateData.due_time    = body.due_time
         if (body.priority    !== undefined) updateData.priority    = body.priority
         if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to
+        if (body.unit_id     !== undefined) updateData.unit_id     = body.unit_id
 
         if (body.status === 'completed') {
             updateData.completed_at = new Date().toISOString()
@@ -113,7 +116,12 @@ export async function PATCH(request, { params }) {
                     id, name, email, phone, mobile, score, interest_level, assigned_to,
                     stage:pipeline_stages!leads_stage_id_fkey(id, name, color)
                 ),
-                project:projects!tasks_project_id_fkey(id, name, city, address)
+                project:projects!tasks_project_id_fkey(id, name, city, address),
+                unit:units!tasks_unit_id_fkey(
+                    id, unit_number, bedrooms, bathrooms, floor_number, facing, 
+                    carpet_area, total_price, status, construction_status,
+                    tower:towers(name)
+                )
             `)
             .single()
 

@@ -14,8 +14,8 @@ import ComingUpNextCard from '@/components/crm/ComingUpNextCard'
 import BestTimeToContactCard from '@/components/crm/BestTimeToContactCard'
 import SentimentAnalysisCard from '@/components/crm/SentimentAnalysisCard'
 import { Textarea } from '@/components/ui/textarea'
-
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 
 // Helper to get initials
 const getInitials = (name) => {
@@ -139,7 +139,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
                 <div className="flex flex-col items-center text-center">
                     <div className="relative mb-4">
                         <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
-                            <AvatarImage src={lead.avatar_url} alt={lead.name} />
+                            <AvatarImage src={lead.avatar_url || getDefaultAvatar(lead.email || lead.name)} alt={lead.name} className="object-cover" />
                             <AvatarFallback className="text-2xl font-bold bg-primary/10 text-primary">
                                 {getInitials(lead.name)}
                             </AvatarFallback>
@@ -222,7 +222,7 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0 bg-muted/10">
                 <div className="border-b bg-background px-6">
-                    <div className="text-xs text-red-500 font-mono py-1">DEBUG: Tabs Updated</div>
+
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
                         <TabsList className="h-14 w-full justify-start bg-transparent p-0 space-x-6">
                             {['overview', 'notes', 'timeline'].map(tab => (
@@ -287,11 +287,19 @@ export default function LeadProfileView({ leadId, onClose, isModal = false }) {
 
                             {/* Row 2 */}
                             <div className="col-span-12 md:col-span-6 lg:col-span-5">
-                                <UnitDealsCard deals={lead.deals || []} />
+                                <UnitDealsCard 
+                                    deals={lead.deals || []} 
+                                    leadId={leadId} 
+                                    onUpdate={fetchLeadData} 
+                                />
                             </div>
                             <div className="col-span-12 md:col-span-6 lg:col-span-7 grid grid-rows-2 gap-6">
                                 <div className="row-span-1">
-                                    <ComingUpNextCard tasks={[]} />
+                                    <ComingUpNextCard 
+                                        leadId={leadId} 
+                                        leadName={lead.name} 
+                                        onShowAll={() => setActiveTab('timeline')} 
+                                    />
                                 </div>
                                 <div className="row-span-1">
                                     <BestTimeToContactCard profile={profile} />

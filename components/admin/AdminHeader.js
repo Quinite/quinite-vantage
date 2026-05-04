@@ -462,8 +462,7 @@ export default function AdminHeader({ user, profile }) {
                                         className="relative flex items-center gap-2 h-8 px-1.5 rounded-lg hover:bg-slate-100 focus:ring-0 transition-colors"
                                         suppressHydrationWarning
                                     >
-                                        <Avatar className="h-7 w-7 border border-slate-200 shrink-0">
-                                            <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                                        <Avatar className="h-7 w-7 border border-slate-200 shrink-0 bg-blue-100">
                                             <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
                                                 {profile?.full_name?.[0] || 'U'}
                                             </AvatarFallback>
@@ -476,8 +475,7 @@ export default function AdminHeader({ user, profile }) {
                                 <DropdownMenuContent className="w-60" align="end" forceMount>
                                     {/* Profile header */}
                                     <div className="flex items-center gap-3 px-3 py-3">
-                                        <Avatar className="h-9 w-9 border border-slate-200 shrink-0">
-                                            <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                                        <Avatar className="h-9 w-9 border border-slate-200 shrink-0 bg-blue-100">
                                             <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-semibold">
                                                 {profile?.full_name?.[0] || 'U'}
                                             </AvatarFallback>
@@ -509,8 +507,7 @@ export default function AdminHeader({ user, profile }) {
                             </DropdownMenu>
                         ) : (
                             <div className="flex items-center gap-2 h-8 px-1.5">
-                                <Avatar className="h-7 w-7 border border-slate-200">
-                                    <AvatarImage src={profile?.avatar_url} alt={profile?.full_name} />
+                                <Avatar className="h-7 w-7 border border-slate-200 bg-blue-100">
                                     <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
                                         {profile?.full_name?.[0] || 'U'}
                                     </AvatarFallback>

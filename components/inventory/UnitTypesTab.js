@@ -8,6 +8,7 @@ import {
     Plus,
     Edit,
     Trash2,
+    Copy,
     Layers,
     Home,
     Building2,
@@ -36,6 +37,7 @@ import ResidentialConfigForm from '@/components/projects/ResidentialConfigForm'
 import { toast } from 'react-hot-toast'
 import { formatINR } from '@/lib/inventory'
 import { cn } from '@/lib/utils'
+import AmenitiesDisplay from '@/components/amenities/AmenitiesDisplay'
 
 export default function UnitTypesTab({ projectId, project }) {
     const queryClient = useQueryClient()
@@ -92,6 +94,21 @@ export default function UnitTypesTab({ projectId, project }) {
         } catch (error) {
             console.error('Save unit type error:', error)
             toast.error('Failed to save configuration')
+        }
+    }
+
+    const handleDuplicate = async (config) => {
+        try {
+            const { id, created_at, created_by, updated_at, updated_by, ...rest } = config
+            await saveUnitConfig({
+                ...rest,
+                project_id: projectId,
+                organization_id: project?.organization_id
+            })
+            toast.success('Configuration duplicated')
+        } catch (error) {
+            console.error('Duplicate error:', error)
+            toast.error('Failed to duplicate configuration')
         }
     }
 
@@ -198,6 +215,14 @@ export default function UnitTypesTab({ projectId, project }) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
+                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50"
+                                        onClick={() => handleDuplicate(config)}
+                                    >
+                                        <Copy className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
                                         className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                                         onClick={() => handleDelete(config)}
                                     >
@@ -209,19 +234,36 @@ export default function UnitTypesTab({ projectId, project }) {
                                     <div className="w-10 h-10 shrink-0 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100 transition-colors">
                                         <Icon className="w-5 h-5 text-slate-500 group-hover:text-blue-600 transition-colors" />
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
+                                    <div className="flex-1 min-w-0 pr-10">
+                                        <div className="flex items-center gap-2">
                                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition-colors truncate">
                                                 {config.config_name || config.configuration || config.property_type || config.type || 'Standard'}
                                             </h4>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="flex items-center bg-indigo-50 border border-indigo-100 rounded-md px-1.5 py-0.5 cursor-default transition-colors hover:bg-indigo-100">
+                                                                <span className="text-[10px] font-bold text-indigo-700">{placedCount} Units</span>
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p className="text-xs">Placed Units</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                                <Badge variant="outline" className="text-[9px] bg-slate-50 uppercase tracking-widest font-bold">
+                                                    {config.transaction_type || 'Sell'}
+                                                </Badge>
+                                            </div>
                                         </div>
-                                        <p className="text-xs font-semibold text-slate-400 capitalize tracking-wide truncate">
+                                        <p className="text-xs font-semibold text-slate-400 capitalize tracking-wide truncate mt-0.5">
                                             {(config.category || 'Residential')} • {(config.property_type || config.type || 'Apartment')}
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100 mb-3 h-full">
+                                <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100 h-full">
                                     {config.carpet_area > 0 && (
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted-foreground font-medium text-xs">Carpet Area</span>
@@ -243,27 +285,21 @@ export default function UnitTypesTab({ projectId, project }) {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Unit config amenities */}
+                                    {config.amenities?.length > 0 && (
+                                        <div className="pt-2 mt-1">
+                                            <AmenitiesDisplay
+                                                amenityIds={config.amenities}
+                                                context="unit"
+                                                variant="tags"
+                                                maxVisible={3}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Repositioned Badges Row */}
-                                <div className="flex items-center gap-2 mt-auto">
 
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <div className="flex items-center bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5 cursor-default transition-colors hover:bg-indigo-100">
-                                                    <span className="text-[10px] font-bold text-indigo-700">{placedCount} Units</span>
-                                                </div>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p className="text-xs">Placed Units</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <Badge variant="outlined" className="text-[9px] bg-slate-50 uppercase tracking-widest font-bold">
-                                        {config.transaction_type || 'Sell'}
-                                    </Badge>
-                                </div>
                             </div>
                         )
                     })}
@@ -292,6 +328,7 @@ export default function UnitTypesTab({ projectId, project }) {
                             onAdd={handleSave}
                             category={(project?.unit_configs?.[0]?.category) || 'residential'}
                             initialData={editingConfig}
+                            unitsPlacedCount={editingConfig ? (unitCountsByConfigId[editingConfig.id] || 0) : 0}
                         />
                     </div>
                 </DialogContent>

@@ -149,7 +149,7 @@ For issues and questions:
 
 - Check [Troubleshooting Guide](./docs/development/TROUBLESHOOTING.md)
 - Review [API Documentation](./docs/development/API.md)
-- Contact: <support@quinite.com>
+- Contact: <support@quinite.co>
 
 ---
 

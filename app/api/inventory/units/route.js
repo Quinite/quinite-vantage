@@ -32,7 +32,9 @@ export const GET = withAuth(async (request, context) => {
         const filters = {
             status: searchParams.get('status'),
             category: searchParams.get('category'),
-            projectId: searchParams.get('project_id')
+            projectId: searchParams.get('project_id'),
+            search: searchParams.get('search'),
+            limit: searchParams.get('limit') ? Number(searchParams.get('limit')) : null
         }
 
         const units = await UnitService.getUnits(profile.organization_id, filters)

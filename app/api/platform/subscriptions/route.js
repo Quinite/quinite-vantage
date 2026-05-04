@@ -108,7 +108,7 @@ export async function GET(request) {
 
                 return {
                     ...effectiveSub,
-                    credit_balance: credits.total_balance,
+                    credit_balance: credits.balance,
                     low_balance: credits.low_balance,
                     highest_utilization: highestUtilization,
                     any_over_limit: anyOverLimit,
@@ -228,41 +228,6 @@ export async function POST(request) {
                 entity_type: 'call_credits',
                 entity_id: org_id,
                 metadata: { minutes, reason: reason.trim() }
-            })
-
-            return corsJSON({ success: true, credits: newCredits })
-        }
-
-        // ----------------------------------------------------------------
-        // Action: reset_monthly_minutes
-        // Body: { org_id }
-        // ----------------------------------------------------------------
-        if (action === 'reset_monthly_minutes') {
-            const { org_id } = body
-
-            if (!org_id) {
-                return corsJSON({ error: 'org_id is required' }, { status: 400 })
-            }
-
-            const { error: rpcError } = await adminClient.rpc('reset_monthly_minutes', {
-                org_id
-            })
-
-            if (rpcError) {
-                console.error('reset_monthly_minutes RPC error:', rpcError)
-                return corsJSON({ error: rpcError.message }, { status: 500 })
-            }
-
-            const { getCreditBalance } = await import('@/lib/middleware/subscription')
-            const newCredits = await getCreditBalance(org_id, adminClient)
-
-            await adminClient.from('audit_logs').insert({
-                organization_id: org_id,
-                user_id: user.id,
-                user_name: profile.email || 'Platform Admin',
-                action: 'MONTHLY_MINUTES_RESET',
-                entity_type: 'call_credits',
-                entity_id: org_id
             })
 
             return corsJSON({ success: true, credits: newCredits })
@@ -392,7 +357,6 @@ export async function POST(request) {
                     updated_at: now.toISOString()
                 }
 
-                // Sync org fields + reset monthly credits
                 sideEffects.push(() =>
                     adminClient.from('organizations').update({
                         subscription_status: 'active',
@@ -400,9 +364,19 @@ export async function POST(request) {
                         updated_at: now.toISOString()
                     }).eq('id', orgId)
                 )
-                sideEffects.push(() =>
-                    adminClient.rpc('reset_monthly_minutes', { org_id: orgId })
-                )
+                // Credit plan-included minutes to balance on activation/renewal
+                sideEffects.push(async () => {
+                    const { data: activePlan } = await adminClient
+                        .from('subscription_plans')
+                        .select('features')
+                        .eq('id', currentSub.plan_id)
+                        .single()
+                    const minutes = parseFloat(activePlan?.features?.ai_minutes_included ?? activePlan?.features?.monthly_minutes_included ?? 0)
+                    if (minutes > 0) {
+                        const { addCallCredits } = await import('@/lib/middleware/subscription')
+                        await addCallCredits(orgId, minutes, 'plan_allocation', null, user.id)
+                    }
+                })
                 break
             }
 
@@ -449,9 +423,14 @@ export async function POST(request) {
                         updated_at: now.toISOString()
                     }).eq('id', orgId)
                 )
-                sideEffects.push(() =>
-                    adminClient.rpc('reset_monthly_minutes', { org_id: orgId })
-                )
+                // Credit plan-included minutes to balance on plan change
+                sideEffects.push(async () => {
+                    const minutes = parseFloat(targetPlan?.features?.ai_minutes_included ?? targetPlan?.features?.monthly_minutes_included ?? 0)
+                    if (minutes > 0) {
+                        const { addCallCredits } = await import('@/lib/middleware/subscription')
+                        await addCallCredits(orgId, minutes, 'plan_allocation', null, user.id)
+                    }
+                })
                 break
             }
 

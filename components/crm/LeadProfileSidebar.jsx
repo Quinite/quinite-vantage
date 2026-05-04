@@ -1,11 +1,31 @@
 'use client'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { useState } from 'react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Camera, Mail, Phone, Smartphone, Building, Building2, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Camera, Mail, Phone, Smartphone, Building, Building2, MapPin, Edit2, AlertTriangle, Clock, UserCheck, PhoneCall, User, Home, Copy, Download, FileText, Trash2, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'react-hot-toast'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
+import { usePipelines } from '@/hooks/usePipelines'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 
 function WhatsAppIcon({ className }) {
     return (
@@ -82,15 +102,101 @@ function IntelPill({ label, cls }) {
     )
 }
 
-export default function LeadProfileSidebar({ lead, project, onEditProfile, onEditAvatar, upcomingVisit }) {
+export default function LeadProfileSidebar({ lead, project, onEditProfile, onEditAvatar, upcomingVisit, onLeadFieldUpdate }) {
     if (!lead) return null
+
+    const [scorePopoverOpen, setScorePopoverOpen] = useState(false)
+    const [scoreInput, setScoreInput] = useState('')
+    const [savingScore, setSavingScore] = useState(false)
+    const [savingInterest, setSavingInterest] = useState(false)
+
+    // Callback deletion state
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+    const [selectedMoveStageId, setSelectedMoveStageId] = useState('')
+    const [deletingCallback, setDeletingCallback] = useState(false)
+
+    const { data: pipelines = [] } = usePipelines()
+    const stages = pipelines[0]?.stages || []
+
+    const handleDeleteCallback = async () => {
+        if (!selectedMoveStageId) {
+            toast.error('Please select a stage to move the lead to')
+            return
+        }
+        setDeletingCallback(true)
+        try {
+            const res = await fetch(`/api/leads/${lead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    waiting_status: null,
+                    callback_time: null,
+                    stageId: selectedMoveStageId
+                })
+            })
+            if (!res.ok) throw new Error()
+            toast.success('Callback deleted and lead moved')
+            setIsDeleteDialogOpen(false)
+            onLeadFieldUpdate?.({
+                waiting_status: null,
+                callback_time: null,
+                stage_id: selectedMoveStageId
+            })
+        } catch {
+            toast.error('Failed to delete callback')
+        } finally {
+            setDeletingCallback(false)
+        }
+    }
+
+    const saveScore = async () => {
+        const val = Number(scoreInput)
+        if (isNaN(val) || val < 0 || val > 100) {
+            toast.error('Score must be 0–100')
+            return
+        }
+        setSavingScore(true)
+        try {
+            const res = await fetch(`/api/leads/${lead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ score: val })
+            })
+            if (!res.ok) throw new Error()
+            toast.success('Score updated')
+            setScorePopoverOpen(false)
+            onLeadFieldUpdate?.({ score: val })
+        } catch {
+            toast.error('Failed to update score')
+        } finally {
+            setSavingScore(false)
+        }
+    }
+
+    const saveInterest = async (level) => {
+        setSavingInterest(true)
+        try {
+            const res = await fetch(`/api/leads/${lead.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ interest_level: level })
+            })
+            if (!res.ok) throw new Error()
+            toast.success('Interest level updated')
+            onLeadFieldUpdate?.({ interest_level: level })
+        } catch {
+            toast.error('Failed to update interest level')
+        } finally {
+            setSavingInterest(false)
+        }
+    }
 
     const interest = interestConfig(lead.interest_level)
     const sentiment = sentimentConfig(lead.last_sentiment_score)
     const readiness = readinessConfig(lead.purchase_readiness)
     const lastCalled = relativeTime(lead.last_contacted_at)
 
-    const hasIntelligence = lead.score > 0 || interest || sentiment || readiness || lead.budget_range || lead.total_calls > 0
+    const hasIntelligence = true
 
     return (
         <div className="bg-card border rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
@@ -126,14 +232,11 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
             <div className="flex flex-col items-center text-center px-6 -mt-12 mb-4">
                 <div className="relative mb-1 group">
                     <Avatar key={lead.avatar_url || 'no-avatar'} className="h-24 w-24 border-4 border-background shadow-md">
-                        {lead.avatar_url ? (
-                            <img
-                                src={lead.avatar_url}
-                                alt={lead.name}
-                                className="aspect-square h-full w-full object-cover"
-                                onError={(e) => { e.target.style.display = 'none' }}
-                            />
-                        ) : null}
+                        <AvatarImage 
+                            src={lead.avatar_url || getDefaultAvatar(lead.email || lead.name)} 
+                            alt={lead.name}
+                            className="object-cover"
+                        />
                         <AvatarFallback className="text-2xl font-bold bg-white text-primary">
                             {getInitials(lead.name)}
                         </AvatarFallback>
@@ -217,8 +320,10 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
                         </span>
                     )}
                     <div className="flex items-center gap-1.5 min-w-0">
-                        <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
-                            <User className="w-3 h-3 text-slate-500" />
+                        <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0 border border-white shadow-sm">
+                            <span className="text-[9px] font-bold text-slate-600">
+                                {lead.assigned_to_user?.full_name ? getInitials(lead.assigned_to_user.full_name) : 'UN'}
+                            </span>
                         </div>
                         <span className="text-[11px] text-slate-600 font-medium truncate">
                             {lead.assigned_to_user?.full_name?.split(' ')[0] || 'Unassigned'}
@@ -266,7 +371,7 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
             <div className="px-4 space-y-2 mb-3">
                 {/* Abuse — highest priority, block calling */}
                 {lead.abuse_flag && (
-                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 mt-2">
                         <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                         <div>
                             <p className="text-xs font-bold text-red-700">Do Not Call — Abusive</p>
@@ -279,20 +384,30 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
 
                 {/* Callback scheduled */}
                 {lead.waiting_status === 'callback_scheduled' && (
-                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200">
+                    <div className="group/badge relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 mt-2">
                         <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                        <div>
+                        <div className="flex-1">
                             <p className="text-xs font-bold text-amber-700">Callback Scheduled</p>
                             {lead.callback_time && (
                                 <p className="text-[11px] text-amber-600">{formatCallbackTime(lead.callback_time)}</p>
                             )}
                         </div>
+                        <button
+                            onClick={() => {
+                                setSelectedMoveStageId(lead.stage_id || '')
+                                setIsDeleteDialogOpen(true)
+                            }}
+                            className="p-1.5 rounded-md hover:bg-amber-100 text-amber-400 hover:text-amber-600 transition-colors"
+                            title="Delete callback"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                     </div>
                 )}
 
                 {/* Transferred to human */}
                 {lead.transferred_to_human && (
-                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200">
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200 mt-2">
                         <UserCheck className="w-4 h-4 text-blue-500 shrink-0" />
                         <p className="text-xs font-semibold text-blue-700">Transferred to Human Agent</p>
                     </div>
@@ -316,30 +431,83 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
             {hasIntelligence && (
                 <div className="mx-4 mb-4 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden">
                     {/* Row 1: Score / Interest / Sentiment */}
-                    {(lead.score > 0 || interest || sentiment) && (
-                        <div className="flex items-center justify-around gap-1 px-2 py-2.5 border-b border-slate-100">
-                            {lead.score > 0 && (
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ring-1 ${scoreColor(lead.score)}`}>
-                                        {lead.score}
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Score</span>
-                                </div>
-                            )}
-                            {interest && (
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <IntelPill label={interest.label} cls={interest.cls} />
-                                    <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Interest</span>
-                                </div>
-                            )}
-                            {sentiment && (
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <IntelPill label={sentiment.label} cls={sentiment.cls} />
-                                    <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Sentiment</span>
-                                </div>
-                            )}
+                    <div className="flex items-center justify-around gap-1 px-2 py-2.5 border-b border-slate-100">
+                        {/* Score — always shown, click to edit */}
+                        <div className="flex flex-col items-center gap-0.5">
+                            <Popover open={scorePopoverOpen} onOpenChange={(open) => {
+                                setScorePopoverOpen(open)
+                                if (open) setScoreInput(String(lead.score || ''))
+                            }}>
+                                <PopoverTrigger asChild>
+                                    <button
+                                        className={`text-[11px] font-black px-2 py-0.5 rounded-full ring-1 cursor-pointer hover:opacity-75 transition-opacity ${lead.score > 0 ? scoreColor(lead.score) : 'bg-slate-100 text-slate-400 ring-slate-200'}`}
+                                        title="Click to edit score"
+                                    >
+                                        {lead.score > 0 ? lead.score : '—'}
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-48 p-3" align="center">
+                                    <p className="text-xs font-semibold text-slate-600 mb-2">Edit Score (0–100)</p>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={scoreInput}
+                                            onChange={e => setScoreInput(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && saveScore()}
+                                            className="h-7 text-xs"
+                                            autoFocus
+                                        />
+                                        <Button size="sm" className="h-7 px-2 text-xs" onClick={saveScore} disabled={savingScore}>
+                                            {savingScore ? '…' : 'Save'}
+                                        </Button>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                            <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Score</span>
                         </div>
-                    )}
+
+                        {/* Interest — always shown, click to edit */}
+                        <div className="flex flex-col items-center gap-0.5">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1 whitespace-nowrap cursor-pointer hover:opacity-75 transition-opacity ${interest ? interest.cls : 'bg-slate-100 text-slate-400 ring-slate-200'}`}
+                                        title="Click to edit interest level"
+                                        disabled={savingInterest}
+                                    >
+                                        {interest ? interest.label : '— None'}
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="center" className="w-36">
+                                    {[
+                                        { value: 'high', label: '🔥 High', cls: 'text-rose-600' },
+                                        { value: 'medium', label: '⚡ Medium', cls: 'text-amber-600' },
+                                        { value: 'low', label: '💤 Low', cls: 'text-slate-500' },
+                                        { value: 'none', label: '— None', cls: 'text-slate-400' },
+                                    ].map(opt => (
+                                        <DropdownMenuItem
+                                            key={opt.value}
+                                            onClick={() => saveInterest(opt.value)}
+                                            className={`text-xs font-semibold cursor-pointer ${lead.interest_level === opt.value ? 'bg-slate-50' : ''} ${opt.cls}`}
+                                        >
+                                            {opt.label}
+                                            {lead.interest_level === opt.value && <span className="ml-auto text-slate-400">✓</span>}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Interest</span>
+                        </div>
+
+                        {sentiment && (
+                            <div className="flex flex-col items-center gap-0.5">
+                                <IntelPill label={sentiment.label} cls={sentiment.cls} />
+                                <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Sentiment</span>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Row 2: Readiness / AI Budget / Total Calls */}
                     {(readiness || lead.budget_range || lead.total_calls > 0) && (
@@ -466,6 +634,70 @@ export default function LeadProfileSidebar({ lead, project, onEditProfile, onEdi
                     Edit Profile
                 </Button>
             </div>
+
+            {/* Delete Callback Confirmation Dialog */}
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-amber-600">
+                            <Clock className="w-5 h-5" />
+                            Delete Scheduled Callback
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <p className="text-sm text-slate-500 leading-relaxed">
+                            Are you sure you want to delete the scheduled callback for <span className="font-semibold text-slate-900">{lead.name}</span>?
+                        </p>
+                        
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                Move Lead to Stage
+                            </label>
+                            <Select
+                                value={selectedMoveStageId}
+                                onValueChange={setSelectedMoveStageId}
+                            >
+                                <SelectTrigger className="bg-white">
+                                    <SelectValue placeholder="Select a stage" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {stages.map((stage) => (
+                                        <SelectItem key={stage.id} value={stage.id}>
+                                            <div className="flex items-center gap-2">
+                                                <div 
+                                                    className="w-2 h-2 rounded-full" 
+                                                    style={{ backgroundColor: stage.color }} 
+                                                />
+                                                {stage.name}
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-slate-400 italic">
+                                Deleting the callback will remove the pending status and allow the lead to be processed in the new stage.
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsDeleteDialogOpen(false)}
+                            disabled={deletingCallback}
+                        >
+                            No, keep it
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleDeleteCallback}
+                            disabled={deletingCallback || !selectedMoveStageId}
+                            className="bg-amber-600 hover:bg-amber-700 text-white border-0"
+                        >
+                            {deletingCallback ? 'Deleting...' : 'Yes, Delete Callback'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

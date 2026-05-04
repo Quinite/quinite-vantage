@@ -8,6 +8,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import AdminHeader from '@/components/admin/AdminHeader'
 import { AlertTriangle } from 'lucide-react'
 import { SubscriptionProvider, useSubscription } from '@/contexts/SubscriptionContext'
+import GlobalAddLead from '@/components/crm/GlobalAddLead'
 
 function AdminLayoutInner({ children }) {
     const { user, profile, loading: authLoading, profileLoading } = useAuth()
@@ -92,6 +93,9 @@ function AdminLayoutInner({ children }) {
 
     return (
         <div className="h-screen bg-secondary/20 flex flex-col overflow-hidden">
+            {/* Global Shortcut Components */}
+            <GlobalAddLead />
+
             {/* Header - Fixed at top */}
             <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md shadow-sm border-b border-border/40 shrink-0">
                 <AdminHeader user={user} profile={profile} />

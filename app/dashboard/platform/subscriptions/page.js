@@ -84,7 +84,6 @@ function OrgDetailDrawer({ sub, open, onClose, plans, onRefresh }) {
         max_projects: '',
         max_campaigns: '',
         max_leads: '',
-        monthly_minutes_included: '',
     })
     const [creditsForm, setCreditsForm] = useState({ minutes: '', reason: '' })
     const [creditsLoading, setCreditsLoading] = useState(false)
@@ -99,7 +98,6 @@ function OrgDetailDrawer({ sub, open, onClose, plans, onRefresh }) {
                 max_projects: cl.max_projects ?? '',
                 max_campaigns: cl.max_campaigns ?? '',
                 max_leads: cl.max_leads ?? '',
-                monthly_minutes_included: cl.monthly_minutes_included ?? '',
             })
         }
     }, [sub])
@@ -175,17 +173,6 @@ function OrgDetailDrawer({ sub, open, onClose, plans, onRefresh }) {
 
     const handleClearLimits = () =>
         postAction({ action: 'update_org_limits', org_id: sub.organization?.id, custom_limits: null }, 'Overrides cleared')
-
-    const handleResetMonthly = () => {
-        setConfirmDialog({
-            type: 'reset',
-            message: `This will reset ${orgName}'s monthly AI minutes to their plan's included amount. Are you sure?`,
-            onConfirm: () => {
-                setConfirmDialog(null)
-                postAction({ action: 'reset_monthly_minutes', org_id: sub.organization?.id }, 'Monthly minutes reset')
-            },
-        })
-    }
 
     const handleAddCredits = async () => {
         if (!creditsForm.minutes || !creditsForm.reason) {
@@ -330,7 +317,6 @@ function OrgDetailDrawer({ sub, open, onClose, plans, onRefresh }) {
                                         { key: 'max_projects', label: 'Max Projects', placeholder: sub.plan?.features?.max_projects ?? '—' },
                                         { key: 'max_campaigns', label: 'Max Campaigns', placeholder: sub.plan?.features?.max_campaigns ?? '—' },
                                         { key: 'max_leads', label: 'Max Leads', placeholder: sub.plan?.features?.max_leads ?? '—' },
-                                        { key: 'monthly_minutes_included', label: 'Monthly AI Minutes', placeholder: sub.plan?.features?.monthly_minutes_included ?? '—' },
                                     ].map(({ key, label, placeholder }) => (
                                         <div key={key} className="grid grid-cols-2 gap-2 items-center">
                                             <Label className="text-xs">{label}</Label>
@@ -392,37 +378,14 @@ function OrgDetailDrawer({ sub, open, onClose, plans, onRefresh }) {
                                     <CardTitle className="text-sm">Credit Summary</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-2 text-sm">
-                                    <div className="flex justify-between"><span className="text-gray-500">Monthly Included</span><span>{credits.monthly_included ?? '—'} min</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Monthly Balance</span><span>{credits.monthly_balance ?? '—'} min</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Monthly Used</span><span>{credits.monthly_used ?? '—'} min</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Reset Date</span><span>{formatDate(credits.reset_date)}</span></div>
-                                    <hr />
-                                    <div className="flex justify-between"><span className="text-gray-500">Purchased Balance</span><span>{credits.purchased_balance ?? '—'} min</span></div>
-                                    <div className="flex justify-between font-medium"><span>Total Available</span><span>{((credits.monthly_balance || 0) + (credits.purchased_balance || 0))} min</span></div>
+                                    <div className="flex justify-between font-medium"><span>Available Balance</span><span>{credits.balance ?? '—'} min</span></div>
+                                    <div className="flex justify-between"><span className="text-gray-500">Total Consumed</span><span>{credits.total_consumed ?? '—'} min</span></div>
+                                    <div className="flex justify-between"><span className="text-gray-500">Total Purchased</span><span>{credits.total_purchased ?? '—'} min</span></div>
                                     {credits.low_balance && (
                                         <div className="mt-2 flex items-center gap-1 text-amber-700 bg-amber-50 rounded px-2 py-1 text-xs">
                                             <AlertTriangle className="w-3 h-3" /> Low balance
                                         </div>
                                     )}
-                                </CardContent>
-                            </Card>
-
-                            {/* Reset Monthly */}
-                            <Card>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm">Reset Monthly Minutes</CardTitle>
-                                    <CardDescription className="text-xs">Resets to plan's included amount immediately.</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleResetMonthly}
-                                        disabled={actionLoading}
-                                        className="w-full"
-                                    >
-                                        <RotateCcw className="w-4 h-4 mr-2" /> Reset Monthly Minutes
-                                    </Button>
                                 </CardContent>
                             </Card>
 
@@ -570,7 +533,7 @@ export default function PlatformSubscriptionsPage() {
             max_projects: 2,
             max_campaigns: 5,
             max_leads: 500,
-            monthly_minutes_included: 60,
+            ai_minutes_included: 60,
             topup_allowed: false,
             topup_rate_per_minute: 0,
             csv_export: false,
@@ -849,7 +812,7 @@ export default function PlatformSubscriptionsPage() {
                                             ) : (
                                                 subscriptions.map((sub) => {
                                                     const credits = sub.credits || {}
-                                                    const totalCredits = (credits.monthly_balance || 0) + (credits.purchased_balance || 0)
+                                                    const totalCredits = credits.balance || 0
                                                     return (
                                                         <TableRow
                                                             key={sub.id}

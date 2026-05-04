@@ -50,12 +50,17 @@ export default function SentimentAnalysisCard({ callLogs = [] }) {
     return (
         <Card className="border-border bg-card">
             <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Brain className="w-4 h-4 text-purple-600" />
-                    Sentiment Analysis
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                        <Brain className="w-4 h-4 text-purple-600" />
+                        Sentiment Analysis
+                    </CardTitle>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/50 px-2 py-0.5 rounded-full border border-border/50">
+                        Based on {callsWithSentiment.length} AI Call{callsWithSentiment.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-2">
                 {/* Latest Sentiment */}
                 <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border/50">
                     <div className="flex items-center gap-3">
@@ -86,14 +91,14 @@ export default function SentimentAnalysisCard({ callLogs = [] }) {
 
                 {/* Sentiment History */}
                 {callsWithSentiment.length > 1 && (
-                    <div className="space-y-2">
+                    <div className="space-y-2 mt-2">
                         <p className="text-xs font-medium text-muted-foreground">Recent Calls</p>
-                        <div className="space-y-2">
-                            {callsWithSentiment.slice(0, 5).map((log, index) => (
-                                <div key={log.id || index} className="flex items-center justify-between text-xs p-2 rounded-md hover:bg-muted/30 transition-colors">
+                        <div className="space-y-1 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+                            {callsWithSentiment.map((log, index) => (
+                                <div key={log.id || index} className="flex items-center justify-between text-xs p-2 rounded-md hover:bg-muted/30 transition-colors border-b border-border/10 last:border-0">
                                     <div className="flex items-center gap-2">
                                         <span className="text-base">{getSentimentEmoji(log.sentiment_score || 0)}</span>
-                                        <span className="text-muted-foreground">
+                                        <span className="text-[10px] text-muted-foreground font-medium">
                                             {new Date(log.created_at).toLocaleDateString('en-US', {
                                                 month: 'short',
                                                 day: 'numeric',
@@ -102,7 +107,7 @@ export default function SentimentAnalysisCard({ callLogs = [] }) {
                                             })}
                                         </span>
                                     </div>
-                                    <Badge variant="outline" className={`${getSentimentColor(log.sentiment_score || 0)} border-0 text-[10px] h-5`}>
+                                    <Badge variant="outline" className={`${getSentimentColor(log.sentiment_score || 0)} border-0 text-[9px] h-5 px-1.5`}>
                                         {getSentimentLabel(log.sentiment_score || 0)}
                                     </Badge>
                                 </div>
@@ -110,13 +115,6 @@ export default function SentimentAnalysisCard({ callLogs = [] }) {
                         </div>
                     </div>
                 )}
-
-                {/* Call Count */}
-                <div className="pt-2 border-t border-border/50">
-                    <p className="text-xs text-muted-foreground">
-                        Based on <span className="font-medium text-foreground">{callsWithSentiment.length}</span> AI call{callsWithSentiment.length !== 1 ? 's' : ''}
-                    </p>
-                </div>
             </CardContent>
         </Card>
     )

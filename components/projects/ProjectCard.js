@@ -64,7 +64,7 @@ export default function ProjectCard({
     const status     = resolveStatus(project, isArchived)
     const priceRange = resolvePriceRange(project)
 
-    const total     = project.total_units     || 0
+    const total     = project.total_units || (project.units?.[0]?.count) || 0
     const sold      = project.sold_units      || 0
     const reserved  = project.reserved_units  || 0
     const available = project.available_units ?? Math.max(0, total - sold - reserved)

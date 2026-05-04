@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import PlatformSidebar from '@/components/platform/PlatformSidebar'
 
 export default function PlatformLayout({ children }) {
   const router = useRouter()
@@ -91,15 +92,6 @@ export default function PlatformLayout({ children }) {
     router.push('/admin-login')
   }
 
-  const navItems = [
-    { icon: Shield, label: 'Dashboard', href: '/dashboard/platform/dashboard' },
-    { icon: Building2, label: 'Organizations', href: '/dashboard/platform/organizations' },
-    { icon: Shield, label: 'Permissions', href: '/dashboard/platform/permissions' },
-    { icon: CreditCard, label: 'Subscriptions', href: '/dashboard/platform/subscriptions' },
-    { icon: FileText, label: 'Audit Logs', href: '/dashboard/platform/audit' },
-    { icon: Users2, label: 'Profile', href: '/dashboard/platform/profile' },
-    { icon: Megaphone, label: 'Broadcast Notifications', href: '/dashboard/platform/notifications' },
-  ]
 
 
   return (
@@ -115,80 +107,14 @@ export default function PlatformLayout({ children }) {
       {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-gradient-to-b from-purple-900 to-slate-900 text-white
-        transform transition-transform duration-200 ease-in-out
+        w-64 transform transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-6 border-b border-purple-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-purple-600 to-pink-600 rounded-lg">
-                  <Shield className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="font-bold text-lg">Platform Admin</h1>
-                  <p className="text-xs text-purple-300">Control Plane</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden text-white hover:bg-purple-800"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <ScrollArea className="flex-1 px-3 py-4">
-            <nav className="space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href
-                return (
-                  <Button
-                    key={item.href}
-                    variant={isActive ? 'secondary' : 'ghost'}
-                    className={`w-full justify-start ${isActive
-                      ? 'bg-purple-700 text-white hover:bg-purple-600'
-                      : 'text-purple-100 hover:bg-purple-800 hover:text-white'
-                      }`}
-                    onClick={() => {
-                      router.push(item.href)
-                      setSidebarOpen(false)
-                    }}
-                  >
-                    <Icon className="w-5 h-5 mr-3" />
-                    {item.label}
-                  </Button>
-                )
-              })}
-            </nav>
-          </ScrollArea>
-
-          {/* User info & logout */}
-          <div className="p-4 border-t border-purple-800">
-            <div className="mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Shield className="w-4 h-4 text-purple-300" />
-                <p className="text-sm font-medium text-white">Platform Admin</p>
-              </div>
-              <p className="text-xs text-purple-300">{user?.email}</p>
-            </div>
-            <Separator className="mb-3 bg-purple-800" />
-            <Button
-              className="w-full justify-start border border-purple-700 bg-purple-800 text-white hover:bg-purple-700 hover:text-white shadow-sm"
-              onClick={handleSignOut}
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
+        <PlatformSidebar 
+          user={user} 
+          handleSignOut={handleSignOut} 
+          setSidebarOpen={setSidebarOpen} 
+        />
       </aside>
 
       {/* Main content */}
@@ -216,10 +142,17 @@ export default function PlatformLayout({ children }) {
         )}
 
         {/* Mobile header */}
-        <header className="lg:hidden bg-white border-b border-gray-200 p-4">
+        <header className="lg:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-lg">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-slate-900">Platform Admin</span>
+          </div>
           <Button
             variant="ghost"
             size="icon"
+            className="text-slate-500 hover:bg-slate-100"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="w-6 h-6" />

@@ -26,7 +26,9 @@ import {
     Clock,
     CalendarClock,
     Loader2,
+    Building2,
 } from 'lucide-react'
+import TaskUnitBadge from './TaskUnitBadge'
 import { cn } from '@/lib/utils'
 import { toast } from 'react-hot-toast'
 import { isPast, isToday, parseISO, differenceInDays } from 'date-fns'
@@ -154,6 +156,15 @@ function OverviewTaskRow({ task, onToggle, onDelete }) {
                     <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{task.description}</p>
                 )}
 
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {task.project && (
+                        <span className="text-[9px] font-bold uppercase tracking-tight text-indigo-500 bg-indigo-50/50 px-1.5 py-px rounded border border-indigo-100 shrink-0">
+                            {task.project.name}
+                        </span>
+                    )}
+                    {task.unit && <TaskUnitBadge unit={task.unit} project={task.project} />}
+                </div>
+
                 {/* Footer: due date + assignee */}
                 <div className="flex items-center gap-3 mt-1.5">
                     {!isCompleted && <DueDateBadge task={task} />}
@@ -187,6 +198,8 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
     const [saving, setSaving] = useState(false)
     const [teamMembers, setTeamMembers] = useState([])
     const [formData, setFormData] = useState(EMPTY_FORM)
+    const [selectedUnitLabel, setSelectedUnitLabel] = useState(null)
+    const [selectedProjectLabel, setSelectedProjectLabel] = useState(null)
 
     useEffect(() => {
         if (leadId) fetchTasks()
@@ -237,6 +250,8 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
             toast.success('Task created successfully')
             setIsDialogOpen(false)
             setFormData(EMPTY_FORM)
+            setSelectedUnitLabel(null)
+            setSelectedProjectLabel(null)
             fetchTasks()
         } catch (error) {
             console.error('Error creating task:', error)
@@ -373,7 +388,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        {sortedTasks.slice(0, 4).map((task) => (
+                        {sortedTasks.slice(0, 3).map((task) => (
                             <OverviewTaskRow
                                 key={task.id}
                                 task={task}
@@ -389,7 +404,7 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
                                 onClick={onShowAll}
                                 className="w-full mt-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 text-xs font-semibold py-2 h-auto"
                             >
-                                {tasks.length > 4 ? `Show all ${tasks.length} tasks` : "View all tasks"}
+                                {tasks.length > 3 ? `Show all ${tasks.length} tasks` : "View all tasks"}
                             </Button>
                         )}
                     </div>
@@ -411,7 +426,15 @@ export default function ComingUpNextCard({ leadId, leadName, onShowAll }) {
                             canAssignOthers={teamMembers.length > 0}
                             fixedLeadId={leadId}
                             fixedLeadLabel={leadName}
-                            showLeadProject={false}
+                            showLeadProject={true}
+                            selectedProjectLabel={selectedProjectLabel}
+                            onProjectChange={(id, label) => {
+                                setFormData(f => ({ ...f, project_id: id, unit_id: null }));
+                                setSelectedProjectLabel(label);
+                                setSelectedUnitLabel(null);
+                            }}
+                            selectedUnitLabel={selectedUnitLabel}
+                            onUnitChange={(id, label) => setSelectedUnitLabel(label)}
                         />
                         <div className="flex items-center justify-end gap-3 pt-4 border-t">
                             <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="text-slate-500">

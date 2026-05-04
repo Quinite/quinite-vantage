@@ -27,9 +27,10 @@ export function SystemStatus() {
         const newStatuses = { ...statuses }
 
         try {
-            // 1. Check API Server
-            const apiPromise = fetch(`${process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL}/health`)
-                .then(res => res.ok ? 'operational' : 'degraded')
+            // 1. Check AI Calling Server (via proxy to avoid CORS)
+            const apiPromise = fetch('/api/health/ai-calling')
+                .then(res => res.json())
+                .then(data => data.status || 'offline')
                 .catch(() => 'offline')
 
             // 2. Check Database

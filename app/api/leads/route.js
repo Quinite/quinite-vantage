@@ -45,8 +45,15 @@ export const GET = withAuth(async (request, context) => {
         const { searchParams } = new URL(request.url)
         const filters = {
             projectId: searchParams.get('project_id'),
+            projectIds: searchParams.get('project_ids')?.split(',').filter(Boolean),
             stageId: searchParams.get('stage_id'),
+            stageIds: searchParams.get('stage_ids')?.split(',').filter(Boolean),
             assignedTo: searchParams.get('assigned_to'),
+            assignedToIds: searchParams.get('assigned_to_ids')?.split(',').filter(Boolean),
+            interestLevels: searchParams.get('interest_levels')?.split(',').filter(Boolean),
+            sources: searchParams.get('sources')?.split(',').filter(Boolean),
+            scoreMin: searchParams.get('score_min') ? parseInt(searchParams.get('score_min')) : undefined,
+            scoreMax: searchParams.get('score_max') ? parseInt(searchParams.get('score_max')) : undefined,
             search: searchParams.get('search'),
             status: searchParams.get('status'),
             viewMode: searchParams.get('view_mode') || 'active',

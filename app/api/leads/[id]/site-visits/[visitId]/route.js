@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { firePipelineTrigger, TRIGGER_KEYS } from '@/lib/pipeline-triggers'
 
 export async function PATCH(request, { params }) {
     try {
@@ -26,6 +27,30 @@ export async function PATCH(request, { params }) {
             .single()
 
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+        // Fire pipeline trigger based on new status/outcome — non-blocking
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (authUser) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('organization_id')
+                .eq('id', authUser.id)
+                .single()
+
+            if (profile?.organization_id) {
+                if (data.status === 'no_show') {
+                    firePipelineTrigger(TRIGGER_KEYS.SITE_VISIT_NO_SHOW, id, profile.organization_id).catch(() => {})
+                } else if (data.status === 'completed') {
+                    const keyMap = {
+                        interested:       TRIGGER_KEYS.SITE_VISIT_COMPLETED_INTERESTED,
+                        not_interested:   TRIGGER_KEYS.SITE_VISIT_COMPLETED_NOT_INTERESTED,
+                        follow_up_needed: TRIGGER_KEYS.SITE_VISIT_COMPLETED_FOLLOW_UP,
+                    }
+                    const triggerKey = keyMap[data.outcome]
+                    if (triggerKey) firePipelineTrigger(triggerKey, id, profile.organization_id).catch(() => {})
+                }
+            }
+        }
 
         return NextResponse.json({ visit: data })
     } catch (error) {

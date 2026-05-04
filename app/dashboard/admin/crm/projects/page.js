@@ -51,6 +51,8 @@ import { useProjects } from '@/hooks/useProjects'
 import { formatCurrency } from '@/lib/utils/currency'
 import { PROJECT_AMENITY_MAP } from '@/lib/amenities-constants'
 import { DynamicIcon } from '@/components/amenities/DynamicIcon'
+import { cn } from '@/lib/utils'
+import { useDynamicTitle } from '@/hooks/useDynamicTitle'
 
 const ProjectForm = dynamic(() => import('@/components/projects/ProjectForm'), {
   loading: () => <Skeleton className="h-96 w-full" />
@@ -87,6 +89,7 @@ const getIcon = (type) => {
 }
 
 export default function ProjectsPage() {
+  useDynamicTitle('CRM Projects')
   const router = useRouter()
   const [page, setPage] = useState(1)
   const [searchTerm, setSearchTerm] = useState('')

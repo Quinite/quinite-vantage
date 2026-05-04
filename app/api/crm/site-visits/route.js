@@ -30,7 +30,7 @@ export async function GET(request) {
             .from('site_visits')
             .select(`
                 *,
-                leads:lead_id ( id, name, phone, email ),
+                leads:lead_id ( id, name, phone, email, avatar_url ),
                 projects:project_id ( id, name ),
                 units:unit_id ( id, unit_number )
             `)

@@ -1,14 +1,16 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw, Settings } from 'lucide-react'
+import { Plus, RefreshCw, Settings, Zap } from 'lucide-react'
 import PipelineBoard from '@/components/crm/PipelineBoard'
 import ManageStagesSheet from '@/components/crm/ManageStagesSheet'
+import PipelineTriggersSheet from '@/components/crm/PipelineTriggersSheet'
 import { usePipelines } from '@/hooks/usePipelines'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { PermissionGate } from '@/components/permissions/PermissionGate'
 import LeadSourceDialog from '@/components/crm/LeadSourceDialog'
+import { useDynamicTitle } from '@/hooks/useDynamicTitle'
 import {
     Select,
     SelectContent,
@@ -18,11 +20,13 @@ import {
 } from "@/components/ui/select"
 
 function CrmPipelineContent() {
+    useDynamicTitle('CRM Pipeline')
     const searchParams = useSearchParams()
     const router = useRouter()
     const projectId = searchParams.get('project_id')
     const [isDealInitOpen, setIsDealInitOpen] = useState(false)
     const [manageStagesOpen, setManageStagesOpen] = useState(false)
+    const [triggersOpen, setTriggersOpen] = useState(false)
     const [projects, setProjects] = useState([])
     const { data: pipelines = [], refetch: refetchPipelines } = usePipelines()
     const activePipeline = pipelines[0] ?? null
@@ -50,13 +54,23 @@ function CrmPipelineContent() {
                     </div>
 
                     <PermissionGate feature={['manage_crm_settings', 'view_settings']}>
-                        <Button
-                            onClick={() => setManageStagesOpen(true)}
-                            className="bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 shadow-sm h-10 px-4 transition-all w-full md:w-auto justify-center"
-                        >
-                            <Settings className="w-4 h-4 mr-2" />
-                            Manage Pipeline
-                        </Button>
+                        <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
+                            <Button
+                                onClick={() => setTriggersOpen(true)}
+                                variant="outline"
+                                className="h-10 px-4 gap-2 border-dashed w-full sm:w-auto justify-center"
+                            >
+                                <Zap className="w-4 h-4" />
+                                Pipeline Triggers
+                            </Button>
+                            <Button
+                                onClick={() => setManageStagesOpen(true)}
+                                className="bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 shadow-sm h-10 px-4 transition-all w-full sm:w-auto justify-center"
+                            >
+                                <Settings className="w-4 h-4 mr-2" />
+                                Manage Pipeline
+                            </Button>
+                        </div>
                     </PermissionGate>
                 </div>
 
@@ -77,6 +91,13 @@ function CrmPipelineContent() {
                 onOpenChange={setIsDealInitOpen}
                 projects={projects}
                 initialProjectId={projectId}
+            />
+
+            {/* Pipeline Triggers Sheet */}
+            <PipelineTriggersSheet
+                open={triggersOpen}
+                onOpenChange={setTriggersOpen}
+                pipelineId={activePipeline?.id}
             />
 
             {/* Manage Stages Sheet */}

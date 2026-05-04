@@ -8,12 +8,13 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog"
-import { Keyboard, Search, Move, X } from 'lucide-react'
+import { Keyboard, Search, Move, X, Plus } from 'lucide-react'
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }) {
     const shortcuts = [
         { icon: Search, label: 'Global Search', keys: ['/'] },
         { icon: Move, label: 'Navigation', keys: ['Tab'] },
+        { icon: Plus, label: 'Add Lead', keys: ['Alt', 'N'] },
         { icon: X, label: 'Close Dialogs', keys: ['Esc'] },
     ]
 

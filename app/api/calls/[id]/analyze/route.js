@@ -76,7 +76,7 @@ export async function POST(request, { params }) {
             ai_metadata: {
                 objections: analysis.objections,
                 budget_estimated: analysis.budget,
-                priority_score: analysis.priority,
+                priority_score: Math.round(analysis.priority),
                 key_takeaways: analysis.key_takeaways,
                 manual_analysis_at: new Date().toISOString()
             }

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { requireRole } from '@/lib/middleware/requireRole'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { ValidationError, NotFoundError, handleApiError } from '@/lib/errors'
+import { corsJSON } from '@/lib/cors'
+import { hasDashboardPermission } from '@/lib/dashboardPermissions'
 
 export async function GET(request, { params }) {
     try {
@@ -69,16 +72,16 @@ export async function PUT(request, { params }) {
             throw new NotFoundError('User')
         }
 
-        // Update user profile
+        // Only update fields that were explicitly sent in the body
+        const updates = { updated_at: new Date().toISOString() }
+        if (body.fullName !== undefined) updates.full_name = body.fullName
+        if (body.email    !== undefined) updates.email     = body.email
+        if (body.phone    !== undefined) updates.phone     = body.phone || null
+        if (body.role     !== undefined) updates.role      = body.role
+
         const { data: updatedUser, error } = await admin
             .from('profiles')
-            .update({
-                full_name: body.fullName,
-                email: body.email,
-                phone: body.phone,
-                role: body.role,
-                updated_at: new Date().toISOString()
-            })
+            .update(updates)
             .eq('id', userId)
             .select()
             .single()

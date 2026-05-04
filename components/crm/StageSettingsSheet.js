@@ -18,6 +18,12 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -45,6 +51,7 @@ const ACTION_LABELS = {
     move_stage: 'Move to stage',
     assign_agent: 'Assign to agent',
     create_task: 'Create follow-up task',
+    show_site_visit_form: 'Show site visit booking form',
 }
 
 function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
@@ -56,11 +63,27 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
     const [saving, setSaving] = useState(false)
 
     const handleSave = async () => {
-        if (!name.trim()) { toast.error('Rule name is required'); return }
+        if (!name.trim()) return
         setSaving(true)
         await onSave({ name: name.trim(), trigger_type: triggerType, trigger_config: triggerConfig, action_type: actionType, action_config: actionConfig })
         setSaving(false)
     }
+
+    const isTriggerValid = () => {
+        if (triggerType === 'ai_call_outcome') return !!triggerConfig.outcome
+        if (triggerType === 'interest_level_change') return !!triggerConfig.interest_level
+        if (triggerType === 'score_threshold') return triggerConfig.score_above !== undefined
+        return true
+    }
+
+    const isActionValid = () => {
+        if (actionType === 'move_stage') return !!actionConfig.stage_id
+        if (actionType === 'assign_agent') return !!actionConfig.user_id || actionConfig.mode === 'round_robin'
+        if (actionType === 'create_task') return !!actionConfig.title && !!actionConfig.due_in_hours
+        return true
+    }
+
+    const isValid = !!name.trim() && isTriggerValid() && isActionValid()
 
     return (
         <div className="space-y-4 p-4 bg-muted/30 rounded-xl border border-border">
@@ -68,14 +91,17 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Rule name (e.g. Schedule site visit)"
-                className="h-8 text-sm"
+                className="h-8 text-sm bg-white"
             />
 
             {/* Trigger */}
             <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">When</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    When
+                </p>
                 <Select value={triggerType} onValueChange={v => { setTriggerType(v); setTriggerConfig({}) }}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-sm bg-white"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {Object.entries(TRIGGER_LABELS).map(([k, v]) => (
                             <SelectItem key={k} value={k}>{v}</SelectItem>
@@ -84,7 +110,7 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                 </Select>
                 {triggerType === 'ai_call_outcome' && (
                     <Select value={triggerConfig.outcome || ''} onValueChange={v => setTriggerConfig({ outcome: v })}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select outcome" /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-sm bg-white"><SelectValue placeholder="Select outcome" /></SelectTrigger>
                         <SelectContent>
                             {['interested', 'not_interested', 'callback', 'unreachable', 'transferred'].map(o => (
                                 <SelectItem key={o} value={o}>{o.replace(/_/g, ' ')}</SelectItem>
@@ -94,7 +120,7 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                 )}
                 {triggerType === 'interest_level_change' && (
                     <Select value={triggerConfig.interest_level || ''} onValueChange={v => setTriggerConfig({ interest_level: v })}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Becomes..." /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-sm bg-white"><SelectValue placeholder="Becomes..." /></SelectTrigger>
                         <SelectContent>
                             {['high', 'medium', 'low'].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                         </SelectContent>
@@ -107,16 +133,19 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                         value={triggerConfig.score_above ?? ''}
                         onChange={e => setTriggerConfig({ score_above: parseInt(e.target.value) || 0 })}
                         placeholder="Score above (0-100)"
-                        className="h-8 text-sm"
+                        className="h-8 text-sm bg-white"
                     />
                 )}
             </div>
 
             {/* Action */}
             <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Then</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Then
+                </p>
                 <Select value={actionType} onValueChange={v => { setActionType(v); setActionConfig({}) }}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-sm bg-white"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {Object.entries(ACTION_LABELS).map(([k, v]) => (
                             <SelectItem key={k} value={k}>{v}</SelectItem>
@@ -125,7 +154,7 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                 </Select>
                 {actionType === 'move_stage' && (
                     <Select value={actionConfig.stage_id || ''} onValueChange={v => setActionConfig({ stage_id: v })}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select stage" /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-sm bg-white"><SelectValue placeholder="Select stage" /></SelectTrigger>
                         <SelectContent>
                             {Array.isArray(stages) && stages.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                         </SelectContent>
@@ -133,7 +162,7 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                 )}
                 {actionType === 'assign_agent' && (
                     <Select value={actionConfig.user_id || actionConfig.mode || ''} onValueChange={v => setActionConfig(v === 'round_robin' ? { mode: 'round_robin' } : { user_id: v })}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select agent" /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-sm bg-white"><SelectValue placeholder="Select agent" /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="round_robin">Round-robin (auto)</SelectItem>
                             {Array.isArray(users) && users.map(u => <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>)}
@@ -146,7 +175,7 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                             value={actionConfig.title || ''}
                             onChange={e => setActionConfig(c => ({ ...c, title: e.target.value }))}
                             placeholder="Task title"
-                            className="h-8 text-sm"
+                            className="h-8 text-sm bg-white"
                         />
                         <Input
                             type="number"
@@ -154,7 +183,7 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
                             value={actionConfig.due_in_hours ?? ''}
                             onChange={e => setActionConfig(c => ({ ...c, due_in_hours: parseInt(e.target.value) || 24 }))}
                             placeholder="Due in hours (e.g. 48)"
-                            className="h-8 text-sm"
+                            className="h-8 text-sm bg-white"
                         />
                     </div>
                 )}
@@ -162,7 +191,7 @@ function AutomationRuleForm({ rule, stages, users, onSave, onCancel }) {
 
             <div className="flex gap-2 justify-end">
                 <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-                <Button size="sm" onClick={handleSave} disabled={saving}>
+                <Button size="sm" onClick={handleSave} disabled={saving || !isValid}>
                     {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                     Save Rule
                 </Button>
@@ -181,7 +210,24 @@ export function StageSettingsSheet({ stage, pipeline, open, onClose, onStageUpda
     const [deleting, setDeleting] = useState(false)
     const [savingStale, setSavingStale] = useState(false)
     const [justSavedStale, setJustSavedStale] = useState(false)
+    const [dependencies, setDependencies] = useState({ triggers: [], automations: [] })
     const { data: users = [] } = useUsers()
+
+    const fetchDependencies = useCallback(async () => {
+        if (!pipeline?.id) return
+        try {
+            const [tRes, aRes] = await Promise.all([
+                fetch('/api/pipeline/triggers').then(r => r.json()),
+                fetch(`/api/pipeline/automations?pipeline_id=${pipeline.id}`).then(r => r.json())
+            ])
+            setDependencies({
+                triggers: tRes.triggers || [],
+                automations: aRes.automations || []
+            })
+        } catch (e) {
+            console.error('Failed to fetch dependencies', e)
+        }
+    }, [pipeline?.id])
 
     const fetchAutomations = useCallback(async () => {
         if (!pipeline?.id) return
@@ -203,8 +249,11 @@ export function StageSettingsSheet({ stage, pipeline, open, onClose, onStageUpda
     }, [pipeline?.id, stage.id])
 
     useEffect(() => {
-        if (open) fetchAutomations()
-    }, [open, fetchAutomations])
+        if (open) {
+            fetchAutomations()
+            fetchDependencies()
+        }
+    }, [open, fetchAutomations, fetchDependencies])
 
     useEffect(() => {
         setStaleDays(stage.stale_days ?? '')
@@ -406,15 +455,29 @@ export function StageSettingsSheet({ stage, pipeline, open, onClose, onStageUpda
                     {/* Delete stage — bottom */}
                     {!stage.is_default && (
                         <div className="px-6 py-4 border-t border-border mt-auto">
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                className="w-full text-xs"
-                                onClick={() => setDeleteStageOpen(true)}
-                            >
-                                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                                Delete Stage
-                            </Button>
+                            <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="w-full">
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                className="w-full text-xs"
+                                                onClick={() => setDeleteStageOpen(true)}
+                                                disabled={stage.lead_count > 0}
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                                                Delete Stage
+                                            </Button>
+                                        </div>
+                                    </TooltipTrigger>
+                                    {stage.lead_count > 0 && (
+                                        <TooltipContent side="top" className="text-xs">
+                                            Move {stage.lead_count} lead{stage.lead_count !== 1 ? 's' : ''} first
+                                        </TooltipContent>
+                                    )}
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
                     )}
                 </SheetContent>
@@ -424,7 +487,12 @@ export function StageSettingsSheet({ stage, pipeline, open, onClose, onStageUpda
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete "{stage.name}"?</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogDescription className="text-sm">
+                            {dependencies.triggers.filter(t => t.target_stage_id === stage.id).length > 0 || dependencies.automations.filter(a => a.trigger_config?.stage_id === stage.id || a.action_config?.stage_id === stage.id).length > 0 ? (
+                                <span className="text-destructive font-medium block mb-2">
+                                    Warning: This stage is used in {dependencies.triggers.filter(t => t.target_stage_id === stage.id).length} trigger(s) and {dependencies.automations.filter(a => a.trigger_config?.stage_id === stage.id || a.action_config?.stage_id === stage.id).length} automation rule(s).
+                                </span>
+                            ) : null}
                             This will permanently remove the stage. Leads in this stage will need to be moved first.
                         </AlertDialogDescription>
                     </AlertDialogHeader>

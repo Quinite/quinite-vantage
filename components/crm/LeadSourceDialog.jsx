@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSubscription } from '@/contexts/SubscriptionContext'
+import { cn } from '@/lib/utils'
 import {
     Dialog,
     DialogContent,
@@ -25,7 +26,7 @@ const FormBuilder = dynamic(() => import('./FormBuilder'), {
     ssr: false
 })
 
-export default function LeadSourceDialog({ open, onOpenChange, projectId, projects, users = [], onSuccess }) {
+export default function LeadSourceDialog({ open, onOpenChange, projectId, projects, users = [], onSuccess, singleEntryOnly = false }) {
     const { isExpired: subExpired } = useSubscription()
     const [activeTab, setActiveTab] = useState('manual')
     const [importProjectId, setImportProjectId] = useState(projectId || 'none')
@@ -143,15 +144,22 @@ export default function LeadSourceDialog({ open, onOpenChange, projectId, projec
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-2xl border-0 shadow-2xl [&>button]:hidden">
+            <DialogContent className={cn(
+                "max-w-5xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-2xl border-0 shadow-2xl [&>button]:hidden",
+                singleEntryOnly && "max-w-3xl h-auto max-h-[90vh]"
+            )}>
                 {/* Compact Header */}
                 <div className="relative bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <DialogTitle className="text-xl font-bold text-white">Add New Leads</DialogTitle>
-                            <DialogDescription className="text-blue-100 text-xs mt-0.5">
-                                Choose your preferred method to capture leads
-                            </DialogDescription>
+                            <DialogTitle className="text-xl font-bold text-white">
+                                {singleEntryOnly ? 'Add New Lead' : 'Add New Leads'}
+                            </DialogTitle>
+                            {!singleEntryOnly && (
+                                <DialogDescription className="text-blue-100 text-xs mt-0.5">
+                                    Choose your preferred method to capture leads
+                                </DialogDescription>
+                            )}
                         </div>
                         <DialogClose className="h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-white/50">
                             <X className="h-5 w-5" />
@@ -161,41 +169,42 @@ export default function LeadSourceDialog({ open, onOpenChange, projectId, projec
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 bg-slate-50">
-                    {/* Compact Tab Navigation */}
-                    <div className="px-6 py-3 bg-white border-b border-slate-200">
-                        <TabsList className="grid grid-cols-4 w-full bg-slate-100/80 p-1 rounded-lg h-auto">
-                            <TabsTrigger
-                                value="manual"
-                                className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium"
-                            >
-                                <UserPlus className="w-4 h-4 mr-1.5" />
-                                Manual
-                            </TabsTrigger>
-                            <TabsTrigger
-                                value="builder"
-                                className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium"
-                            >
-                                <LayoutTemplate className="w-4 h-4 mr-1.5" />
-                                Form Builder
-                            </TabsTrigger>
-                            <TabsTrigger
-                                value="import"
-                                disabled={subExpired}
-                                className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={subExpired ? 'Subscription expired — renew to import leads' : undefined}
-                            >
-                                <Upload className="w-4 h-4 mr-1.5" />
-                                CSV Import
-                            </TabsTrigger>
-                            <TabsTrigger
-                                value="connect"
-                                className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium"
-                            >
-                                <Database className="w-4 h-4 mr-1.5" />
-                                Integrations
-                            </TabsTrigger>
-                        </TabsList>
-                    </div>
+                    {!singleEntryOnly && (
+                        <div className="px-6 py-3 bg-white border-b border-slate-200">
+                            <TabsList className="grid grid-cols-4 w-full bg-slate-100/80 p-1 rounded-lg h-auto">
+                                <TabsTrigger
+                                    value="manual"
+                                    className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium"
+                                >
+                                    <UserPlus className="w-4 h-4 mr-1.5" />
+                                    Manual
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="builder"
+                                    className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium"
+                                >
+                                    <LayoutTemplate className="w-4 h-4 mr-1.5" />
+                                    Form Builder
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="import"
+                                    disabled={subExpired}
+                                    className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title={subExpired ? 'Subscription expired — renew to import leads' : undefined}
+                                >
+                                    <Upload className="w-4 h-4 mr-1.5" />
+                                    CSV Import
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="connect"
+                                    className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-md py-2 px-3 transition-all duration-200 text-xs font-medium"
+                                >
+                                    <Database className="w-4 h-4 mr-1.5" />
+                                    Integrations
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
+                    )}
 
                     <div className="flex-1 overflow-y-auto" style={{ padding: '1.5rem' }}>
                         <TabsContent value="manual" className="mt-0 h-full">

@@ -41,13 +41,13 @@ export function HelpMenu() {
                     <DropdownMenuLabel>Help & Support</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                        <a href="mailto:support@quinite.com" className="cursor-pointer">
+                        <a href="mailto:support@quinite.co" className="cursor-pointer">
                             <Mail className="mr-2 h-4 w-4" />
                             <span>Email Support</span>
                         </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                        <a href="https://wa.me/917043024484" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-green-600 focus:text-green-600 focus:bg-green-50">
+                        <a href="https://wa.me/918866066069" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-green-600 focus:text-green-600 focus:bg-green-50">
                             <MessageCircle className="mr-2 h-4 w-4" />
                             <span>WhatsApp Support</span>
                         </a>

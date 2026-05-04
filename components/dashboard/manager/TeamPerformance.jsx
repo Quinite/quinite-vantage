@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 import { Users, TrendingUp, Phone, Award } from 'lucide-react'
 
 export function TeamPerformance({ members = [], topPerformers = [] }) {
@@ -39,9 +40,10 @@ export function TeamPerformance({ members = [], topPerformers = [] }) {
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="relative">
-                                            <Avatar>
-                                                <AvatarImage src={member.avatar} alt={member.name} />
-                                                <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
+                                            <Avatar className="bg-slate-100 border-2 border-white shadow-sm ring-1 ring-slate-100">
+                                                <AvatarFallback className="text-xs font-bold text-slate-600 bg-slate-100">
+                                                    {getInitials(member.name)}
+                                                </AvatarFallback>
                                             </Avatar>
                                             <div
                                                 className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${getStatusColor(member.isOnline)}`}
@@ -95,9 +97,10 @@ export function TeamPerformance({ members = [], topPerformers = [] }) {
                                             {index + 1}
                                         </div>
                                         <div className="relative">
-                                            <Avatar>
-                                                <AvatarImage src={performer.avatar} alt={performer.name} />
-                                                <AvatarFallback>{getInitials(performer.name)}</AvatarFallback>
+                                            <Avatar className="bg-slate-100 border-2 border-white shadow-sm ring-1 ring-slate-100">
+                                                <AvatarFallback className="text-xs font-bold text-slate-600 bg-slate-100">
+                                                    {getInitials(performer.name)}
+                                                </AvatarFallback>
                                             </Avatar>
                                         </div>
                                         <div>

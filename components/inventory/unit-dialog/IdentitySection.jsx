@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-import { Sparkles, ChevronRight, ChevronDown, Check, LayoutGrid } from 'lucide-react'
+import { Sparkles, ChevronRight, ChevronDown, Check, LayoutGrid, Info, Layers, AlertTriangle } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { getStatusConfig, formatINR } from '@/lib/inventory'
 import AmenitiesDisplay from '@/components/amenities/AmenitiesDisplay'
@@ -150,7 +151,13 @@ export default function IdentitySection({
   unitConfigs,
   onConfigChange,
   selectedConfig,
+  towerPicker = null,
+  existingUnitNumbers = [],
 }) {
+  const isLandOrVilla = selectedConfig?.category === 'land' || selectedConfig?.property_type === 'Villa'
+  const showTowerPicker = towerPicker !== null && !isLandOrVilla
+  const unitNumberDuplicate = !!formData.unit_number?.trim() &&
+    existingUnitNumbers.some(n => n?.trim().toLowerCase() === formData.unit_number.trim().toLowerCase())
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
       {/* Section header */}
@@ -166,21 +173,8 @@ export default function IdentitySection({
         </span>
       </div>
 
-      {/* Row 1: Unit number + Config + Transaction */}
+      {/* Row 1: Config + Transaction + Status */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
-            Unit Number <span className="text-rose-400">*</span>
-          </Label>
-          <Input
-            value={formData.unit_number || ''}
-            onChange={(e) => setFormData(p => ({ ...p, unit_number: e.target.value }))}
-            placeholder="e.g. A-F01"
-            required
-            className="h-9 bg-slate-50 border-slate-200 rounded-xl font-semibold text-sm focus:bg-white transition-all"
-          />
-          <p className="text-[10px] text-slate-400">🔁 Auto-gen · editable</p>
-        </div>
         <div className="space-y-1.5">
           <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
             Type / Config <span className="text-rose-400">*</span>
@@ -211,79 +205,182 @@ export default function IdentitySection({
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Row 2: (Status + Facing) in one col, Features in other */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-3">
-          <div className="space-y-1.5">
+        <div className="space-y-1.5 mt-1.5">
+          <div className="flex items-center gap-1.5">
             <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Status</Label>
-            <Select
-              value={formData.status || 'available'}
-              onValueChange={(v) => setFormData(p => ({ ...p, status: v }))}
-            >
-              <SelectTrigger
-                className={cn(
-                  'h-9 rounded-xl border font-bold text-sm transition-all px-3',
-                  getStatusConfig(formData.status).bg,
-                  getStatusConfig(formData.status).text,
-                  'border-current/20'
-                )}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                {STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt} className="py-1.5 rounded-lg">
-                    <div className="flex items-center gap-2 font-semibold text-xs capitalize">
-                      <div className={cn('w-1.5 h-1.5 rounded-full', getStatusConfig(opt).dot)} />
-                      {opt.replace(/_/g, ' ')}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 text-slate-400 hover:text-blue-500 transition-colors cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">Managed via Deals tab</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Facing Direction</Label>
-            <Select
-              value={formData.facing || 'North'}
-              onValueChange={(v) => setFormData(p => ({ ...p, facing: v }))}
-            >
-              <SelectTrigger className="h-9 bg-slate-50 border-slate-200 rounded-xl font-semibold text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                {FACING_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt} className="font-semibold text-xs">{opt}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className={cn(
+            'h-9 rounded-xl border font-bold text-sm flex items-center px-3',
+            getStatusConfig(formData.status).bg,
+            getStatusConfig(formData.status).text,
+            'border-current/20 opacity-80'
+          )}>
+            <div className="flex items-center capitalize">
+              {(formData.status || 'available').replace(/_/g, ' ')}
+            </div>
           </div>
         </div>
+      </div>
 
+      {/* Placement — only when adding from list view AND not land/villa */}
+      {towerPicker !== null && !isLandOrVilla && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Placement</span>
+          </div>
+
+          {towerPicker.towersLoading ? (
+            <p className="text-xs text-slate-400 py-1">Loading towers…</p>
+          ) : towerPicker.towers.length === 0 ? (
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-800">No towers created yet</p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  Go to the <span className="font-bold">Visual View</span> tab to add towers first, then come back to add units.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                  Tower <span className="text-rose-400">*</span>
+                </Label>
+                <Select value={towerPicker.pickedTowerId} onValueChange={towerPicker.setPickedTowerId}>
+                  <SelectTrigger className="h-9 bg-white border-slate-200 rounded-xl font-semibold text-sm">
+                    <SelectValue placeholder="Select tower…" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {towerPicker.towers.map(t => (
+                      <SelectItem key={t.id} value={t.id} className="font-semibold text-xs cursor-pointer">
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                  Floor <span className="text-rose-400">*</span>
+                </Label>
+                {(() => {
+                  const pickedTower = towerPicker.towers.find(t => t.id === towerPicker.pickedTowerId)
+                  const maxFloors = pickedTower?.total_floors ?? 0
+                  return (
+                    <Select
+                      value={towerPicker.pickedFloor}
+                      onValueChange={towerPicker.setPickedFloor}
+                      disabled={!towerPicker.pickedTowerId}
+                    >
+                      <SelectTrigger className="h-9 bg-white border-slate-200 rounded-xl font-semibold text-sm disabled:opacity-50">
+                        <SelectValue placeholder={towerPicker.pickedTowerId ? 'Select floor…' : 'Pick tower first'} />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl max-h-48">
+                        {Array.from({ length: maxFloors }, (_, i) => i + 1).map(f => (
+                          <SelectItem key={f} value={String(f)} className="font-semibold text-xs cursor-pointer">
+                            Floor {f}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Row 2: Unit number + Facing + Features */}
+      <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Unit Features</Label>
-          <div className="space-y-1.5">
-            <FeatureChip
-              icon="📐"
-              label="Corner Unit"
-              descOn="2-sided frontage · premium"
-              descOff="Tap to mark as corner"
-              value={formData.is_corner}
-              onChange={(v) => setFormData(p => ({ ...p, is_corner: v }))}
-              colorOn="amber"
-            />
-            <FeatureChip
-              icon="🧭"
-              label="Vastu Compliant"
-              descOn="Directional alignment ✓"
-              descOff="Tap to mark as aligned"
-              value={formData.is_vastu_compliant}
-              onChange={(v) => setFormData(p => ({ ...p, is_vastu_compliant: v }))}
-              colorOn="green"
-            />
+          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            Unit Number <span className="text-rose-400">*</span>
+          </Label>
+          <Input
+            value={formData.unit_number || ''}
+            onChange={(e) => setFormData(p => ({ ...p, unit_number: e.target.value }))}
+            placeholder="e.g. A-F01"
+            required
+            className={cn(
+              'h-9 rounded-xl font-semibold text-sm transition-all',
+              unitNumberDuplicate
+                ? 'bg-rose-50 border-rose-300 focus:bg-rose-50 ring-1 ring-rose-200'
+                : 'bg-slate-50 border-slate-200 focus:bg-white'
+            )}
+          />
+          {unitNumberDuplicate
+            ? <p className="text-[10px] text-rose-500 font-semibold">Unit number already exists</p>
+            : <p className="text-[10px] text-slate-400">🔁 Auto-gen · editable</p>
+          }
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Facing</Label>
+          <Select
+            value={formData.facing || 'North'}
+            onValueChange={(v) => setFormData(p => ({ ...p, facing: v }))}
+          >
+            <SelectTrigger className="h-9 bg-slate-50 border-slate-200 rounded-xl font-semibold text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              {FACING_OPTIONS.map((opt) => (
+                <SelectItem key={opt} value={opt} className="font-semibold text-xs cursor-pointer">{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Features</Label>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFormData(p => ({ ...p, is_corner: !p.is_corner }))}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border-[1.5px] text-left transition-all',
+                formData.is_corner
+                  ? 'border-amber-400 bg-amber-50'
+                  : 'border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              )}
+            >
+              <span className="text-sm">📐</span>
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-[11px] font-bold leading-tight', formData.is_corner ? 'text-slate-900' : 'text-slate-500')}>Corner</p>
+              </div>
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0', formData.is_corner ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400')}>
+                {formData.is_corner ? 'Yes ✓' : 'No'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormData(p => ({ ...p, is_vastu_compliant: !p.is_vastu_compliant }))}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border-[1.5px] text-left transition-all',
+                formData.is_vastu_compliant
+                  ? 'border-green-400 bg-green-50'
+                  : 'border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              )}
+            >
+              <span className="text-sm">🧭</span>
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-[11px] font-bold leading-tight', formData.is_vastu_compliant ? 'text-slate-900' : 'text-slate-500')}>Vastu</p>
+              </div>
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0', formData.is_vastu_compliant ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400')}>
+                {formData.is_vastu_compliant ? 'Yes ✓' : 'No'}
+              </span>
+            </button>
           </div>
         </div>
       </div>

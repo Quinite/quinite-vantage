@@ -10,6 +10,8 @@ import {
     X,
     Loader2
 } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getDefaultAvatar } from '@/lib/avatar-utils'
 
 import {
     Command,
@@ -137,10 +139,18 @@ export function GlobalSearch() {
                                         <CommandItem
                                             key={lead.id}
                                             onSelect={() => runCommand(() => router.push(`/dashboard/admin/crm/leads/${lead.id}`))}
+                                            className="flex items-center gap-2"
                                         >
-                                            <Users className="mr-2 h-4 w-4" />
-                                            <span>{lead.name}</span>
-                                            {lead.email && <span className="ml-2 text-xs text-muted-foreground truncate max-w-[150px]">({lead.email})</span>}
+                                            <Avatar className="h-6 w-6 border border-slate-100">
+                                                <AvatarImage src={lead.avatar_url || getDefaultAvatar(lead.email || lead.name)} />
+                                                <AvatarFallback className="text-[10px] font-bold">
+                                                    {lead.name?.charAt(0) || 'L'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                <span className="truncate">{lead.name}</span>
+                                                {lead.email && <span className="text-[10px] text-muted-foreground truncate opacity-70">({lead.email})</span>}
+                                            </div>
                                         </CommandItem>
                                     ))}
                                 </CommandGroup>

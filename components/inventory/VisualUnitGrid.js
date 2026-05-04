@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus,
   Building2,
@@ -78,11 +78,13 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
   
   const queryClient = useQueryClient();
   const [activeTowerId, setActiveTowerId] = useState(null);
-  const [selectedConfig, setSelectedConfig] = useState(null); 
+  const [selectedConfig, setSelectedConfig] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState(null);
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [targetFloor, setTargetFloor] = useState(null);
+  const [dialogConfigFilter, setDialogConfigFilter] = useState(null); // 'villa' | 'land' | null
+  const pendingSlots = useRef(new Set());
 
   useEffect(() => {
     if (towers.length > 0 && !activeTowerId) {
@@ -96,8 +98,11 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
 
   // Plot units: unassigned units with a land config — survive tower deletion
   const plotUnits = unassignedUnits.filter(u => u.config?.category === 'land');
-  const otherUnassigned = unassignedUnits.filter(u => u.config?.category !== 'land');
+  // Villa/Bungalow units: residential but not tower-placed
+  const villaUnits = unassignedUnits.filter(u => u.config?.property_type === 'Villa');
+  const otherUnassigned = unassignedUnits.filter(u => u.config?.category !== 'land' && u.config?.property_type !== 'Villa');
   const hasLandConfigs = unitConfigs.some(c => c.category === 'land');
+  const hasVillaConfigs = unitConfigs.some(c => c.property_type === 'Villa');
 
   // UnitDialog needs a projectType hint; the unit's own config category takes priority inside the dialog
   const projectType = 'residential';
@@ -133,7 +138,13 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
 
   const handlePaintUnit = async (floorNum, slotIndex = null) => {
     if (!selectedConfig) return;
-    
+    if (selectedConfig.property_type === 'Villa') return;
+    if (selectedConfig.category === 'land') return;
+
+    const slotKey = `${activeTowerId}-${floorNum}-${slotIndex}`;
+    if (slotIndex !== null && pendingSlots.current.has(slotKey)) return;
+    if (slotIndex !== null) pendingSlots.current.add(slotKey);
+
     try {
       const currentFloorUnits = towerUnits.filter(u => Number(u.floor_number) === Number(floorNum));
       const nextIndex = slotIndex !== null ? slotIndex : currentFloorUnits.length;
@@ -164,6 +175,8 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
     } catch (error) {
       console.error('Painting error:', error);
       return false;
+    } finally {
+      if (slotIndex !== null) pendingSlots.current.delete(slotKey);
     }
   };
 
@@ -200,6 +213,34 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
        setDrawerMode('add_unit');
        setSelectedUnit(null);
        setDrawerOpen(true);
+    }
+  };
+
+  const handlePaintVilla = async () => {
+    if (!selectedConfig || selectedConfig.property_type !== 'Villa') return;
+    const nextIndex = villaUnits.length;
+    try {
+      await addUnit({
+        tower_id: null,
+        floor_number: null,
+        config_id: selectedConfig.id,
+        unit_number: `V-${String(nextIndex + 1).padStart(2, '0')}`,
+        status: 'available',
+        transaction_type: selectedConfig.transaction_type || 'sell',
+        construction_status: normalizeProjectStatus(project?.status),
+        carpet_area: selectedConfig.carpet_area || 0,
+        built_up_area: selectedConfig.built_up_area || selectedConfig.builtup_area || 0,
+        super_built_up_area: selectedConfig.super_built_up_area || selectedConfig.super_builtup_area || 0,
+        plot_area: selectedConfig.plot_area || 0,
+        base_price: selectedConfig.base_price || 0,
+        total_price: selectedConfig.base_price || 0,
+        project_id: projectId,
+        organization_id: organizationId,
+        metadata: { slot_index: nextIndex },
+        facing: 'North',
+      });
+    } catch (error) {
+      console.error('Villa paint error:', error);
     }
   };
 
@@ -378,19 +419,21 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
             {selectedConfig && (
               <div className={cn(
                 "text-white p-4 rounded-2xl shadow-xl flex items-center justify-between animate-in slide-in-from-top-3 sticky top-0 z-50",
-                selectedConfig.category === 'land' ? "bg-amber-500" : "bg-blue-600"
+                selectedConfig.category === 'land' ? "bg-amber-500" : selectedConfig.property_type === 'Villa' ? "bg-emerald-600" : "bg-blue-600"
               )}>
                 <div className="flex items-center gap-4">
                   <div className="p-2 bg-white/20 rounded-xl animate-pulse">
-                    {selectedConfig.category === 'land' ? <TreePine className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
+                    {selectedConfig.category === 'land' ? <TreePine className="w-5 h-5" /> : selectedConfig.property_type === 'Villa' ? <Home className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h4 className={cn("text-sm uppercase tracking-tight", selectedConfig.category === 'land' ? "text-amber-100" : "text-yellow-300")}>
-                      {selectedConfig.category === 'land' ? 'Plot Placement Active' : 'Quick-Fill Active'}
+                    <h4 className={cn("text-sm uppercase tracking-tight", selectedConfig.category === 'land' ? "text-amber-100" : selectedConfig.property_type === 'Villa' ? "text-emerald-100" : "text-yellow-300")}>
+                      {selectedConfig.category === 'land' ? 'Plot Placement Active' : selectedConfig.property_type === 'Villa' ? 'Villa Placement Active' : 'Quick-Fill Active'}
                     </h4>
                     <p className="text-[10px] opacity-90 font-bold uppercase tracking-widest">
                       {selectedConfig.category === 'land'
                         ? <>Click the <span className="underline">Plots section</span> below to add <span className="underline">{selectedConfig.config_name || selectedConfig.property_type}</span></>
+                        : selectedConfig.property_type === 'Villa'
+                        ? <>Click the <span className="underline">Villa / Bungalow section</span> below to add <span className="underline">{selectedConfig.config_name || selectedConfig.property_type}</span></>
                         : <>Click empty boxes to place <span className="underline">{selectedConfig.config_name || selectedConfig.property_type}</span></>
                       }
                     </p>
@@ -400,10 +443,15 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
               </div>
             )}
 
-            <div className="overflow-x-auto">
+            {/* Tower floor grid — blurred when villa or land config is active */}
+            <div className={cn("overflow-x-auto transition-all duration-300", (selectedConfig?.property_type === 'Villa' || selectedConfig?.category === 'land') && "opacity-40 blur-[2px] pointer-events-none")}>
               <div className="w-max min-w-full space-y-4">
-                {activeTower ? (
-                  Array.from({ length: activeTower.total_floors + 1 }, (_, i) => activeTower.total_floors - i).map(floorNum => (
+                {activeTower ? (() => {
+                  const hasGroundFloor = activeTower.metadata?.has_ground_floor ?? true;
+                  return Array.from(
+                    { length: hasGroundFloor ? activeTower.total_floors + 1 : activeTower.total_floors },
+                    (_, i) => activeTower.total_floors - i
+                  ).map(floorNum => (
                     <FloorRow
                       key={floorNum}
                       floorNum={floorNum}
@@ -414,30 +462,47 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
                       onStatusChange={updateUnitStatus}
                       onDeleteUnit={deleteUnit}
                       onFillFloor={() => handleFillFloor(floorNum)}
-                      paintingActive={!!selectedConfig && selectedConfig.category !== 'land'}
+                      paintingActive={!!selectedConfig && selectedConfig.category !== 'land' && selectedConfig.property_type !== 'Villa'}
                     />
-                  ))
-                ) : (
+                  ));
+                })() : (
                   <div className="h-[400px] flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl bg-white/50">
-                    <Building2 className="w-16 h-16 mb-4 opacity-10" />
-                    <p className="text-lg font-black uppercase tracking-wider text-slate-300">No towers defined</p>
-                    <Button onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="mt-6 bg-slate-900 text-white rounded-xl h-12 px-8 font-bold">Create Tower</Button>
+                    <Building2 className="w-12 h-12 mb-4 opacity-10" />
+                    <p className="text-md font-bold uppercase tracking-wider text-slate-300">No towers defined</p>
+                    <Button onClick={() => { setDrawerMode('add_tower'); setDrawerOpen(true); }} className="mt-4 bg-slate-900 text-white rounded-xl h-10 px-6 font-bold">Create Tower</Button>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Plots / Land Section */}
+            {/* Villa / Bungalow Section — blurred when any non-villa config is active */}
+            {hasVillaConfigs && (
+              <div className={cn("transition-all duration-300", selectedConfig && selectedConfig.property_type !== 'Villa' && "opacity-40 blur-[2px] pointer-events-none")}>
+                <VillaSection
+                  units={villaUnits}
+                  paintingActive={selectedConfig?.property_type === 'Villa'}
+                  onUnitClick={handleEditUnit}
+                  onAddUnit={handlePaintVilla}
+                  onStatusChange={updateUnitStatus}
+                  onDeleteUnit={deleteUnit}
+                  onOpenDialog={() => { setDialogConfigFilter('villa'); setTargetFloor(null); setDrawerMode('add_unit'); setSelectedUnit(null); setDrawerOpen(true); }}
+                />
+              </div>
+            )}
+
+            {/* Plots / Land Section — blurred when any non-land config is active */}
             {hasLandConfigs && (
-              <PlotsSection
-                units={plotUnits}
-                paintingActive={selectedConfig?.category === 'land'}
-                onUnitClick={handleEditUnit}
-                onAddUnit={handlePaintPlot}
-                onStatusChange={updateUnitStatus}
-                onDeleteUnit={deleteUnit}
-                onOpenDialog={() => { setTargetFloor(null); setDrawerMode('add_unit'); setSelectedUnit(null); setDrawerOpen(true); }}
-              />
+              <div className={cn("transition-all duration-300", selectedConfig && selectedConfig.category !== 'land' && "opacity-40 blur-[2px] pointer-events-none")}>
+                <PlotsSection
+                  units={plotUnits}
+                  paintingActive={selectedConfig?.category === 'land'}
+                  onUnitClick={handleEditUnit}
+                  onAddUnit={handlePaintPlot}
+                  onStatusChange={updateUnitStatus}
+                  onDeleteUnit={deleteUnit}
+                  onOpenDialog={() => { setDialogConfigFilter('land'); setTargetFloor(null); setDrawerMode('add_unit'); setSelectedUnit(null); setDrawerOpen(true); }}
+                />
+              </div>
             )}
 
             {/* Other unassigned (non-land) assets */}
@@ -467,19 +532,26 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
 
       <UnitDialog
         open={drawerOpen && drawerMode?.includes('unit')}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => { setDrawerOpen(false); setDialogConfigFilter(null); }}
         mode={drawerMode?.includes('add') ? 'add' : 'edit'}
         unit={selectedUnit}
         tower={activeTower}
         project={project}
         projectType={projectType}
-        unitConfigs={unitConfigs}
-        floorNumber={targetFloor}
-        towerId={activeTowerId}
+        unitConfigs={
+          dialogConfigFilter === 'villa'
+            ? unitConfigs.filter(c => c.property_type === 'Villa')
+            : dialogConfigFilter === 'land'
+            ? unitConfigs.filter(c => c.category === 'land')
+            : unitConfigs
+        }
+        floorNumber={selectedUnit ? selectedUnit.floor_number : targetFloor}
+        towerId={selectedUnit ? selectedUnit.tower_id : activeTowerId}
         projectId={projectId}
         organizationId={organizationId}
         onSave={drawerMode?.includes('add') ? addUnit : (data) => updateUnit(selectedUnit.id, data)}
         onDelete={deleteUnit}
+        existingUnitNumbers={Object.values(units).flat().map(u => u.unit_number).filter(Boolean)}
       />
 
       <TowerDrawer
@@ -500,7 +572,6 @@ export default function VisualUnitGrid({ projectId, project, organizationId, rea
 function PlotsSection({ units, paintingActive, onUnitClick, onAddUnit, onStatusChange, onDeleteUnit, onOpenDialog }) {
   return (
     <div className="pt-6 border-t-2 border-amber-100 border-dashed animate-in fade-in slide-in-from-bottom-4">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <div className="w-9 h-9 rounded-xl bg-amber-500 shadow-lg shadow-amber-100 flex items-center justify-center text-white shrink-0">
           <TreePine className="w-4 h-4" />
@@ -518,7 +589,6 @@ function PlotsSection({ units, paintingActive, onUnitClick, onAddUnit, onStatusC
         )}
       </div>
 
-      {/* Plot cells */}
       <div className="flex gap-2 flex-wrap pl-12">
         {units.map(unit => (
           <div key={unit.id} className="shrink-0 min-w-[110px] max-w-[110px]">
@@ -526,28 +596,70 @@ function PlotsSection({ units, paintingActive, onUnitClick, onAddUnit, onStatusC
           </div>
         ))}
 
-        {/* Paint slot — active only when a land config is selected */}
-        <div
-          onClick={paintingActive ? onAddUnit : undefined}
-          className={cn(
-            'h-[80px] min-w-[110px] max-w-[110px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all shadow-sm select-none',
-            paintingActive
-              ? 'border-amber-400 bg-amber-50/50 cursor-pointer hover:bg-amber-100/60 hover:shadow-md hover:-translate-y-0.5 active:scale-95'
-              : 'border-amber-100 bg-transparent cursor-default opacity-30'
-          )}
-        >
-          <Plus className={cn('w-4 h-4', paintingActive ? 'text-amber-500' : 'text-amber-200')} />
-          {paintingActive && <span className="text-[8px] font-black uppercase tracking-wider text-amber-400">Add Plot</span>}
-        </div>
-
-        {/* Manual add via dialog (always available) */}
-        {!paintingActive && (
+        {paintingActive ? (
+          <div
+            onClick={onAddUnit}
+            className="h-[80px] min-w-[110px] max-w-[110px] rounded-2xl border-2 border-dashed border-amber-400 bg-amber-50/50 flex flex-col items-center justify-center gap-1 transition-all shadow-sm select-none cursor-pointer hover:bg-amber-100/60 hover:shadow-md hover:-translate-y-0.5 active:scale-95"
+          >
+            <Plus className="w-4 h-4 text-amber-500" />
+            <span className="text-[8px] font-black uppercase tracking-wider text-amber-400">Add Plot</span>
+          </div>
+        ) : (
           <button
             onClick={onOpenDialog}
             className="h-[80px] min-w-[110px] rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-amber-400 hover:bg-amber-50 transition-all flex flex-col items-center justify-center text-slate-300 hover:text-amber-500 group shadow-sm"
           >
             <Plus className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
             <span className="text-[8px] font-black uppercase tracking-tighter">New Plot</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VillaSection({ units, paintingActive, onUnitClick, onAddUnit, onStatusChange, onDeleteUnit, onOpenDialog }) {
+  return (
+    <div className="pt-6 border-t-2 border-emerald-100 border-dashed animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl bg-emerald-500 shadow-lg shadow-emerald-100 flex items-center justify-center text-white shrink-0">
+          <Home className="w-4 h-4" />
+        </div>
+        <div>
+          <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">Villa / Bungalow</h3>
+          <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
+            {units.length > 0 ? `${units.length} unit${units.length !== 1 ? 's' : ''}` : 'No villas yet — select a villa config above to start placing'}
+          </p>
+        </div>
+        {paintingActive && (
+          <span className="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full animate-pulse">
+            Click + to place
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-2 flex-wrap pl-12">
+        {units.map(unit => (
+          <div key={unit.id} className="shrink-0 min-w-[110px] max-w-[110px]">
+            <UnitCell unit={unit} onClick={() => onUnitClick(unit)} onStatusChange={onStatusChange} onDelete={() => onDeleteUnit(unit.id)} />
+          </div>
+        ))}
+
+        {paintingActive ? (
+          <div
+            onClick={onAddUnit}
+            className="h-[80px] min-w-[110px] max-w-[110px] rounded-2xl border-2 border-dashed border-emerald-400 bg-emerald-50/50 flex flex-col items-center justify-center gap-1 transition-all shadow-sm select-none cursor-pointer hover:bg-emerald-100/60 hover:shadow-md hover:-translate-y-0.5 active:scale-95"
+          >
+            <Plus className="w-4 h-4 text-emerald-500" />
+            <span className="text-[8px] font-black uppercase tracking-wider text-emerald-400">Add Villa</span>
+          </div>
+        ) : (
+          <button
+            onClick={onOpenDialog}
+            className="h-[80px] min-w-[110px] rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50 transition-all flex flex-col items-center justify-center text-slate-300 hover:text-emerald-500 group shadow-sm"
+          >
+            <Plus className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
+            <span className="text-[8px] font-black uppercase tracking-tighter">New Villa</span>
           </button>
         )}
       </div>
@@ -598,24 +710,24 @@ function FloorRow({ floorNum, tower, units, onUnitClick, onAddUnit, onStatusChan
             {unit ? (
               <UnitCell unit={unit} onClick={() => onUnitClick(unit)} onStatusChange={onStatusChange} onDelete={() => onDeleteUnit(unit.id)} />
             ) : (
-              <div 
+              <div
                 onClick={() => onAddUnit(floorNum, idx)}
                 className="h-[80px] rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center justify-center cursor-pointer group/box shadow-sm"
               >
-                 <Plus className="w-4 h-4 text-slate-200 group-hover/box:text-blue-400 transition-colors scale-75" />
+                <Plus className="w-4 h-4 text-slate-200 group-hover/box:text-blue-400 transition-colors scale-75" />
               </div>
             )}
           </div>
         ))}
         <div className="shrink-0 flex items-center pt-1.5 px-2">
-           <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-6 w-6 rounded-full opacity-0 group-hover/row:opacity-100 transition-all bg-white border border-slate-100 shadow-sm"
             onClick={() => onAddUnit(floorNum, slots.length)}
-           >
-             <Plus className="w-3.5 h-3.5 text-slate-300" />
-           </Button>
+          >
+            <Plus className="w-3.5 h-3.5 text-slate-300" />
+          </Button>
         </div>
       </div>
     </div>

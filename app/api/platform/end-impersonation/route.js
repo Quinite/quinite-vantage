@@ -18,7 +18,11 @@ export async function POST() {
     const adminClient = createAdminClient()
 
     try {
-      const { error } = await adminClient.from('impersonation_sessions').update({ is_active: false, ended_at: new Date().toISOString() }).eq('impersonator_user_id', user.id).eq('is_active', true)
+      const { error } = await adminClient
+        .from('impersonation_sessions')
+        .update({ active: false, ended_at: new Date().toISOString() })
+        .eq('admin_id', user.id)
+        .eq('active', true)
       if (error) throw new Error('Failed to end impersonation')
 
       await adminClient.from('audit_logs').insert({ user_id: user.id, user_name: 'Platform Admin', action: 'IMPERSONATION_ENDED', entity_type: 'session', entity_id: null })
