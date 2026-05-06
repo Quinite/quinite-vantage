@@ -44,8 +44,13 @@ function sentimentMeta(score) {
 
 const STATUS_META = {
     completed:    { label: 'Completed',    cls: 'bg-emerald-500/10 text-emerald-700 border-emerald-200' },
+    called:       { label: 'Completed',    cls: 'bg-emerald-500/10 text-emerald-700 border-emerald-200' },
     transferred:  { label: 'Transferred',  cls: 'bg-blue-500/10 text-blue-700 border-blue-200' },
     failed:       { label: 'Failed',       cls: 'bg-red-500/10 text-red-600 border-red-200' },
+    no_answer:    { label: 'No Answer',    cls: 'bg-amber-500/10 text-amber-700 border-amber-200' },
+    busy:         { label: 'Busy',         cls: 'bg-orange-500/10 text-orange-700 border-orange-200' },
+    cancelled:    { label: 'Cancelled',    cls: 'bg-zinc-400/10 text-zinc-600 border-zinc-200' },
+    canceled:     { label: 'Cancelled',    cls: 'bg-zinc-400/10 text-zinc-600 border-zinc-200' },
     in_progress:  { label: 'In Progress',  cls: 'bg-amber-500/10 text-amber-700 border-amber-200' },
     disconnected: { label: 'Disconnected', cls: 'bg-zinc-400/10 text-zinc-600 border-zinc-200' },
     unknown:      { label: 'Unknown',      cls: 'bg-zinc-400/10 text-zinc-500 border-zinc-200' },

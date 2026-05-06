@@ -391,8 +391,8 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
   const [selectedProjectIds, setSelectedProjectIds] = useState([])
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [startDate, setStartDate] = useState(getTodayString())
+  const [endDate, setEndDate] = useState(getTodayString())
   const [timeStart, setTimeStart] = useState('09:00')
   const [timeEnd, setTimeEnd] = useState('21:00')
   const [dndCompliance, setDndCompliance] = useState(true)
@@ -439,8 +439,8 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
       setSelectedProjectIds([])
       setName('')
       setDescription('')
-      setStartDate('')
-      setEndDate('')
+      setStartDate(today)
+      setEndDate(today)
       setTimeStart('09:00')
       setTimeEnd('21:00')
       setDndCompliance(true)
@@ -557,7 +557,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
 
   function handleClose() {
     if (creating) return
-    setSelectedProjectIds([]); setName(''); setDescription(''); setStartDate(''); setEndDate('')
+    setSelectedProjectIds([]); setName(''); setDescription(''); setStartDate(getTodayString()); setEndDate(getTodayString())
     setTimeStart('09:00'); setTimeEnd('21:00'); setDndCompliance(true); setTouched(false)
     setCreditCap(''); setAiScript(''); setPreviewLeads([]); setPreviewLoading(false)
     setCallSettings({ language: 'hinglish', voice_id: 'shimmer', max_duration: 600, silence_timeout: 30 })
@@ -570,6 +570,8 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
   // Reset confirmation when filters or projects change
   useEffect(() => {
     setHasConfirmedEnrollment(false)
+    setPreviewLeads([])
+    setConfirmedEnrollCount(null)
   }, [selectedProjectIds, inclusionFilters, exclusionFilters, inclusionLogic, exclusionLogic])
 
   async function handleSubmit() {
@@ -607,7 +609,7 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent className="max-w-2xl bg-gray-100 max-h-[90vh] overflow-y-auto p-0">
 
         {/* ── Sticky Header ── */}
         <div className="sticky top-0 z-10 bg-background border-b border-border px-6 pt-5 pb-4 flex items-center justify-between">
@@ -984,13 +986,13 @@ function CreateCampaignDialog({ open, onOpenChange, projects, loadingProjects, o
                       <div className="p-3 space-y-2">
                         {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
                       </div>
-                    ) : previewLeads.length === 0 ? (
+                    ) : previewLeads.filter(l => !l.ineligible_reason).length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-8 opacity-40">
                         <Users className="w-8 h-8 mb-2" />
                         <p className="text-[10px] font-bold">No leads matched by filters</p>
                       </div>
                     ) : (
-                      previewLeads.map(lead => (
+                      previewLeads.filter(l => !l.ineligible_reason).map(lead => (
                         <div key={lead.id} className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-white/80">
                           <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
                             <span className="text-[10px] font-bold text-slate-500">{lead.name?.[0]?.toUpperCase()}</span>

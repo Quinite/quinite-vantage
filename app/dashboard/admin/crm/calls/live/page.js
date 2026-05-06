@@ -6,13 +6,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-    Phone, Clock, PhoneOff, PhoneForwarded,
-    RefreshCw, StopCircle, Radio, Zap, AlertTriangle,
-    Lock, ArrowUpRight, Mic
+    Phone, Clock, PhoneForwarded,
+    RefreshCw, StopCircle, Radio, Lock, ArrowUpRight, Mic
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { usePermission } from '@/contexts/PermissionContext'
-import FailedCallsList from '@/components/crm/calls/FailedCallsList'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -172,8 +170,6 @@ function ActiveCallCard({ call, elapsed, onForceEnd }) {
                         </p>
                     </div>
                 </div>
-
-                {/* transferred banner removed to avoid redundancy with status badge */}
             </div>
         </div>
     )
@@ -181,15 +177,14 @@ function ActiveCallCard({ call, elapsed, onForceEnd }) {
 
 // ─── Queue breakdown bar ───────────────────────────────────────────────────────
 
-function QueueBreakdown({ queued, calling, failed, total }) {
+function QueueBreakdown({ queued, calling, total }) {
     if (total === 0) return (
         <div className="h-2 w-full rounded-full bg-muted" />
     )
     return (
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden flex gap-px">
             <div className="bg-sky-500 h-full rounded-l-full transition-all duration-700" style={{ width: `${(queued / total) * 100}%` }} />
-            <div className="bg-amber-400 h-full transition-all duration-700" style={{ width: `${(calling / total) * 100}%` }} />
-            <div className="bg-red-500 h-full rounded-r-full transition-all duration-700" style={{ width: `${(failed / total) * 100}%` }} />
+            <div className="bg-amber-400 h-full rounded-r-full transition-all duration-700" style={{ width: `${(calling / total) * 100}%` }} />
         </div>
     )
 }
@@ -222,8 +217,8 @@ function LiveSkeleton() {
                 </div>
                 <Skeleton className="h-8 w-24 rounded-full" />
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[...Array(4)].map((_, i) => (
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                {[...Array(3)].map((_, i) => (
                     <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
                         <div className="flex items-start justify-between">
                             <Skeleton className="h-8 w-8 rounded-lg" />
@@ -267,12 +262,11 @@ function LiveSkeleton() {
 
 export default function LiveCallMonitor() {
     const [activeCalls, setActiveCalls] = useState([])
-    const [queueStats, setQueueStats] = useState({ queued: 0, calling: 0, failed: 0 })
+    const [queueStats, setQueueStats] = useState({ queued: 0, calling: 0 })
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     const [user, setUser] = useState(null)
     const [orgId, setOrgId] = useState(null)
-    const [failedOpen, setFailedOpen] = useState(false)
     const [elapsed, setElapsed] = useState({})
     const [lastUpdated, setLastUpdated] = useState(null)
 
@@ -364,14 +358,13 @@ export default function LiveCallMonitor() {
         if (!id) return
         const { data, error } = await supabase
             .from('campaign_leads')
-            .select('status, attempt_count')
+            .select('status')
             .eq('organization_id', id)
-            .in('status', ['queued', 'calling', 'failed'])
+            .in('status', ['queued', 'calling'])
         if (!error && data) {
             setQueueStats({
                 queued: data.filter(r => r.status === 'queued').length,
                 calling: data.filter(r => r.status === 'calling').length,
-                failed: data.filter(r => r.status === 'failed' && r.attempt_count >= 4).length,
             })
         }
     }
@@ -400,7 +393,7 @@ export default function LiveCallMonitor() {
     }
 
     // ── derived stats ─────────────────────────────────────────────────────────
-    const totalQueue = queueStats.queued + queueStats.calling + queueStats.failed
+    const totalQueue = queueStats.queued + queueStats.calling
     const systemLive = activeCalls.length > 0 || queueStats.queued > 0 || queueStats.calling > 0
 
     // ── guards ────────────────────────────────────────────────────────────────
@@ -459,7 +452,7 @@ export default function LiveCallMonitor() {
             </div>
 
             {/* ── Stat cards ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 <StatCard
                     label="Active Calls"
                     value={activeCalls.length}
@@ -485,18 +478,6 @@ export default function LiveCallMonitor() {
                     icon={Radio}
                     pulse={queueStats.calling > 0 ? 'bg-amber-400' : undefined}
                 />
-                <StatCard
-                    label="Failed"
-                    value={queueStats.failed}
-                    sub="Max retries exhausted"
-                    icon={PhoneOff}
-                    onClick={queueStats.failed > 0 ? () => setFailedOpen(true) : undefined}
-                    badge={queueStats.failed > 0 && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-600 border border-red-200">
-                            {queueStats.failed}
-                        </span>
-                    )}
-                />
             </div>
 
             {/* ── Queue progress bar ── */}
@@ -509,14 +490,12 @@ export default function LiveCallMonitor() {
                     <QueueBreakdown
                         queued={queueStats.queued}
                         calling={queueStats.calling}
-                        failed={queueStats.failed}
                         total={totalQueue}
                     />
                     <div className="flex items-center gap-4">
                         {[
                             { color: 'bg-sky-500', label: 'Queued', value: queueStats.queued },
                             { color: 'bg-amber-400', label: 'Calling', value: queueStats.calling },
-                            { color: 'bg-red-500', label: 'Failed', value: queueStats.failed },
                         ].map(s => (
                             <div key={s.label} className="flex items-center gap-1.5">
                                 <div className={`w-2 h-2 rounded-full shrink-0 ${s.color}`} />
@@ -560,53 +539,6 @@ export default function LiveCallMonitor() {
                     )}
                 </div>
             </div>
-
-            {/* ── Failed leads summary ── */}
-            <div className="grid grid-cols-1 gap-4">
-
-                {/* Failed calls summary */}
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
-                    <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
-                        <AlertTriangle className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-semibold text-foreground">Failed Leads</span>
-                        {queueStats.failed > 0 && (
-                            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-600 border border-red-200">
-                                {queueStats.failed}
-                            </span>
-                        )}
-                    </div>
-                    <div className="p-5">
-                        {queueStats.failed === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
-                                <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center mb-3">
-                                    <Zap className="w-5 h-5 text-emerald-600" />
-                                </div>
-                                <p className="text-sm font-medium text-foreground">All clear</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">No leads have exhausted retries</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="p-4 bg-red-500/5 border border-red-200/60 rounded-xl">
-                                    <p className="text-xs text-red-900/70 font-medium">Leads needing attention</p>
-                                    <p className="text-3xl font-bold text-red-600 tabular-nums mt-0.5">{queueStats.failed}</p>
-                                    <p className="text-xs text-red-900/50 mt-1">All 4 call attempts exhausted</p>
-                                </div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setFailedOpen(true)}
-                                    className="w-full h-9 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 font-medium"
-                                >
-                                    <PhoneOff className="w-3.5 h-3.5 mr-2" />
-                                    View Failed Leads
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            <FailedCallsList open={failedOpen} onOpenChange={setFailedOpen} />
         </div>
     )
 }
