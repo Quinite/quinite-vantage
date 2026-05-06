@@ -855,12 +855,13 @@ export class CampaignService {
         const adminClient = createAdminClient()
         const { data: logs } = await adminClient
             .from('call_logs')
-            .select('call_status, transferred, sentiment_score')
+            .select('call_status, transferred, sentiment_score, call_cost')
             .eq('campaign_id', campaignId)
 
         const totalCalls = logs?.length || 0
         const answeredCalls = logs?.filter(l => ['called', 'completed'].includes(l.call_status)).length || 0
         const transferredCalls = logs?.filter(l => l.transferred).length || 0
+        const totalCreditSpent = logs?.reduce((sum, l) => sum + (Number(l.call_cost) || 0), 0) || 0
         const sentimentScores = logs?.map(l => l.sentiment_score).filter(s => s != null) || []
         const avgSentimentScore = sentimentScores.length
             ? sentimentScores.reduce((a, b) => a + b, 0) / sentimentScores.length
@@ -870,6 +871,7 @@ export class CampaignService {
             total_calls: totalCalls,
             answered_calls: answeredCalls,
             transferred_calls: transferredCalls,
+            credit_spent: totalCreditSpent,
             avg_sentiment_score: avgSentimentScore,
             updated_at: new Date().toISOString()
         }).eq('id', campaignId)

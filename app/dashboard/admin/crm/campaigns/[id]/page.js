@@ -586,7 +586,7 @@ function EnrolledLeadsTab({ campaignId, campaignStatus, projectIds = [] }) {
                                                         "bg-amber-100 text-amber-700 border-amber-200"
                                                     )}>
                                                         <SentimentIcon score={sentiment} />
-                                                        {sentiment >= 0.3 ? 'POS' : sentiment < -0.1 ? 'NEG' : 'NEU'}
+                                                        {sentiment >= 0.3 ? 'Positive' : sentiment < -0.1 ? 'Negative' : 'Neutral'}
                                                     </span>
                                                 ) : <span className="text-slate-300">—</span>}
                                             </td>

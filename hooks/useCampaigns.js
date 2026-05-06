@@ -355,6 +355,7 @@ export function useCampaignPipelineMovement(campaignId) {
                 .map(l => ({
                     leadId: l.lead_id,
                     leadName: l.lead?.name,
+                    leadScore: l.lead?.score,
                     interestLevel: l.interest_level,
                     sentimentScore: l.sentiment_score,
                     callDate: l.created_at,

@@ -67,7 +67,8 @@ export async function GET(request, { params }) {
           id,
           name,
           email,
-          phone
+          phone,
+          score
         )
       `)
             .eq('campaign_id', id)

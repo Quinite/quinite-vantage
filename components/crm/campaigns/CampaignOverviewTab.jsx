@@ -209,6 +209,7 @@ export function CampaignOverviewTab({ campaign }) {
                 <thead>
                   <tr className="bg-muted/40 border-b border-border/50">
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Lead</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium text-center">Score</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Interest</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Sentiment</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Date</th>
@@ -218,6 +219,11 @@ export function CampaignOverviewTab({ campaign }) {
                   {movements.slice(0, 15).map((m, i) => (
                     <tr key={i} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-2.5 font-medium text-foreground">{m.leadName || m.leadId}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 font-bold border border-blue-100">
+                          {m.leadScore ?? 0}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5">
                         <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-semibold',
                           m.interestLevel === 'high' ? 'bg-emerald-100 text-emerald-700' :
