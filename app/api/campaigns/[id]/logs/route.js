@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { hasPermission } from '@/lib/permissions'
+import { hasDashboardPermission } from '@/lib/dashboardPermissions'
 import { corsJSON } from '@/lib/cors'
 
 /**
@@ -18,7 +18,7 @@ export async function GET(request, { params }) {
         }
 
         // Check permission
-        const canView = await hasPermission(supabase, user.id, 'campaign.view')
+        const canView = await hasDashboardPermission(user.id, 'view_campaigns')
         if (!canView) {
             return corsJSON({ error: 'Insufficient permissions' }, { status: 403 })
         }
