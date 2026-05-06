@@ -40,21 +40,29 @@ export async function POST(request, { params }) {
             return corsJSON({ error: 'LEADS_STILL_PENDING', pending_count: pendingCount, message: `${pendingCount} leads still pending. Pass force=true to complete anyway.` }, { status: 400 })
         }
 
+        const now = new Date().toISOString()
+
         // Clean up remaining queue items (including those waiting for retries)
         await admin.from('call_queue')
-            .update({ 
-                status: 'failed', 
-                last_error: 'campaign_manually_completed', 
-                next_retry_at: null, // Clear retry timer
-                updated_at: new Date().toISOString() 
+            .update({
+                status: 'failed',
+                last_error: 'campaign_manually_completed',
+                next_retry_at: null,
+                updated_at: now,
             })
             .eq('campaign_id', campaignId)
-            .neq('status', 'completed') // Neutralize everything that isn't finished
+            .neq('status', 'completed')
+
+        // Mark any leads still pending/in-flight as skipped
+        await admin.from('campaign_leads')
+            .update({ status: 'skipped', skip_reason: 'campaign_completed', updated_at: now })
+            .eq('campaign_id', campaignId)
+            .in('status', ['enrolled', 'queued', 'calling'])
 
         // Finalize stats and mark complete
         await CampaignService.finalizeStats(campaignId)
         await admin.from('campaigns')
-            .update({ status: 'completed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .update({ status: 'completed', completed_at: now, updated_at: now })
             .eq('id', campaignId)
 
         await logAudit(admin, user.id, null, 'campaign.completed', 'campaign', campaignId, { force, pending_count: pendingCount })
