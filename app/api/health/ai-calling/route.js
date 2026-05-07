@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
-    const serverUrl = process.env.WEBSOCKET_SERVER_URL || process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL
+    const serverUrl = process.env.WEBSOCKET_SERVER_URL
     
     if (!serverUrl) {
       return NextResponse.json({ status: 'offline', error: 'URL not configured' })

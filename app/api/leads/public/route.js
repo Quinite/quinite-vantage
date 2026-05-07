@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // Public-facing endpoint: creates a lead from the website contact form.
 // No auth required — uses admin client to bypass RLS.

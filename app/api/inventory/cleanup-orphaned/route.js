@@ -1,4 +1,5 @@
-import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase/server'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { corsJSON } from '@/lib/cors'
 
 /**

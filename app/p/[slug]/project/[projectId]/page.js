@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, MapPin, Building2, BedDouble, Bath, Ruler, CheckCircle2 } from 'lucide-react'
