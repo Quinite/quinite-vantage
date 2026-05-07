@@ -249,6 +249,45 @@ export async function PUT(request) {
       isComplete: body.isComplete
     })
 
+    if (body.isComplete) {
+      const { data: freePlan } = await admin
+        .from('subscription_plans')
+        .select('id')
+        .eq('slug', 'free')
+        .eq('is_active', true)
+        .single()
+
+      if (freePlan) {
+        const now = new Date()
+        const periodEnd = new Date(now)
+        periodEnd.setMonth(periodEnd.getMonth() + 3)
+
+        await admin.from('subscriptions').upsert({
+          organization_id: organizationId,
+          plan_id: freePlan.id,
+          status: 'active',
+          billing_cycle: 'monthly',
+          current_period_start: now.toISOString(),
+          current_period_end: periodEnd.toISOString()
+        }, { onConflict: 'organization_id' })
+
+        await admin.from('organizations').update({
+          current_plan_id: freePlan.id
+        }).eq('id', organizationId)
+
+        await admin.from('call_credits').upsert({
+          organization_id: organizationId,
+          balance: 0,
+          total_purchased: 0,
+          total_consumed: 0
+        }, { onConflict: 'organization_id' })
+
+        console.log('✅ Free plan subscription assigned to org:', organizationId)
+      } else {
+        console.warn('⚠️ Free plan not found in subscription_plans — skipping subscription assignment')
+      }
+    }
+
 
     // Create audit log
     const { error: auditError } = await admin
