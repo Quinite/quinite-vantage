@@ -21,8 +21,8 @@ export default function GlobalAddLead() {
 
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // Shortcut: Alt + N (New Lead)
-            if (e.altKey && e.key.toLowerCase() === 'n') {
+            // Shortcut: Alt+N (Win/Linux) or Option+N (Mac — produces 'ñ')
+            if ((e.altKey && e.key.toLowerCase() === 'n') || e.key === 'ñ') {
                 if (!user || !canCreate || subExpired) return
                 
                 // Don't trigger if user is typing in an input/textarea
